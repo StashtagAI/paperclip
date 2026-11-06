@@ -9,21 +9,65 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
+type Mode = 'password' | 'link';
+
 /**
- * Passwordless sign-in. Supabase emails a magic link (opens /auth/callback) and,
- * if the email template includes {{ .Token }}, a 6-digit code that can be typed
- * here instead — handy on iOS when the link opens in a different browser.
+ * Email + password sign-in (the default while testing), with passwordless as an alternative.
+ * Passwordless: Supabase emails a magic link (opens /auth/callback) and, if the email template
+ * includes {{ .Token }}, a 6-digit code that can be typed here instead.
  */
 export default function SignIn() {
+  const [mode, setMode] = useState<Mode>('password');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function validEmail() {
+    const address = email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(address)) {
+      setError('Enter a valid email address.');
+      return null;
+    }
+    return address;
+  }
+
+  async function signInWithPassword() {
+    const address = validEmail();
+    if (!address) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const { error } = await supabase.auth.signInWithPassword({ email: address, password });
+    setBusy(false);
+    if (error) setError(error.message);
+    // On success the auth listener swaps the stack to the app.
+  }
+
+  async function signUp() {
+    const address = validEmail();
+    if (!address) return;
+    if (password.length < 6) return setError('Use a password of at least 6 characters.');
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const { data, error } = await supabase.auth.signUp({
+      email: address,
+      password,
+      options: { emailRedirectTo: Linking.createURL('auth/callback') },
+    });
+    setBusy(false);
+    if (error) return setError(error.message);
+    // No session means the project still requires email confirmation.
+    if (!data.session) setNotice(`Account created. Confirm it from the email sent to ${address}, then sign in.`);
+  }
 
   async function sendLink() {
-    const address = email.trim().toLowerCase();
-    if (!/^\S+@\S+\.\S+$/.test(address)) return setError('Enter a valid email address.');
+    const address = validEmail();
+    if (!address) return;
     setBusy(true);
     setError(null);
     const { error } = await supabase.auth.signInWithOtp({
@@ -42,8 +86,29 @@ export default function SignIn() {
     const { error } = await supabase.auth.verifyOtp({ email: sentTo, token: code.trim(), type: 'email' });
     setBusy(false);
     if (error) setError(error.message);
-    // On success the auth listener swaps the stack to the app.
   }
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setSentTo(null);
+    setError(null);
+    setNotice(null);
+  }
+
+  const emailField = (
+    <TextField
+      value={email}
+      onChangeText={setEmail}
+      placeholder="you@example.com"
+      keyboardType="email-address"
+      textContentType="emailAddress"
+      autoComplete="email"
+      autoCapitalize="none"
+      autoCorrect={false}
+      onSubmitEditing={mode === 'link' ? sendLink : undefined}
+      invalid={!!error}
+    />
+  );
 
   return (
     <Screen>
@@ -52,7 +117,26 @@ export default function SignIn() {
         <ThemedText themeColor="textSecondary">Save Instagram and TikTok posts as organised lists.</ThemedText>
       </View>
 
-      {sentTo ? (
+      {mode === 'password' ? (
+        <>
+          {emailField}
+          <TextField
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Password"
+            secureTextEntry
+            textContentType="password"
+            autoComplete="password"
+            autoCapitalize="none"
+            autoCorrect={false}
+            onSubmitEditing={signInWithPassword}
+            invalid={!!error}
+          />
+          <Button title="Sign in" onPress={signInWithPassword} loading={busy} disabled={!password} />
+          <Button title="Create account" variant="secondary" onPress={signUp} disabled={busy} />
+          <Button title="Email me a sign-in link instead" variant="secondary" onPress={() => switchMode('link')} />
+        </>
+      ) : sentTo ? (
         <>
           <ThemedText>
             Check {sentTo} for a sign-in link. Or enter the code from the email:
@@ -72,22 +156,13 @@ export default function SignIn() {
         </>
       ) : (
         <>
-          <TextField
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            keyboardType="email-address"
-            textContentType="emailAddress"
-            autoComplete="email"
-            autoCapitalize="none"
-            autoCorrect={false}
-            onSubmitEditing={sendLink}
-            invalid={!!error}
-          />
+          {emailField}
           <Button title="Email me a sign-in link" onPress={sendLink} loading={busy} />
+          <Button title="Sign in with a password instead" variant="secondary" onPress={() => switchMode('password')} />
         </>
       )}
 
+      {notice ? <ThemedText type="small">{notice}</ThemedText> : null}
       {error ? (
         <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
           {error}

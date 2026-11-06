@@ -54,7 +54,9 @@ only insert links as `pending` and cannot update them; `process-link` uses the s
 
 Supabase dashboard › Authentication:
 
-1. **Providers › Email**: enabled (magic link is the default).
+1. **Providers › Email**: enabled. The sign-in screen defaults to email + password (for testing), with the magic link
+   as an alternative. To sign in straight after **Create account**, turn off **Confirm email**, or add the user under
+   **Users › Add user** with **Auto Confirm User** ticked.
 2. **URL Configuration › Redirect URLs**: add `stashtag://auth/callback`, `stashtag://**`, and your web origins, e.g.
    `http://localhost:8081/auth/callback` and the deployed web URL.
 3. Optional but recommended on iOS: in **Email Templates › Magic Link** add `{{ .Token }}` so the email also carries a
