@@ -46,7 +46,13 @@ Deno.serve(async (req) => {
       { onConflict: "list_id,name" },
     );
     if (ie) throw ie;
-    await db.from("links").update({ status: "done", error: null }).eq("id", link_id);
+    await db.from("links").update({
+      status: "done",
+      error: null,
+      tags: ex.tags,
+      raw_content: { caption: content.caption, author: content.author ?? null, transcript: content.transcript ?? null, source: content.source },
+      processed_at: new Date().toISOString(),
+    }).eq("id", link_id);
     return json({ status: "done", items: ex.items.length });
   } catch (e) {
     return await fail(String((e as Error).message ?? e).slice(0, 200));
