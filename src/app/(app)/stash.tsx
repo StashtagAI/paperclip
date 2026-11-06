@@ -5,8 +5,7 @@ import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchRecentLinks, submitLink } from '@/lib/data';
@@ -16,7 +15,8 @@ import type { LinkRow, LinkStatus } from '@/lib/types';
 
 type Feedback = { tone: 'danger' | 'success'; text: string } | null;
 
-export default function AddLinkScreen() {
+/** "Stash a link": paste an Instagram/TikTok URL; process-link sorts it into a kind > category > list. */
+export default function StashScreen() {
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [saving, setSaving] = useState(false);
@@ -42,8 +42,9 @@ export default function AddLinkScreen() {
   }
 
   return (
-    <Screen refreshControl={<RefreshControl refreshing={links.loading && !!links.data} onRefresh={links.refresh} />}>
-      <ThemedText type="subtitle">Stash a post</ThemedText>
+    <Screen
+      edges="none"
+      refreshControl={<RefreshControl refreshing={links.loading && !!links.data} onRefresh={links.refresh} />}>
       <ThemedText themeColor="textSecondary">Paste an Instagram post or reel, or a TikTok video link.</ThemedText>
 
       <TextField
@@ -62,7 +63,7 @@ export default function AddLinkScreen() {
         invalid={feedback?.tone === 'danger'}
         accessibilityLabel="Instagram or TikTok link"
       />
-      <Button title="Save link" onPress={onSubmit} loading={saving} disabled={!input.trim()} />
+      <Button title="Stash it" onPress={onSubmit} loading={saving} disabled={!input.trim()} />
       {feedback ? (
         <ThemedText type="small" themeColor={feedback.tone} accessibilityRole="alert">
           {feedback.text}
@@ -100,7 +101,7 @@ function LinkRowView({ link }: { link: LinkRow }) {
   const theme = useTheme();
   const color = link.status === 'failed' ? theme.danger : link.status === 'done' ? theme.success : theme.textSecondary;
   return (
-    <ThemedView type="backgroundElement" style={styles.linkRow}>
+    <View style={[styles.linkRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <View style={styles.linkText}>
         <ThemedText type="small" numberOfLines={1}>
           {link.url.replace(/^https:\/\/(www\.)?/, '')}
@@ -114,7 +115,7 @@ function LinkRowView({ link }: { link: LinkRow }) {
       <ThemedText type="smallBold" style={{ color }}>
         {STATUS_LABEL[link.status]}
       </ThemedText>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -125,7 +126,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
     padding: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.row,
+    borderWidth: StyleSheet.hairlineWidth * 2,
   },
   linkText: { flex: 1 },
   signOut: { marginTop: Spacing.four },

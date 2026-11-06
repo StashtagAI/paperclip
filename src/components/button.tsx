@@ -1,35 +1,45 @@
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, type PressableProps } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type Props = Omit<PressableProps, 'children'> & {
   title: string;
   variant?: 'primary' | 'secondary';
+  size?: 'default' | 'large';
   loading?: boolean;
+  /** Rendered before the title; receives the label colour. */
+  icon?: (color: string) => ReactNode;
 };
 
-export function Button({ title, variant = 'primary', loading, disabled, style, ...rest }: Props) {
+export function Button({ title, variant = 'primary', size = 'default', loading, disabled, icon, style, ...rest }: Props) {
   const theme = useTheme();
   const primary = variant === 'primary';
   const inactive = disabled || loading;
+  const color = primary ? theme.onTint : theme.text;
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={title}
       disabled={inactive}
       style={(state) => [
         styles.button,
-        { backgroundColor: primary ? theme.tint : theme.backgroundElement, opacity: inactive ? 0.5 : state.pressed ? 0.8 : 1 },
+        size === 'large' && styles.large,
+        { backgroundColor: primary ? theme.tint : theme.backgroundSelected, opacity: inactive ? 0.5 : state.pressed ? 0.8 : 1 },
         typeof style === 'function' ? style(state) : style,
       ]}
       {...rest}>
       {loading ? (
-        <ActivityIndicator color={primary ? theme.onTint : theme.text} />
+        <ActivityIndicator color={color} />
       ) : (
-        <ThemedText type="smallBold" style={{ color: primary ? theme.onTint : theme.text }}>
-          {title}
-        </ThemedText>
+        <>
+          {icon?.(color)}
+          <ThemedText type={size === 'large' ? 'defaultBold' : 'smallBold'} style={{ color }}>
+            {title}
+          </ThemedText>
+        </>
       )}
     </Pressable>
   );
@@ -40,7 +50,10 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: Spacing.three,
     paddingHorizontal: Spacing.four,
+    flexDirection: 'row',
+    gap: Spacing.two,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  large: { minHeight: 58, borderRadius: Radius.row },
 });

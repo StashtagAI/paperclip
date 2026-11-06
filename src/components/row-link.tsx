@@ -1,28 +1,27 @@
-import { Link, type Href } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 /** A tappable card row used by the Category > List > Items browser. */
 export function RowLink({ href, title, subtitle }: { href: Href; title: string; subtitle?: string }) {
+  const theme = useTheme();
   return (
-    <Link href={href} asChild>
-      <Pressable style={({ pressed }) => pressed && styles.pressed}>
-        <ThemedView type="backgroundElement" style={styles.row}>
-          <View style={styles.text}>
-            <ThemedText type="default">{title}</ThemedText>
-            {subtitle ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                {subtitle}
-              </ThemedText>
-            ) : null}
-          </View>
-          <ThemedText themeColor="textSecondary">›</ThemedText>
-        </ThemedView>
-      </Pressable>
-    </Link>
+    <Pressable onPress={() => router.push(href)} accessibilityRole="button" style={({ pressed }) => pressed && styles.pressed}>
+      <View style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+        <View style={styles.text}>
+          <ThemedText type="defaultBold">{title}</ThemedText>
+          {subtitle ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {subtitle}
+            </ThemedText>
+          ) : null}
+        </View>
+        <ThemedText themeColor="textSecondary">›</ThemedText>
+      </View>
+    </Pressable>
   );
 }
 
@@ -31,7 +30,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.row,
+    borderWidth: StyleSheet.hairlineWidth * 2,
     gap: Spacing.two,
   },
   text: { flex: 1 },

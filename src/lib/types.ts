@@ -12,6 +12,19 @@ export const KIND_LABELS: Record<Kind, string> = {
   do: 'Do',
 };
 
+/** Tile subtitles on Home (design brief, "Home screen.pdf"). */
+export const KIND_SUBTITLES: Record<Kind, string> = {
+  eats: 'Cafés and restaurants',
+  trips: 'Places to go',
+  recipes: 'To cook next',
+  do: 'Things to try',
+};
+
+export const PLATFORM_LABELS: Record<Platform, string> = {
+  instagram: 'Instagram',
+  tiktok: 'TikTok',
+};
+
 export type LinkStatus = 'pending' | 'processing' | 'done' | 'failed';
 
 export type LinkRow = {
@@ -20,6 +33,7 @@ export type LinkRow = {
   platform: Platform;
   status: LinkStatus;
   error: string | null;
+  tags: string[];
   created_at: string;
 };
 

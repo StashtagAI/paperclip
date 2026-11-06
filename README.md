@@ -7,10 +7,12 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 
 | Path | What |
 | --- | --- |
-| `src/app/` | Routes: `sign-in`, `auth/callback`, `(tabs)/index` (add link), `(tabs)/lists/…` (Category › List › Items) |
+| `src/app/` | Routes: `sign-in`, `auth/callback`, `(app)/index` (Home), `(app)/stash` (Stash a link sheet), `(app)/kind/[kind]` (Kind › Category › List), `(app)/list/[listId]` (items) |
 | `src/lib/link-filter.ts` | Instagram/TikTok URL allowlist (unit-tested in `src/lib/__tests__`) |
 | `src/lib/supabase.ts`, `src/lib/auth.tsx` | Supabase client and session context (email magic link / one-time code) |
-| `src/constants/theme.ts` | Design tokens; all screens read colours via `useTheme()` |
+| `src/constants/theme.ts`, `palette.ts` | Light/dark design tokens and per-kind `KindColors` (fill, `onColor`, chip); read via `useTheme()` / `useKindColors()`. Contrast is unit-tested |
+| `src/constants/brand.ts` | The pin mark (logo concept B). `npm run icons` regenerates every icon/splash PNG in `assets/images` from it |
+| `src/constants/features.ts` | Feature flags (`shared` stashes: Premium, off) |
 | `supabase/migrations/` | Database schema and row-level security |
 | `supabase/functions/process-link/` | Extraction edge function (owned by Extraction, HAN-6) |
 
@@ -96,6 +98,8 @@ npm run typecheck
 npm run lint
 npm test
 ```
+
+Screenshots for the design brief live in `docs/design/`.
 
 CI (`.github/workflows/ci.yml`) runs all three on every pull request and on pushes to `main`.
 
