@@ -1,6 +1,6 @@
 import { SvgXml } from 'react-native-svg';
 
-import { pinSvg } from '@/constants/brand';
+import { hashStrokeWidth, pinSvg } from '@/constants/brand';
 import { useTheme } from '@/hooks/use-theme';
 
 type Props = {
@@ -13,5 +13,6 @@ type Props = {
 /** The Stashtag pin mark (concept B). Also intended for in-app map pins. */
 export function PinMark({ size, pin, hash }: Props) {
   const theme = useTheme();
-  return <SvgXml xml={pinSvg({ pin: pin ?? theme.tint, hash: hash ?? theme.background })} width={size} height={size} />;
+  const xml = pinSvg({ pin: pin ?? theme.tint, hash: hash ?? theme.background, strokeWidth: hashStrokeWidth(size) });
+  return <SvgXml xml={xml} width={size} height={size} />;
 }
