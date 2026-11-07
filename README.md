@@ -101,7 +101,9 @@ npm run lint
 npm test
 ```
 
-Screenshots for the design brief live in `docs/design/`.
+Screenshots for the design brief live in `docs/design/`. App Store listing artwork (product page header, search result
+image) lives in `docs/store/`; it is uploaded in App Store Connect and is not bundled into the app. The board keeps the
+source media in `~/Documents/StashtagAI`.
 
 CI (`.github/workflows/ci.yml`) runs all three on every pull request and on pushes to `main`.
 
