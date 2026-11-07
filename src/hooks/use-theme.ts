@@ -1,14 +1,20 @@
 /**
- * Learn more about light and dark modes:
+ * Theme hooks; both follow the system appearance.
  * https://docs.expo.dev/guides/color-schemes/
  */
 
-import { Colors } from '@/constants/theme';
+import { Colors, KindColors, type ColorScheme } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export function useTheme() {
-  const scheme = useColorScheme();
-  const theme = scheme === 'dark' ? 'dark' : 'light';
+export function useScheme(): ColorScheme {
+  return useColorScheme() === 'dark' ? 'dark' : 'light';
+}
 
-  return Colors[theme];
+export function useTheme() {
+  return Colors[useScheme()];
+}
+
+/** Per-kind fill, on-colour and chip colours (see `KindColors`). */
+export function useKindColors() {
+  return KindColors[useScheme()];
 }

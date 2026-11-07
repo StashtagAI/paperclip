@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 120 120" role="img" aria-label="Pin favicon at 24 pixels">
+<rect width="120" height="120" rx="28" fill="#1F6FEB"></rect>
+<g transform="translate(10.8 10.4) scale(0.82)">
+<path d="M60 8C36 8 18 26 18 49c0 29 42 65 42 65s42-36 42-65C102 26 84 8 60 8Z" fill="#FFFFFF"></path>
+<g stroke="#1F6FEB" stroke-width="12" stroke-linecap="round" fill="none">
+<line x1="56" y1="29" x2="52" y2="67"></line>
+<line x1="70" y1="29" x2="66" y2="67"></line>
+<line x1="42" y1="43" x2="80" y2="43"></line>
+<line x1="41" y1="57" x2="79" y2="57"></line>
+</g>
+</g>
+</svg>
