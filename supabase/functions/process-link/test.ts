@@ -239,3 +239,12 @@ import { ground } from "./extract.ts";
   const mk = (names: string[]) => ({ kind: "trips" as const, category: "Hotels", list_scope: null, tags: [], items: names.map((name) => ({ name, description: "" })) });
   assert.deepEqual(ground(mk(["Badrutt's Palace", "Hotel Eden"]), c, []).items.map((i) => i.name), ["Badrutt's Palace"]);
 }
+
+// grounding reports the names it dropped (for process_events)
+{
+  const c = { platform: "instagram", url: IG, caption: "Check into @badruttspalace" } as never;
+  const ex = { kind: "trips" as const, category: "Hotels", list_scope: null, tags: [], items: ["Badrutt's Palace", "Hotel Eden"].map((name) => ({ name, description: "" })) };
+  const dropped: string[] = [];
+  ground(ex, c, [], dropped);
+  assert.deepEqual(dropped, ["Hotel Eden"]);
+}

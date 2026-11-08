@@ -19,7 +19,16 @@ Deno.serve(async (req) => {
   const { data: link, error: le } = await db.from("links").select("id,url,user_id").eq("id", link_id).single();
   if (le || !link) return json({ error: "link not found" }, 404);
 
+  const t00 = Date.now();
+  // Best-effort stage log; never lets logging break processing.
+  const event = async (stage: string, ok: boolean, ms: number | undefined, detail: Record<string, unknown> = {}) => {
+    try { await db.from("process_events").insert({ link_id, user_id: link.user_id, source: "function", stage, ok, ms, detail }); } catch { /* ignore */ }
+  };
+  const pending: Promise<void>[] = [];
+  const sink = (...a: Parameters<typeof event>) => { pending.push(event(...a)); };
   const fail = async (code: string) => {
+    await Promise.allSettled(pending);
+    await event("final", false, Date.now() - t00, { status: "failed", error: code });
     await db.from("links").update({ status: "failed", error: code }).eq("id", link_id);
     return json({ status: "failed", error: code });
   };
@@ -50,11 +59,13 @@ Deno.serve(async (req) => {
   const sBase = searchFromEnv((k) => Deno.env.get(k));
   const base = lookupFromEnv((k) => Deno.env.get(k));
   try {
-    const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`) });
+    const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`), event: sink });
     if (!r.ok) return await fail(r.error);
     if ("unsorted" in r) {
       // Unsorted bucket: done + no items + raw_content.unsorted, no empty category/list created.
       await db.from("links").update({ status: "done", error: null, raw_content: r.raw_content, processed_at: new Date().toISOString() }).eq("id", link_id);
+      await Promise.allSettled(pending);
+      await event("final", true, Date.now() - t00, { status: "done", items: 0, unsorted: true });
       return json({ status: "done", items: 0, unsorted: true });
     }
     const ex = r.extraction;
@@ -80,6 +91,8 @@ Deno.serve(async (req) => {
       raw_content: r.raw_content,
       processed_at: new Date().toISOString(),
     }).eq("id", link_id);
+    await Promise.allSettled(pending);
+    await event("final", true, Date.now() - t00, { status: "done", items: ex.items.length });
     return json({ status: "done", items: ex.items.length });
   } catch (e) {
     return await fail(String((e as Error).message ?? e).slice(0, 200));
