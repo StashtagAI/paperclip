@@ -1,46 +1,32 @@
-import { platformOf, resolveAllowed } from "./url.ts";
+import { parseAllowedUrl, platformOf } from "./url.ts";
+import type { Platform } from "./url.ts";
 
-export interface Content {
-  platform: "instagram" | "tiktok";
-  url: string;
-  caption: string;
-  author?: string;
+/** Text captured ON THE PHONE (OCR, transcript, pasted caption). The server never fetches the post itself. */
+export interface Captured {
+  caption?: string;
   transcript?: string;
   ocr?: string;
-  source: string; // which provider produced it
 }
 
-/** Pluggable provider. Real implementations (paid scraper + transcription) are a board decision; see docs/extraction.md. */
-export interface RetrievalProvider {
-  name: string;
-  fetchContent(url: URL): Promise<Content | null>;
+export interface Content extends Captured {
+  platform: Platform;
+  url: string;
 }
 
-/** Free baseline: TikTok oEmbed (title+author only). Instagram oEmbed requires a Meta app token. */
-export const oembedProvider: RetrievalProvider = {
-  name: "oembed",
-  async fetchContent(url) {
-    const platform = platformOf(url);
-    if (platform !== "tiktok") return null;
-    const res = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url.toString())}`);
-    if (!res.ok) return null;
-    const j = await res.json();
-    if (!j.title) return null;
-    return { platform, url: url.toString(), caption: String(j.title), author: j.author_name, source: "oembed" };
-  },
-};
+const MAX_FIELD = 20_000;
+const clip = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, MAX_FIELD) || undefined : undefined);
 
-export async function retrieve(
-  rawUrl: string,
-  providers: RetrievalProvider[],
-): Promise<Content | null> {
-  const url = await resolveAllowed(rawUrl);
-  if (!url) throw new Error("url_not_allowed");
-  for (const p of providers) {
-    try {
-      const c = await p.fetchContent(url);
-      if (c && (c.caption || c.transcript || c.ocr)) return c;
-    } catch (_) { /* try next provider */ }
-  }
-  return null;
+/** Validates the source link and the captured payload. Returns null if the link is not allowed or no text was captured. */
+export function buildContent(rawUrl: string, captured: unknown): Content | null {
+  const url = parseAllowedUrl(rawUrl);
+  if (!url || !captured || typeof captured !== "object") return null;
+  const c = captured as Record<string, unknown>;
+  const out: Content = {
+    platform: platformOf(url),
+    url: url.toString(),
+    caption: clip(c.caption),
+    transcript: clip(c.transcript),
+    ocr: clip(c.ocr),
+  };
+  return out.caption || out.transcript || out.ocr ? out : null;
 }

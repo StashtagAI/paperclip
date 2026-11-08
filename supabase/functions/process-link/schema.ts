@@ -7,7 +7,13 @@ export interface Item {
   address?: string;
   lat?: number;
   lng?: number;
+  ingredients?: string[];
+  steps?: string[];
+  /** where each field came from; fields without a verifiable source are dropped */
+  sources?: Record<string, Source>;
 }
+export const SOURCES = ["capture", "linked_site", "search"] as const;
+export type Source = typeof SOURCES[number];
 export interface Extraction {
   kind: Kind;
   category: string;
@@ -47,6 +53,18 @@ export function validateExtraction(raw: unknown): Extraction {
     ) {
       item.lat = i.lat;
       item.lng = i.lng;
+    }
+    for (const k of ["ingredients", "steps"] as const) {
+      if (!Array.isArray(i[k])) continue;
+      const l = i[k].map((x: unknown) => str(x, 500)).filter((x): x is string => !!x).slice(0, 60);
+      if (l.length) item[k] = l;
+    }
+    if (i.sources && typeof i.sources === "object") {
+      const src: Record<string, Source> = {};
+      for (const [f, v] of Object.entries(i.sources)) {
+        if (SOURCES.includes(v as Source) && f in item) src[f] = v as Source;
+      }
+      item.sources = src;
     }
     items.push(item);
   }
