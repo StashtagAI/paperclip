@@ -52,6 +52,11 @@ Deno.serve(async (req) => {
   try {
     const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`) });
     if (!r.ok) return await fail(r.error);
+    if ("unsorted" in r) {
+      // Unsorted bucket: done + no items + raw_content.unsorted, no empty category/list created.
+      await db.from("links").update({ status: "done", error: null, raw_content: r.raw_content, processed_at: new Date().toISOString() }).eq("id", link_id);
+      return json({ status: "done", items: 0, unsorted: true });
+    }
     const ex = r.extraction;
 
     const { data: cat, error: ce } = await db.from("categories")
