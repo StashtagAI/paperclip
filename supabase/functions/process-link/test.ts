@@ -26,7 +26,7 @@ assert.throws(() => validateExtraction({ kind: "food", category: "x", items: [] 
 import { findUrls, parseJsonLd, readLinkedSites, safePublicUrl } from "./linked.ts";
 import { processCaptured } from "./pipeline.ts";
 import { buildContent } from "./retrieval.ts";
-import type { LookupProvider } from "./lookup.ts";
+import { googleLookup, type LookupProvider, lookupFromEnv, namesMatch, stubLookup } from "./lookup.ts";
 
 assert.equal(buildContent("https://evil.com/x", { caption: "hi" }), null);
 assert.equal(buildContent("https://www.instagram.com/reel/a/", { caption: "  " }), null);
@@ -108,13 +108,47 @@ if (r3.ok) {
   assert.equal(r3.extraction.items[1].address, undefined);
 }
 
-// 4) lookup provider (when approved) fills only missing fields, tagged as search
+// 4) lookup provider fills only missing fields, tagged places_lookup
 const lookup: LookupProvider = { name: "t", findPlace: (n) => Promise.resolve(n === "Cafe Dos" ? { name: n, address: "2 Elm", lat: 1, lng: 2 } : null) };
 const r4 = await processCaptured("https://www.tiktok.com/@a/video/1", { transcript: "Cafe Dos" }, {
   ...key, lookup,
   fetchFn: mkFetch({}, { kind: "eats", category: "Cafes", list_scope: null, tags: [], items: [{ name: "Cafe Dos", description: "" }] }),
 });
-assert.ok(r4.ok && r4.extraction.items[0].sources?.address === "search");
+assert.ok(r4.ok && r4.extraction.items[0].sources?.address === "places_lookup");
+
+// 4b) Google provider: field mask, key only in header, name-match guard, env fallback to stub
+const calls: { url: string; init?: RequestInit }[] = [];
+const gf = ((u: string, init?: RequestInit) => {
+  calls.push({ url: String(u), init });
+  const body = String(u).includes("places:searchText")
+    ? { places: [{ displayName: { text: JSON.parse(String(init!.body)).textQuery.startsWith("Wrong") ? "Other Place" : "Cafe Dos" }, formattedAddress: "2 Elm St, Denver, CO", location: { latitude: 39.7, longitude: -105 }, googleMapsUri: "https://maps.google.com/?cid=1" }] }
+    : { status: "OK", results: [{ geometry: { location: { lat: 1.5, lng: 2.5 } } }] };
+  return Promise.resolve(new Response(JSON.stringify(body)));
+}) as unknown as typeof fetch;
+const g = googleLookup("SECRET", gf);
+const gp = await g.findPlace("Cafe Dos", "Denver");
+assert.equal(gp?.address, "2 Elm St, Denver, CO");
+assert.equal(gp?.lat, 39.7);
+const h = calls[0].init!.headers as Record<string, string>;
+assert.equal(h["X-Goog-Api-Key"], "SECRET");
+assert.ok(h["X-Goog-FieldMask"].includes("places.formattedAddress") && !calls[0].url.includes("SECRET"));
+assert.equal(await g.findPlace("Wrong Name", null), null);
+assert.deepEqual(await g.geocode!("2 Elm St, Denver"), { lat: 1.5, lng: 2.5 });
+assert.ok(!namesMatch("Cafe Uno", "Taco Palace"));
+assert.equal(lookupFromEnv(() => undefined), stubLookup);
+assert.equal(lookupFromEnv((k) => (k === "GOOGLE_PLACES_API_KEY" ? "k" : undefined)).name, "google");
+// text-stated address gets geocoded, address itself is untouched
+const r4b = await processCaptured("https://www.tiktok.com/@a/video/1", { caption: "Cafe Dos, 2 Elm St, Denver" }, {
+  ...key, lookup: g,
+  fetchFn: mkFetch({}, { kind: "eats", category: "Cafes", list_scope: "Denver", tags: [], items: [{ name: "Cafe Dos", description: "", address: "2 Elm St, Denver" }] }),
+});
+assert.ok(r4b.ok);
+if (r4b.ok) {
+  const it = r4b.extraction.items[0];
+  assert.equal(it.address, "2 Elm St, Denver");
+  assert.equal(it.lat, 1.5);
+  assert.equal(it.sources?.address, "capture");
+}
 
 // 5) failures: no text, no items, off-allowlist source
 assert.deepEqual(await processCaptured(IG, {}, key), { ok: false, error: "no_captured_text" });

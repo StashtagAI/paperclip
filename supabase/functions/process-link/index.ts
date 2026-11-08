@@ -3,6 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { processCaptured } from "./pipeline.ts";
 import { parseAllowedUrl } from "./url.ts";
+import { lookupFromEnv } from "./lookup.ts";
 
 declare const Deno: { env: { get(k: string): string | undefined }; serve(h: (r: Request) => Promise<Response>): void };
 
@@ -27,7 +28,7 @@ Deno.serve(async (req) => {
   await db.from("links").update({ status: "processing", error: null }).eq("id", link_id);
 
   try {
-    const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
+    const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: lookupFromEnv((k) => Deno.env.get(k)) });
     if (!r.ok) return await fail(r.error);
     const ex = r.extraction;
 

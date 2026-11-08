@@ -25,13 +25,20 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
 
   const lookup = d.lookup ?? stubLookup;
   for (const it of ex.items) {
-    if (ex.kind === "recipes" || it.address) continue;
+    if (ex.kind === "recipes") continue;
     try {
+      if (it.address) {
+        // address stated in the text or linked data: geocode it, never replace it
+        if (it.lat != null || !lookup.geocode) continue;
+        const g = await lookup.geocode(it.address);
+        if (g) { it.lat = g.lat; it.lng = g.lng; it.sources = { ...it.sources, lat: "places_lookup", lng: "places_lookup" }; }
+        continue;
+      }
       const p = await lookup.findPlace(it.name, ex.list_scope);
       if (!p) continue;
       it.address = p.address;
-      it.sources = { ...it.sources, address: "search" };
-      if (p.lat != null && p.lng != null) { it.lat = p.lat; it.lng = p.lng; it.sources.lat = it.sources.lng = "search"; }
+      it.sources = { ...it.sources, address: "places_lookup" };
+      if (p.lat != null && p.lng != null) { it.lat = p.lat; it.lng = p.lng; it.sources.lat = it.sources.lng = "places_lookup"; }
     } catch { /* lookup is best-effort */ }
   }
   return {

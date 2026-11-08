@@ -20,12 +20,17 @@ Captured text and linked data go to Claude inside `<post>` / `<linked_site>` tag
 - The model's lat/lng are always discarded. Coordinates come only from linked-site data or a lookup provider.
 - Address is kept only if it appears in the captured text, or comes from linked-site data.
 - Recipe ingredients/steps come from the linked page, or from the model only if every line appears in the captured text.
-- Each field records its source: `capture`, `linked_site` or `search`.
+- Each field records its source: `capture`, `linked_site`, `places_lookup` or `search`.
 
 Output shape: `{kind: eats|trips|recipes|do, category, list_scope|null, tags[], items:[{name, description, address?, lat?, lng?, ingredients?, steps?, sources}]}`. Zero items -> `failed: no_items_found`.
 
-## Paid lookups (`lookup.ts`)
-Places/web search are not approved. `LookupProvider` is an interface with a no-op `stubLookup`; the pipeline fills missing place addresses/coords from it (tagged `search`) when a real provider is injected. No accounts opened.
+## Place lookups (`lookup.ts`)
+`LookupProvider` has `findPlace(name, hint)` and optional `geocode(address)`. `lookupFromEnv` returns the Google provider when the Edge Function secret **`GOOGLE_PLACES_API_KEY`** is set (`Deno.env.get`), otherwise the no-op `stubLookup`. The pipeline then runs as before, with no address or map pin on the cards. The key is never committed, logged, or sent to the client.
+- **Named place without an address:** Places API (New) `places:searchText` over HTTPS, `pageSize: 1`, query `"<name> <list_scope>"`. The key is sent in `X-Goog-Api-Key` and the field mask is `places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri`. Result accepted only if the returned display name matches the queried name (`namesMatch`); otherwise the fields stay empty.
+- **Address already in the text or linked data:** the Geocoding API fills lat/lng only if exactly one result is returned. The stated address is never replaced.
+- Recipes are never looked up. Fields filled this way carry `source: places_lookup`.
+- Web search (`source: search`) is not approved and remains unimplemented.
+- Cost and hit rate are unmeasured: the provider is tested with a mocked `fetch` only, not the live Google API.
 
 ## Storage
 `items` has no column for recipe details or per-field sources. Until Fullstack adds them (suggest `items.details jsonb`, `items.field_sources jsonb`), they are written to `links.raw_content` as `recipe_details` and `item_sources`, keyed by item name. Only `name, description, address, lat, lng` go to `items`.

@@ -21,7 +21,7 @@ export function ground(ex: Extraction, c: Content, linked: LinkedData[]): Extrac
     const match = linked.find((l) => l.name && norm(l.name) === n);
     if (!n || (!capture.includes(n) && !match)) continue;
     const g = { name: it.name, description: it.description } as typeof it;
-    const sources: Record<string, "capture" | "linked_site" | "search"> = {};
+    const sources: Record<string, "capture" | "linked_site" | "search" | "places_lookup"> = {};
     if (it.description) sources.description = "capture";
     if (it.address && capture.includes(norm(it.address))) { g.address = it.address; sources.address = "capture"; }
     if (match) {
