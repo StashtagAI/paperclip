@@ -223,3 +223,12 @@ if (r6.ok) {
 }
 assert.deepEqual(logs, ["web_search count=2 cards=1/1"]);
 console.log("ok");
+
+// recipe grounding ignores quantity formatting but still rejects invented words
+import { ground } from "./extract.ts";
+{
+  const c = { platform: "instagram", url: IG, caption: "Truffles\nIngredients:\n⅓ cup pumpkin puree\n12 medium Medjool dates (240–250 g), pitted" } as never;
+  const mk = (ing: string[]) => ({ kind: "recipes" as const, category: "Recipes", list_scope: null, tags: [], items: [{ name: "Truffles", description: "", ingredients: ing }] });
+  assert.deepEqual(ground(mk(["1/3 cup pumpkin puree", "12 Medjool dates, pitted"]), c, []).items[0].ingredients, ["1/3 cup pumpkin puree", "12 Medjool dates, pitted"]);
+  assert.equal(ground(mk(["1 cup saffron"]), c, []).items[0].ingredients, undefined);
+}
