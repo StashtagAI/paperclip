@@ -248,3 +248,18 @@ import { ground } from "./extract.ts";
   ground(ex, c, [], dropped);
   assert.deepEqual(dropped, ["Hotel Eden"]);
 }
+
+// ---- merge into existing lists (HAN-7) ----
+import { findByName, nameKey, splitNew } from "./merge.ts";
+assert.equal(nameKey("  Sap  Sua "), "sap sua");
+assert.equal(findByName([{ id: 1, name: "Denver" }], "denver ")?.id, 1);
+assert.equal(findByName([{ id: 1, name: "Denver" }], "Boulder"), undefined);
+{
+  const { fresh, already } = splitNew(
+    [{ name: "Sap Sua" }, { name: "Hey Kiddo" }, { name: "hey kiddo" }, { name: "Tavernetta" }],
+    ["SAP SUA", "Annette"],
+  );
+  assert.deepEqual(fresh.map((i) => i.name), ["Hey Kiddo", "Tavernetta"]);
+  assert.deepEqual(already, ["Sap Sua"]);
+}
+console.log("merge ok");

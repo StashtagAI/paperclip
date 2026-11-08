@@ -36,18 +36,23 @@ export function StashRow({ item }: { item: StashItem }) {
 }
 
 /** A link that process-link hasn't sorted yet. */
+/** A link that isn't filed yet: waiting for captured text ("pending") or being sorted ("processing"). */
 export function PendingLinkRow({ link }: { link: LinkRow }) {
   const theme = useTheme();
   return (
-    <RowFrame
-      thumb={
-        <View style={[styles.thumb, { backgroundColor: theme.backgroundSelected }]}>
-          <ActivityIndicator color={theme.tint} />
-        </View>
-      }
-      title="Sorting your link…"
-      subtitle={`from ${PLATFORM_LABELS[link.platform]}`}
-    />
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: link.id } })}>
+      <RowFrame
+        thumb={
+          <View style={[styles.thumb, { backgroundColor: theme.backgroundSelected }]}>
+            {link.status === 'processing' ? <ActivityIndicator color={theme.tint} /> : null}
+          </View>
+        }
+        title={link.status === 'processing' ? 'Sorting your link…' : 'Add what the post says'}
+        subtitle={`from ${PLATFORM_LABELS[link.platform]}`}
+      />
+    </Pressable>
   );
 }
 

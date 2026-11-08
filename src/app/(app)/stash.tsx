@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { RefreshControl, StyleSheet, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
@@ -15,31 +16,42 @@ import type { LinkRow, LinkStatus } from '@/lib/types';
 
 type Feedback = { tone: 'danger' | 'success'; text: string } | null;
 
-/** "Stash a link": paste an Instagram/TikTok URL; process-link sorts it into a kind > category > list. */
+/**
+ * "Stash a link": paste an Instagram/TikTok URL (or arrive here from the share sheet with `?url=`). The link is saved,
+ * then the capture screen collects what the post says for process-link.
+ */
 export default function StashScreen() {
-  const [input, setInput] = useState('');
+  const { url: sharedUrl } = useLocalSearchParams<{ url?: string }>();
+  const [input, setInput] = useState(sharedUrl ?? '');
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [saving, setSaving] = useState(false);
   const links = useAsync(fetchRecentLinks, []);
 
-  async function onSubmit() {
-    const result = checkLink(input);
+  async function save(value: string) {
+    const result = checkLink(value);
     if (!result.ok) return setFeedback({ tone: 'danger', text: result.message });
     setSaving(true);
     try {
-      const outcome = await submitLink(result);
+      const { id } = await submitLink(result);
       setInput('');
-      setFeedback({
-        tone: 'success',
-        text: outcome === 'duplicate' ? 'You already saved that post.' : 'Saved. We’ll sort it into your lists shortly.',
-      });
-      links.refresh();
+      setFeedback(null);
+      router.replace({ pathname: '/capture/[linkId]', params: { linkId: id } });
     } catch (e) {
       setFeedback({ tone: 'danger', text: `Couldn’t save the link: ${(e as Error).message}` });
     } finally {
       setSaving(false);
     }
   }
+  const onSubmit = () => save(input);
+
+  // A link from the share sheet is saved straight away, once.
+  const autoSaved = useRef(false);
+  useEffect(() => {
+    if (sharedUrl && !autoSaved.current) {
+      autoSaved.current = true;
+      save(sharedUrl);
+    }
+  }, [sharedUrl]);
 
   return (
     <Screen
@@ -91,7 +103,7 @@ export default function StashScreen() {
 }
 
 const STATUS_LABEL: Record<LinkStatus, string> = {
-  pending: 'Queued',
+  pending: 'Needs text',
   processing: 'Processing',
   done: 'Filed',
   failed: 'Failed',
@@ -101,7 +113,10 @@ function LinkRowView({ link }: { link: LinkRow }) {
   const theme = useTheme();
   const color = link.status === 'failed' ? theme.danger : link.status === 'done' ? theme.success : theme.textSecondary;
   return (
-    <View style={[styles.linkRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: link.id } })}
+      style={[styles.linkRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <View style={styles.linkText}>
         <ThemedText type="small" numberOfLines={1}>
           {link.url.replace(/^https:\/\/(www\.)?/, '')}
@@ -115,7 +130,7 @@ function LinkRowView({ link }: { link: LinkRow }) {
       <ThemedText type="smallBold" style={{ color }}>
         {STATUS_LABEL[link.status]}
       </ThemedText>
-    </View>
+    </Pressable>
   );
 }
 

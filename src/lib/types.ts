@@ -52,3 +52,29 @@ export type ItemRow = {
   lng: number | null;
   tags: string[];
 };
+
+/** Text captured on the phone, the process-link request body's `captured` field (docs/extraction.md). */
+export type Captured = { caption?: string; transcript?: string; ocr?: string };
+
+/** Where an extracted field came from (process-link `item_sources`). */
+export type FieldSource = 'capture' | 'linked_site' | 'places_lookup' | 'search';
+
+/** What process-link stores in links.raw_content; every field is optional because older rows predate some of them. */
+export type RawContent = {
+  caption?: string | null;
+  transcript?: string | null;
+  ocr?: string | null;
+  linked_sites?: string[];
+  unsorted?: boolean;
+  list_id?: string;
+  already_listed?: string[];
+  item_sources?: Record<string, Partial<Record<string, FieldSource>>>;
+  item_source_urls?: Record<string, Partial<Record<string, string>>>;
+  recipe_details?: Record<string, { ingredients: string[]; steps: string[] }>;
+};
+
+export type LinkDetail = LinkRow & { raw_content: RawContent | null };
+
+export type LinkItem = ItemRow & { list: Pick<ListRow, 'id' | 'name'> & { category: Pick<CategoryRow, 'kind' | 'name'> } };
+
+export type FeedbackReason = 'wrong_category' | 'wrong_items' | 'missed_items';
