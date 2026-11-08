@@ -16,6 +16,7 @@ export interface Deps {
 
 export type Result =
   | { ok: true; extraction: Extraction; raw_content: Record<string, unknown> }
+  | { ok: true; unsorted: true; raw_content: Record<string, unknown> }
   | { ok: false; error: string };
 
 /** url + captured text -> validated, grounded extraction. No DB access, no fetch of the social post. */
@@ -25,7 +26,21 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
   const text = [content.caption, content.transcript, content.ocr].filter(Boolean).join("\n");
   const linked = await readLinkedSites(text, d.fetchFn);
   const ex = await extract(content, linked, d.apiKey, d.fetchFn);
-  if (!ex.items.length) return { ok: false, error: "no_items_found" };
+  if (!ex.items.length) {
+    // Nothing extractable (e.g. items never named): keep the captured text for manual sorting.
+    return {
+      ok: true,
+      unsorted: true,
+      raw_content: {
+        platform: content.platform,
+        caption: content.caption ?? null,
+        transcript: content.transcript ?? null,
+        ocr: content.ocr ?? null,
+        linked_sites: linked.map((l) => l.url),
+        unsorted: true,
+      },
+    };
+  }
 
   const lookup = d.lookup ?? stubLookup;
   for (const it of ex.items) {
