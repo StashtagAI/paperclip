@@ -16,7 +16,7 @@ const words = (s: string) => s.toLowerCase().match(/\p{L}+/gu) ?? [];
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 /** Drop anything the captured text or linked data cannot back up. A plausible-but-wrong item is worse than an empty one. */
-export function ground(ex: Extraction, c: Content, linked: LinkedData[]): Extraction {
+export function ground(ex: Extraction, c: Content, linked: LinkedData[], dropped?: string[]): Extraction {
   const capture = norm([c.caption, c.transcript, c.ocr].filter(Boolean).join(" "));
   const captureTight = capture.replaceAll(" ", "");
   const items = [];
@@ -25,7 +25,7 @@ export function ground(ex: Extraction, c: Content, linked: LinkedData[]): Extrac
     const match = linked.find((l) => l.name && norm(l.name) === n);
     // @handles ("@badruttspalace") have no spaces, so also compare with spaces removed
     const inCapture = capture.includes(n) || captureTight.includes(n.replaceAll(" ", ""));
-    if (!n || (!inCapture && !match)) continue;
+    if (!n || (!inCapture && !match)) { dropped?.push(it.name); continue; }
     const g = { name: it.name, description: it.description } as typeof it;
     const sources: Record<string, "capture" | "linked_site" | "search" | "places_lookup"> = {};
     if (it.description) sources.description = "capture";
@@ -56,6 +56,7 @@ export async function extract(
   linked: LinkedData[],
   apiKey: string,
   fetchFn: typeof fetch = fetch,
+  onEvent?: (stage: string, ok: boolean, ms: number | undefined, detail: Record<string, unknown>) => void,
 ): Promise<Extraction> {
   const strip = (s: string) => s.replaceAll("</post>", "").replaceAll("</linked_site>", "");
   const post = [
@@ -64,6 +65,7 @@ export async function extract(
     c.ocr && `on-screen text: ${c.ocr}`,
   ].filter(Boolean).join("\n");
   const sites = linked.map((l) => `<linked_site url="${l.url}">\n${strip(JSON.stringify(l))}\n</linked_site>`).join("\n");
+  const t0 = Date.now();
   const res = await fetchFn("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
@@ -74,10 +76,29 @@ export async function extract(
       messages: [{ role: "user", content: `<post>\n${strip(post)}\n</post>\n${sites}` }],
     }),
   });
-  if (!res.ok) throw new Error(`anthropic_${res.status}`);
+  if (!res.ok) {
+    onEvent?.("extract", false, Date.now() - t0, { http: res.status });
+    throw new Error(`anthropic_${res.status}`);
+  }
   const j = await res.json();
   const text: string = j.content?.find((b: { type: string }) => b.type === "text")?.text ?? "";
   const m = text.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("no_json");
-  return ground(validateExtraction(JSON.parse(m[0])), c, linked);
+  if (!m) {
+    onEvent?.("extract", false, Date.now() - t0, { error: "no_json", output_chars: text.length });
+    throw new Error("no_json");
+  }
+  const raw = validateExtraction(JSON.parse(m[0]));
+  const dropped: string[] = [];
+  const out = ground(raw, c, linked, dropped);
+  // names only, no captions; grounding drops are what explained the St. Moritz variation
+  onEvent?.("extract", true, Date.now() - t0, {
+    output_chars: text.length,
+    kind: raw.kind,
+    category: raw.category,
+    list_scope: raw.list_scope ?? null,
+    raw_items: raw.items.map((i) => i.name),
+    kept_items: out.items.map((i) => i.name),
+    dropped_by_grounding: dropped,
+  });
+  return out;
 }

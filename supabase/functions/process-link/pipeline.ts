@@ -12,6 +12,8 @@ export interface Deps {
   search?: SearchProvider;
   /** count-only cost logging */
   log?: (msg: string) => void;
+  /** stage events for the process_events table: counts, lengths and item names only */
+  event?: (stage: string, ok: boolean, ms: number | undefined, detail: Record<string, unknown>) => void;
 }
 
 export type Result =
@@ -24,8 +26,15 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
   const content = buildContent(url, captured);
   if (!content) return { ok: false, error: "no_captured_text" };
   const text = [content.caption, content.transcript, content.ocr].filter(Boolean).join("\n");
+  d.event?.("captured", true, undefined, {
+    caption_chars: content.caption?.length ?? 0,
+    transcript_chars: content.transcript?.length ?? 0,
+    ocr_chars: content.ocr?.length ?? 0,
+  });
+  const t0 = Date.now();
   const linked = await readLinkedSites(text, d.fetchFn);
-  const ex = await extract(content, linked, d.apiKey, d.fetchFn);
+  d.event?.("linked_sites", true, Date.now() - t0, { read: linked.length, urls: linked.map((l) => l.url) });
+  const ex = await extract(content, linked, d.apiKey, d.fetchFn, d.event);
   if (!ex.items.length) {
     // Nothing extractable (e.g. items never named): keep the captured text for manual sorting.
     return {
@@ -43,6 +52,7 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
   }
 
   const lookup = d.lookup ?? stubLookup;
+  const t1 = Date.now();
   for (const it of ex.items) {
     if (ex.kind === "recipes") continue;
     try {
@@ -60,6 +70,12 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
       if (p.lat != null && p.lng != null) { it.lat = p.lat; it.lng = p.lng; it.sources.lat = it.sources.lng = "places_lookup"; }
     } catch { /* lookup is best-effort */ }
   }
+  d.event?.("places", true, Date.now() - t1, {
+    items: ex.items.length,
+    with_address: ex.items.filter((i) => i.address).length,
+    with_coords: ex.items.filter((i) => i.lat != null).length,
+  });
+  const t2 = Date.now();
   const search = d.search ?? stubSearch;
   let searches = 0, cardsSearched = 0;
   for (const it of ex.items) {
@@ -80,6 +96,7 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
       if (Object.keys(urls).length) it.source_urls = urls;
     } catch { /* search is best-effort */ }
   }
+  d.event?.("search", true, Date.now() - t2, { searches, cards: cardsSearched });
   d.log?.(`web_search count=${searches} cards=${cardsSearched}/${ex.items.length}`);
   return {
     ok: true,
