@@ -28,6 +28,8 @@ Output shape: `{kind: eats|trips|recipes|do, category, list_scope|null, tags[], 
 `LookupProvider` has `findPlace(name, hint)` and optional `geocode(address)`. `lookupFromEnv` returns the Google provider when the Edge Function secret **`GOOGLE_PLACES_API_KEY`** is set (`Deno.env.get`), otherwise the no-op `stubLookup`. The pipeline then runs as before, with no address or map pin on the cards. The key is never committed, logged, or sent to the client.
 - **Named place without an address:** Places API (New) `places:searchText` over HTTPS, `pageSize: 1`, query `"<name> <list_scope>"`. The key is sent in `X-Goog-Api-Key` and the field mask is `places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri`. Result accepted only if the returned display name matches the queried name (`namesMatch`); otherwise the fields stay empty.
 - **Address already in the text or linked data:** the Geocoding API fills lat/lng only if exactly one result is returned. The stated address is never replaced.
+- **One lookup per card:** an item gets either a Text Search or a Geocoding call, never both. **Cache:** hits are stored in `place_lookups` (migration `20261108190000_place_lookups.sql`, keyed by normalized name + list scope, with the place id), so re-running a link does not call Google again. Misses are not cached.
+- **Website is not requested.** `websiteUri` is in a higher-priced Places SKU than the current mask, so it stays out unless the board accepts the cost.
 - Recipes are never looked up. Fields filled this way carry `source: places_lookup`.
 - Web search (`source: search`) is not approved and remains unimplemented.
 - Cost and hit rate are unmeasured: the provider is tested with a mocked `fetch` only, not the live Google API.

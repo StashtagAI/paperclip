@@ -26,7 +26,7 @@ assert.throws(() => validateExtraction({ kind: "food", category: "x", items: [] 
 import { findUrls, parseJsonLd, readLinkedSites, safePublicUrl } from "./linked.ts";
 import { processCaptured } from "./pipeline.ts";
 import { buildContent } from "./retrieval.ts";
-import { googleLookup, type LookupProvider, lookupFromEnv, namesMatch, stubLookup } from "./lookup.ts";
+import { cachedLookup, googleLookup, type LookupProvider, lookupFromEnv, namesMatch, stubLookup } from "./lookup.ts";
 
 assert.equal(buildContent("https://evil.com/x", { caption: "hi" }), null);
 assert.equal(buildContent("https://www.instagram.com/reel/a/", { caption: "  " }), null);
@@ -149,6 +149,14 @@ if (r4b.ok) {
   assert.equal(it.lat, 1.5);
   assert.equal(it.sources?.address, "capture");
 }
+
+// cache: second identical lookup does not call Google; only hits are cached
+const store = new Map<string, any>();
+const cl = cachedLookup(g, { get: (k) => Promise.resolve(store.get(k) ?? null), set: (k, p) => { store.set(k, p); return Promise.resolve(); } });
+const before = calls.length;
+await cl.findPlace("Cafe Dos", "Denver");
+await cl.findPlace("cafe dos", "Denver");
+assert.equal(calls.length - before, 1);
 
 // 5) failures: no text, no items, off-allowlist source
 assert.deepEqual(await processCaptured(IG, {}, key), { ok: false, error: "no_captured_text" });

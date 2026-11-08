@@ -3,7 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { processCaptured } from "./pipeline.ts";
 import { parseAllowedUrl } from "./url.ts";
-import { lookupFromEnv } from "./lookup.ts";
+import { cachedLookup, lookupFromEnv, type PlaceCache, stubLookup } from "./lookup.ts";
 
 declare const Deno: { env: { get(k: string): string | undefined }; serve(h: (r: Request) => Promise<Response>): void };
 
@@ -27,8 +27,19 @@ Deno.serve(async (req) => {
   if (!parseAllowedUrl(link.url)) return await fail("url_not_allowed");
   await db.from("links").update({ status: "processing", error: null }).eq("id", link_id);
 
+  // Keyed by normalized "name + list scope"; stores the resolved place incl. place id.
+  const cache: PlaceCache = {
+    async get(key) {
+      const { data } = await db.from("place_lookups").select("place_id,name,address,lat,lng,maps_uri").eq("query_key", key).maybeSingle();
+      return data ? { placeId: data.place_id, name: data.name, address: data.address, lat: data.lat ?? undefined, lng: data.lng ?? undefined, mapsUri: data.maps_uri ?? undefined } : null;
+    },
+    async set(key, p) {
+      await db.from("place_lookups").upsert({ query_key: key, place_id: p.placeId, name: p.name, address: p.address, lat: p.lat, lng: p.lng, maps_uri: p.mapsUri });
+    },
+  };
+  const base = lookupFromEnv((k) => Deno.env.get(k));
   try {
-    const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: lookupFromEnv((k) => Deno.env.get(k)) });
+    const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: base === stubLookup ? base : cachedLookup(base, cache) });
     if (!r.ok) return await fail(r.error);
     const ex = r.extraction;
 

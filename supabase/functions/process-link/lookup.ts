@@ -5,6 +5,7 @@ export interface PlaceResult {
   lat?: number;
   lng?: number;
   mapsUri?: string;
+  placeId?: string;
 }
 export interface LookupProvider {
   name: string;
@@ -48,6 +49,7 @@ export function googleLookup(apiKey: string, fetchFn: typeof fetch = fetch): Loo
       const { latitude: lat, longitude: lng } = p.location ?? {};
       return {
         name: display,
+        ...(typeof p.id === "string" ? { placeId: p.id } : {}),
         address: p.formattedAddress,
         ...(typeof lat === "number" && typeof lng === "number" ? { lat, lng } : {}),
         ...(typeof p.googleMapsUri === "string" ? { mapsUri: p.googleMapsUri } : {}),
@@ -65,4 +67,23 @@ export function googleLookup(apiKey: string, fetchFn: typeof fetch = fetch): Loo
 export function lookupFromEnv(get: (k: string) => string | undefined, fetchFn?: typeof fetch): LookupProvider {
   const key = get("GOOGLE_PLACES_API_KEY");
   return key ? googleLookup(key, fetchFn) : stubLookup;
+}
+
+export interface PlaceCache {
+  get(key: string): Promise<PlaceResult | null>;
+  set(key: string, p: PlaceResult): Promise<void>;
+}
+
+/** Re-runs reuse a stored hit instead of calling Google again. Only hits are cached; cache errors never fail a lookup. */
+export function cachedLookup(inner: LookupProvider, cache: PlaceCache): LookupProvider {
+  return {
+    ...inner,
+    async findPlace(name, hint) {
+      const key = norm(`${name} ${hint ?? ""}`);
+      try { const hit = await cache.get(key); if (hit) return hit; } catch { /* fall through to a live call */ }
+      const p = await inner.findPlace(name, hint);
+      if (p) { try { await cache.set(key, p); } catch { /* best-effort */ } }
+      return p;
+    },
+  };
 }
