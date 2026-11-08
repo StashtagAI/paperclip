@@ -3,6 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { processCaptured } from "./pipeline.ts";
 import { parseAllowedUrl } from "./url.ts";
+import { cachedSearch, type SearchCache, searchFromEnv, stubSearch } from "./search.ts";
 import { cachedLookup, lookupFromEnv, type PlaceCache, stubLookup } from "./lookup.ts";
 
 declare const Deno: { env: { get(k: string): string | undefined }; serve(h: (r: Request) => Promise<Response>): void };
@@ -37,9 +38,19 @@ Deno.serve(async (req) => {
       await db.from("place_lookups").upsert({ query_key: key, place_id: p.placeId, name: p.name, address: p.address, lat: p.lat, lng: p.lng, maps_uri: p.mapsUri });
     },
   };
+  const sCache: SearchCache = {
+    async get(key) {
+      const { data } = await db.from("search_lookups").select("fill").eq("query_key", key).maybeSingle();
+      return data?.fill ?? null;
+    },
+    async set(key, fill) {
+      await db.from("search_lookups").upsert({ query_key: key, fill });
+    },
+  };
+  const sBase = searchFromEnv((k) => Deno.env.get(k));
   const base = lookupFromEnv((k) => Deno.env.get(k));
   try {
-    const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: base === stubLookup ? base : cachedLookup(base, cache) });
+    const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`) });
     if (!r.ok) return await fail(r.error);
     const ex = r.extraction;
 

@@ -31,7 +31,12 @@ Output shape: `{kind: eats|trips|recipes|do, category, list_scope|null, tags[], 
 - **One lookup per card:** an item gets either a Text Search or a Geocoding call, never both. **Cache:** hits are stored in `place_lookups` (migration `20261108190000_place_lookups.sql`, keyed by normalized name + list scope, with the place id), so re-running a link does not call Google again. Misses are not cached.
 - **Website is not requested.** `websiteUri` is in a higher-priced Places SKU than the current mask, so it stays out unless the board accepts the cost.
 - Recipes are never looked up. Fields filled this way carry `source: places_lookup`.
-- Web search (`source: search`) is not approved and remains unimplemented.
+- Web search (`source: search`) is approved (board, Nov 8) and implemented in `search.ts` with Claude's server-side `web_search_20260209` tool on the existing `ANTHROPIC_API_KEY`.
+  - Runs only for gaps: recipes missing ingredients or steps, and places still without an address after the Places lookup. One request per card with `max_uses: 3`; no retries, and a `pause_turn` is treated as a miss.
+  - Search results are untrusted. A filled field is accepted only if the model returns a `source_url` that the search tool actually returned; it is stored in `item_source_urls` in `links.raw_content`.
+  - Hits are cached in `search_lookups` (migration `20261108200000`, not applied to the live DB). Cache errors never fail a card.
+  - Kill switch: Edge Function secret `WEB_SEARCH_ENABLED=false` (also `0`, `off`, `no`) turns it off without a deploy. Default is on when `ANTHROPIC_API_KEY` is set.
+  - Cost logging: one line per link, `web_search count=N cards=K/M` (counts only, no content).
 - Cost and hit rate are unmeasured: the provider is tested with a mocked `fetch` only, not the live Google API.
 
 ## Storage

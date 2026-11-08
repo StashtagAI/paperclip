@@ -11,6 +11,8 @@ export interface Item {
   steps?: string[];
   /** where each field came from; fields without a verifiable source are dropped */
   sources?: Record<string, Source>;
+  /** page each search-sourced field came from, for the review screen */
+  source_urls?: Record<string, string>;
 }
 export const SOURCES = ["capture", "linked_site", "search", "places_lookup"] as const;
 export type Source = typeof SOURCES[number];
