@@ -232,3 +232,10 @@ import { ground } from "./extract.ts";
   assert.deepEqual(ground(mk(["1/3 cup pumpkin puree", "12 Medjool dates, pitted"]), c, []).items[0].ingredients, ["1/3 cup pumpkin puree", "12 Medjool dates, pitted"]);
   assert.equal(ground(mk(["1 cup saffron"]), c, []).items[0].ingredients, undefined);
 }
+
+// place names that the caption only has as @handles still ground; unrelated names do not
+{
+  const c = { platform: "instagram", url: IG, caption: "Check into @badruttspalace\nDinner at @carltonstmoritz" } as never;
+  const mk = (names: string[]) => ({ kind: "trips" as const, category: "Hotels", list_scope: null, tags: [], items: names.map((name) => ({ name, description: "" })) });
+  assert.deepEqual(ground(mk(["Badrutt's Palace", "Hotel Eden"]), c, []).items.map((i) => i.name), ["Badrutt's Palace"]);
+}

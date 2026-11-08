@@ -18,11 +18,14 @@ const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").tri
 /** Drop anything the captured text or linked data cannot back up. A plausible-but-wrong item is worse than an empty one. */
 export function ground(ex: Extraction, c: Content, linked: LinkedData[]): Extraction {
   const capture = norm([c.caption, c.transcript, c.ocr].filter(Boolean).join(" "));
+  const captureTight = capture.replaceAll(" ", "");
   const items = [];
   for (const it of ex.items) {
     const n = norm(it.name);
     const match = linked.find((l) => l.name && norm(l.name) === n);
-    if (!n || (!capture.includes(n) && !match)) continue;
+    // @handles ("@badruttspalace") have no spaces, so also compare with spaces removed
+    const inCapture = capture.includes(n) || captureTight.includes(n.replaceAll(" ", ""));
+    if (!n || (!inCapture && !match)) continue;
     const g = { name: it.name, description: it.description } as typeof it;
     const sources: Record<string, "capture" | "linked_site" | "search" | "places_lookup"> = {};
     if (it.description) sources.description = "capture";
