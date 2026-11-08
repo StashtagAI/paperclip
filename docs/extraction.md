@@ -5,8 +5,8 @@
 ## Decision: no server-side fetching of Instagram/TikTok
 Instagram's oEmbed terms bar extracting/storing content, and scrapers are against both platforms' ToS. The server therefore never fetches the post. The phone captures text (OCR, transcript, pasted caption) and sends it.
 
-## Request contract (proposed; to agree with Fullstack on HAN-7)
-`POST process-link {link_id, captured: {caption?, transcript?, ocr?}}`. Each field is a string, clipped to 20k chars; at least one is required (`no_captured_text` otherwise). The source URL is read from `links.url` and re-validated against the host allowlist (`url.ts`); it is only validated, never fetched.
+## Request contract (agreed on HAN-7; client side in `docs/capture.md`)
+`POST process-link {link_id, captured: {caption?, transcript?, ocr?}}`, called by the app with the user's session; the caller must own the link (else 404), and a link already `processing` returns 409. Each field is a string, clipped to 20k chars; at least one is required (`no_captured_text` otherwise). The source URL is read from `links.url` and re-validated against the host allowlist (`url.ts`); it is only validated, never fetched.
 
 ## Flow
 `links.id` -> allowlist check -> status `processing` -> linked-site reader -> Claude extraction -> schema validation -> grounding -> optional lookup -> upsert category/list/items -> `links.status = done|failed`.
@@ -45,7 +45,6 @@ Output shape: `{kind: eats|trips|recipes|do, category, list_scope|null, tags[], 
 ## Open items
 - Real fixtures: need captured text from real public posts (incl. iOS-shared) with expected output, to measure accuracy.
 - Live test with the Anthropic key and a deployed function.
-- Agree the payload on HAN-7.
 
 Run tests: `node --experimental-strip-types supabase/functions/process-link/test.ts`
 

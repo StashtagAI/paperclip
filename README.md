@@ -7,7 +7,8 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 
 | Path | What |
 | --- | --- |
-| `src/app/` | Routes: `sign-in`, `auth/callback`, `(app)/index` (Home), `(app)/stash` (Stash a link sheet), `(app)/kind/[kind]` (Kind › Category › List), `(app)/list/[listId]` (items) |
+| `src/app/` | Routes: `sign-in`, `auth/callback`, `(app)/index` (Home), `(app)/stash` (Stash a link sheet), `(app)/share` (share-sheet landing), `(app)/capture/[linkId]` (screenshots / recording / caption), `(app)/card/[linkId]` (live status + review), `(app)/kind/[kind]` (Kind › Category › List), `(app)/list/[listId]` (items) |
+| `src/lib/capture/`, `modules/media-extract/` | On-device OCR, frame sampling, audio extraction and whisper transcription; see `docs/capture.md` |
 | `src/lib/link-filter.ts` | Instagram/TikTok URL allowlist (unit-tested in `src/lib/__tests__`) |
 | `src/lib/supabase.ts`, `src/lib/auth.tsx` | Supabase client and session context (email magic link / one-time code) |
 | `src/constants/theme.ts`, `palette.ts` | Light/dark design tokens and per-kind `KindColors` (fill, `onColor`, chip); read via `useTheme()` / `useKindColors()`. Contrast is unit-tested |
@@ -92,6 +93,10 @@ First EAS use: `npx eas-cli@latest login` then `npx eas-cli@latest init` to atta
 Bundle ID / package: `ai.stashtag.app`.
 
 Static web build: `npm run build:web` (outputs `dist/`, a single-page app).
+
+Share sheet, OCR and transcription use native modules (`expo-share-intent`, `expo-text-extractor`, `whisper.rn`, the
+local `modules/media-extract`), so they need a development build. They don't work in Expo Go. Flow and package choices:
+[`docs/capture.md`](docs/capture.md).
 
 ## Checks
 

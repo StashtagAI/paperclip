@@ -5,6 +5,7 @@ import { processCaptured } from "./pipeline.ts";
 import { parseAllowedUrl } from "./url.ts";
 import { cachedSearch, type SearchCache, searchFromEnv, stubSearch } from "./search.ts";
 import { cachedLookup, lookupFromEnv, type PlaceCache, stubLookup } from "./lookup.ts";
+import { findByName, splitNew } from "./merge.ts";
 
 declare const Deno: { env: { get(k: string): string | undefined }; serve(h: (r: Request) => Promise<Response>): void };
 
@@ -18,6 +19,11 @@ Deno.serve(async (req) => {
 
   const { data: link, error: le } = await db.from("links").select("id,url,user_id").eq("id", link_id).single();
   if (le || !link) return json({ error: "link not found" }, 404);
+  // The app calls this directly with the user's session (HAN-7). verify_jwt only proves the token is valid (the anon
+  // key is too), so check that the caller owns the link before spending model/lookup calls or touching its rows.
+  const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const { data: auth } = await db.auth.getUser(token);
+  if (!auth?.user || auth.user.id !== link.user_id) return json({ error: "link not found" }, 404);
 
   const t00 = Date.now();
   // Best-effort stage log; never lets logging break processing.
@@ -35,7 +41,10 @@ Deno.serve(async (req) => {
 
   // Server-side re-validation: never trust the client check.
   if (!parseAllowedUrl(link.url)) return await fail("url_not_allowed");
-  await db.from("links").update({ status: "processing", error: null }).eq("id", link_id);
+  // Atomic claim: a double tap (or a retry while a run is in flight) must not start a second run.
+  const { data: claimed } = await db.from("links").update({ status: "processing", error: null })
+    .eq("id", link_id).neq("status", "processing").select("id");
+  if (!claimed?.length) return json({ error: "already_processing" }, 409);
 
   // Keyed by normalized "name + list scope"; stores the resolved place incl. place id.
   const cache: PlaceCache = {
@@ -70,30 +79,51 @@ Deno.serve(async (req) => {
     }
     const ex = r.extraction;
 
-    const { data: cat, error: ce } = await db.from("categories")
-      .upsert({ user_id: link.user_id, kind: ex.kind, name: ex.category }, { onConflict: "user_id,kind,name" })
-      .select("id").single();
-    if (ce) throw ce;
-    const { data: list, error: lie } = await db.from("lists")
-      .upsert({ user_id: link.user_id, category_id: cat.id, name: ex.list_scope ?? ex.category, tags: ex.tags },
-        { onConflict: "user_id,category_id,name" })
-      .select("id").single();
-    if (lie) throw lie;
-    const { error: ie } = await db.from("items").upsert(
-      ex.items.map(({ name, description, address, lat, lng }) => ({ name, description, address, lat, lng, list_id: list.id, link_id, user_id: link.user_id })),
-      { onConflict: "list_id,name" },
-    );
-    if (ie) throw ie;
+    // Merge into existing category/list/items, matching names case-insensitively (merge.ts).
+    const { data: cats, error: cle } = await db.from("categories").select("id,name").eq("user_id", link.user_id).eq("kind", ex.kind);
+    if (cle) throw cle;
+    let cat = findByName(cats ?? [], ex.category);
+    if (!cat) {
+      const { data, error } = await db.from("categories")
+        .upsert({ user_id: link.user_id, kind: ex.kind, name: ex.category }, { onConflict: "user_id,kind,name" })
+        .select("id,name").single();
+      if (error) throw error;
+      cat = data;
+    }
+    const scope = ex.list_scope ?? ex.category;
+    const { data: lists, error: lle } = await db.from("lists").select("id,name,tags").eq("category_id", cat!.id);
+    if (lle) throw lle;
+    let list = findByName(lists ?? [], scope);
+    if (!list) {
+      const { data, error } = await db.from("lists")
+        .upsert({ user_id: link.user_id, category_id: cat!.id, name: scope, tags: ex.tags }, { onConflict: "user_id,category_id,name" })
+        .select("id,name,tags").single();
+      if (error) throw error;
+      list = data;
+    } else if (ex.tags.some((t) => !list!.tags.includes(t))) {
+      await db.from("lists").update({ tags: [...new Set([...list.tags, ...ex.tags])] }).eq("id", list.id);
+    }
+    const { data: existing, error: ee } = await db.from("items").select("name").eq("list_id", list!.id);
+    if (ee) throw ee;
+    // Items already in the list are kept as they are (no duplicate, no overwrite of the earlier post's details).
+    const { fresh, already } = splitNew(ex.items, (existing ?? []).map((i) => i.name));
+    if (fresh.length) {
+      const { error: ie } = await db.from("items").upsert(
+        fresh.map(({ name, description, address, lat, lng }) => ({ name, description, address, lat, lng, list_id: list!.id, link_id, user_id: link.user_id })),
+        { onConflict: "list_id,name", ignoreDuplicates: true },
+      );
+      if (ie) throw ie;
+    }
     await db.from("links").update({
       status: "done",
       error: null,
       tags: ex.tags,
-      raw_content: r.raw_content,
+      raw_content: { ...r.raw_content, list_id: list!.id, already_listed: already },
       processed_at: new Date().toISOString(),
     }).eq("id", link_id);
     await Promise.allSettled(pending);
-    await event("final", true, Date.now() - t00, { status: "done", items: ex.items.length });
-    return json({ status: "done", items: ex.items.length });
+    await event("final", true, Date.now() - t00, { status: "done", items: fresh.length, already_listed: already.length });
+    return json({ status: "done", items: fresh.length, already_listed: already.length, list_id: list!.id });
   } catch (e) {
     return await fail(String((e as Error).message ?? e).slice(0, 200));
   }
