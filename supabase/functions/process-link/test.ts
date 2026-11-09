@@ -1,6 +1,7 @@
 // Run: node --experimental-strip-types test.ts
 import assert from "node:assert/strict";
-import { parseAllowedUrl } from "./url.ts";
+import { ALLOWED_HOSTS, parseAllowedUrl } from "./url.ts";
+import { ALLOWED_HOSTS as SHARED_HOSTS } from "../_shared/link-filter.ts";
 import { validateExtraction } from "./schema.ts";
 
 for (const ok of ["https://www.instagram.com/reel/abc/", "https://vm.tiktok.com/ZM123/", "https://tiktok.com/@a/video/1"])
@@ -9,7 +10,15 @@ for (const bad of [
   "http://instagram.com/p/x", "https://instagram.com.evil.com/p/x", "https://evil.com/instagram.com",
   "https://user@instagram.com/p/x", "https://instagram.com:8443/p/x", "https://l.instagram.com/x",
   "https://169.254.169.254/", "javascript:alert(1)", "not a url", "https://notinstagram.com/p/x",
+  // HAN-19: allowed host, but not a post path
+  "https://www.instagram.com/someuser/", "https://www.instagram.com/p/ABC/%0d%0aHost:evil.com",
+  "https://www.instagram.com\\@evil.com/p/ABC/", "https://www.tiktok.com/@user", "https://www.instagram.com/",
+  "Look https://www.instagram.com/p/ABC/",
 ]) assert.equal(parseAllowedUrl(bad), null, bad);
+// Only the normalised URL comes back (no query, fragment or host case), so that is all anything downstream can fetch.
+assert.equal(parseAllowedUrl(" HTTPS://WWW.Instagram.COM/reel/ABC/?igsh=x#y ")?.toString(), "https://www.instagram.com/reel/ABC/");
+assert.equal(parseAllowedUrl("https://vm.tiktok.com/ZM123/?_r=1")?.toString(), "https://vm.tiktok.com/ZM123/");
+assert.deepEqual([...ALLOWED_HOSTS].sort(), Object.keys(SHARED_HOSTS).sort());
 
 // schema
 const v = validateExtraction({

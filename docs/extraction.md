@@ -6,7 +6,7 @@
 Instagram's oEmbed terms bar extracting/storing content, and scrapers are against both platforms' ToS. The server therefore never fetches the post. The phone captures text (OCR, transcript, pasted caption) and sends it.
 
 ## Request contract (agreed on HAN-7; client side in `docs/capture.md`)
-`POST process-link {link_id, captured: {caption?, transcript?, ocr?}}`, called by the app with the user's session; the caller must own the link (else 404), and a link already `processing` returns 409. Each field is a string, clipped to 20k chars; at least one is required (`no_captured_text` otherwise). The source URL is read from `links.url` and re-validated against the host allowlist (`url.ts`); it is only validated, never fetched.
+`POST process-link {link_id, captured: {caption?, transcript?, ocr?}}`, called by the app with the user's session; the caller must own the link (else 404), and a link already `processing` returns 409. Each field is a string, clipped to 20k chars; at least one is required (`no_captured_text` otherwise). The source URL is read from `links.url` and re-validated with the app's host and path rules (`url.ts` -> `supabase/functions/_shared/link-filter.ts`); a profile or any other non-post path fails with `url_not_allowed`. Only the normalised URL (no query or fragment) is used after that; it is never fetched here.
 
 ## Flow
 `links.id` -> allowlist check -> status `processing` -> linked-site reader -> Claude extraction -> schema validation -> grounding -> optional lookup -> upsert category/list/items -> `links.status = done|failed`.
