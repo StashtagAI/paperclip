@@ -1,6 +1,6 @@
 // Run: node --experimental-strip-types fetch-caption.test.ts  (fetch is mocked; no network)
 import assert from "node:assert/strict";
-import { ACTORS, fetchCaption, fetchDisabled } from "./fetch-caption.ts";
+import { ACTORS, apifyToken, fetchCaption, fetchDisabled } from "./fetch-caption.ts";
 
 type Call = { url: string; init?: RequestInit };
 function mock(routes: [RegExp, (c: Call) => Response | Promise<Response>][]) {
@@ -37,6 +37,19 @@ assert.equal(fetchDisabled("instagram", env({ LINK_FETCH_TIKTOK: "0" })), null);
   const m = mock([]);
   const r = await fetchCaption(IG, env({}), m.fn);
   assert.deepEqual([r.ok, !r.ok && r.reason, m.calls.length], [false, "no_token", 0]);
+}
+
+// token secret names: APIFY_TOKEN wins, then the board's Scrapely_API_Key
+{
+  assert.equal(apifyToken(env({})), undefined);
+  assert.equal(apifyToken(env({ Scrapely_API_Key: " k " })), "k");
+  assert.equal(apifyToken(env({ SCRAPELY_API_KEY: "k" })), "k");
+  assert.equal(apifyToken(env({ APIFY_TOKEN: "a", Scrapely_API_Key: "k" })), "a");
+  assert.equal(apifyToken(env({ APIFY_TOKEN: " ", Scrapely_API_Key: "k" })), "k");
+  const m = mock([[/api\.apify\.com/, () => j([{ caption: "Tacos" }])]]);
+  const r = await fetchCaption(IG, env({ Scrapely_API_Key: "k" }), m.fn);
+  assert.equal(r.ok && r.caption, "Tacos");
+  assert.equal((m.calls[0].init?.headers as Record<string, string>).authorization, "Bearer k");
 }
 
 // Instagram via Apify: caption returned, share params stripped, token in header (not the URL), billing capped
