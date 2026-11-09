@@ -9,7 +9,7 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 | --- | --- |
 | `src/app/` | Routes: `sign-in`, `auth/callback`, `(app)/index` (Home), `(app)/stash` (Stash a link sheet), `(app)/share` (share-sheet landing), `(app)/capture/[linkId]` (screenshots / recording / caption), `(app)/card/[linkId]` (live status + review), `(app)/kind/[kind]` (Kind › Category › List), `(app)/list/[listId]` (items) |
 | `src/lib/capture/`, `modules/media-extract/` | On-device OCR, frame sampling, audio extraction and whisper transcription; see `docs/capture.md` |
-| `src/lib/link-filter.ts` | Instagram/TikTok URL allowlist (unit-tested in `src/lib/__tests__`) |
+| `src/lib/link-filter.ts` | Instagram/TikTok URL allowlist; re-exports `supabase/functions/_shared/link-filter.ts`, which `process-link` also uses (unit-tested in `src/lib/__tests__`) |
 | `src/lib/supabase.ts`, `src/lib/auth.tsx` | Supabase client and session context (email magic link / one-time code) |
 | `src/constants/theme.ts`, `palette.ts` | Light/dark design tokens and per-kind `KindColors` (fill, `onColor`, chip); read via `useTheme()` / `useKindColors()`. Contrast is unit-tested |
 | `src/constants/brand.ts` | The pin mark (logo concept B). `npm run icons` regenerates every icon/splash PNG in `assets/images` from it |
@@ -117,5 +117,5 @@ CI (`.github/workflows/ci.yml`) runs all three on every pull request and on push
 Only these hosts are accepted, compared **exactly** after URL parsing (never by substring), over https, without
 credentials or ports: `instagram.com`, `www.instagram.com`, `tiktok.com`, `www.tiktok.com`, `m.tiktok.com`,
 `vm.tiktok.com`. The path must be a post, reel or video (`/p/…`, `/reel/…`, `/@user/video/…`, short links). Query strings
-and fragments are dropped before saving. The same host list is enforced again by a `links.url` check constraint and by
-`process-link` on the server, so the client check is not the only line of defence.
+and fragments are dropped before saving. The host list is enforced again by a `links.url` check constraint, and `process-link` re-runs the
+same host and path rules (one shared module) on the server, so the client check is not the only line of defence.

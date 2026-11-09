@@ -1,4 +1,4 @@
-import { checkLink } from '../link-filter';
+import { checkLink, checkUrl } from '../link-filter';
 
 describe('checkLink: accepts Instagram and TikTok posts', () => {
   it.each([
@@ -93,6 +93,12 @@ describe('checkLink: rejects everything else', () => {
     rejects('https://vm.tiktok.com/', 'not_a_post');
   });
 
+  it('rejects path smuggling on allowed hosts (HAN-19)', () => {
+    rejects('https://www.instagram.com/someuser/', 'not_a_post');
+    rejects('https://www.instagram.com/p/ABC/%0d%0aHost:evil.com', 'not_a_post');
+    rejects('https://www.instagram.com\\@evil.com/p/ABC/', 'not_a_post');
+  });
+
   it('rejects unrelated sites and junk', () => {
     rejects('https://www.youtube.com/watch?v=abc', 'host_not_allowed');
     rejects('https://maps.google.com/?q=instagram.com/p/ABC', 'host_not_allowed');
@@ -104,5 +110,13 @@ describe('checkLink: rejects everything else', () => {
     const r = checkLink('https://instagram.com.evil.com/p/ABC123');
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.message).toBe('Only Instagram and TikTok links are supported.');
+  });
+});
+
+describe('checkUrl: the strict form process-link uses', () => {
+  it('takes one absolute URL only: no share text, no scheme guessing', () => {
+    expect(checkUrl('https://www.instagram.com/p/ABC/?igsh=1')).toMatchObject({ ok: true, url: 'https://www.instagram.com/p/ABC/' });
+    expect(checkUrl('instagram.com/p/ABC')).toMatchObject({ ok: false, reason: 'invalid_url' });
+    expect(checkUrl('Look https://www.instagram.com/p/ABC/')).toMatchObject({ ok: false });
   });
 });

@@ -8,18 +8,16 @@ export const ALLOWED_HOSTS = new Set([
   "m.tiktok.com",
 ]);
 
+import { checkUrl } from "../_shared/link-filter.ts";
+
+/**
+ * Same host and path rules as the app (HAN-19): profiles, encoded CRLF and `\@` host tricks are rejected. Returns
+ * the normalised URL (https, lower-case host, no query/fragment); anything fetched downstream must use this, never
+ * the raw string.
+ */
 export function parseAllowedUrl(raw: string): URL | null {
-  let u: URL;
-  try {
-    u = new URL(raw.trim());
-  } catch {
-    return null;
-  }
-  if (u.protocol !== "https:") return null;
-  if (u.username || u.password) return null;
-  if (u.port && u.port !== "443") return null;
-  if (!ALLOWED_HOSTS.has(u.hostname.toLowerCase())) return null;
-  return u;
+  const r = checkUrl(raw.trim());
+  return r.ok ? new URL(r.url) : null;
 }
 
 export type Platform = "instagram" | "tiktok";
