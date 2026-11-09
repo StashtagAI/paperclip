@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -21,9 +21,17 @@ import { PLATFORM_LABELS } from '@/lib/types';
 const native = Platform.OS !== 'web';
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 
+const FETCH_COPY: Record<string, string> = {
+  no_items: 'The caption doesn’t name any places, recipes or things to do. Add what the video says.',
+  empty_caption: 'This post has no caption we could read. Add what the post says.',
+  not_available: 'We couldn’t open this post (it may be private). Add what the post says.',
+  timeout: 'Reading the post took too long. Add what the post says.',
+};
+
 /**
- * Capture (HAN-11, approach 1A): the share sheet only gives us the link, so the user adds what the post says.
- * Screenshots and recordings are read on the device (OCR, frame OCR, whisper.rn); only the resulting text is sent.
+ * Capture: the fallback when process-link couldn't read a usable caption from the link (HAN-18), or a re-capture.
+ * The user adds what the post says; any fetched caption is pre-filled. Screenshots and recordings are read on the
+ * device (OCR, frame OCR, whisper.rn); only the resulting text is sent.
  */
 export default function CaptureScreen() {
   const { linkId } = useLocalSearchParams<{ linkId: string }>();
@@ -42,6 +50,16 @@ export default function CaptureScreen() {
   const update = (id: string, patch: Partial<Segment>) =>
     setSegments((s) => s.map((seg) => (seg.id === id ? { ...seg, ...patch } : seg)));
   const remove = (id: string) => setSegments((s) => s.filter((seg) => seg.id !== id));
+
+  // Pre-fill the caption process-link fetched (it named nothing on its own, but helps alongside a transcript).
+  const fetched = link.data?.raw_content?.caption_source === 'fetched' ? link.data.raw_content.caption : null;
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!fetched || prefilled.current) return;
+    prefilled.current = true;
+    add({ source: 'fetched_caption', label: 'Read from the link', status: 'ready', text: fetched });
+  }, [fetched]);
+  const fetchReason = link.data?.error === 'needs_capture' ? link.data.raw_content?.fetch?.reason : undefined;
 
   async function addScreenshots() {
     setError(null);
@@ -148,6 +166,7 @@ export default function CaptureScreen() {
           {PLATFORM_LABELS[link.data.platform]} · {link.data.url.replace(/^https:\/\/(www\.)?/, '')}
         </ThemedText>
       ) : null}
+      {fetchReason && FETCH_COPY[fetchReason] ? <ThemedText>{FETCH_COPY[fetchReason]}</ThemedText> : null}
       <ThemedText themeColor="textSecondary">
         {native
           ? 'Add screenshots of the expanded caption, a screen recording of the reel, or paste the caption. One is enough; more helps. Pictures and video stay on this phone, only the text is sent.'

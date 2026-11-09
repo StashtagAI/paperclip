@@ -150,10 +150,11 @@ export function subscribeToLink(linkId: string, onChange: () => void): () => voi
 }
 
 /**
- * Sends the text captured on the phone to process-link (direct call with the user's session; see docs/capture.md).
- * Only text is sent: screenshots and recordings never leave the device.
+ * Calls process-link with the user's session (see docs/capture.md). With `captured`, it sends the text captured on the
+ * phone (screenshots and recordings never leave the device). Without, the server reads the post's caption itself
+ * (HAN-18) and either files the card or sets the link back to pending with error "needs_capture".
  */
-export async function buildCard(linkId: string, captured: Captured): Promise<void> {
+export async function buildCard(linkId: string, captured?: Captured): Promise<void> {
   const { error } = await supabase.functions.invoke('process-link', { body: { link_id: linkId, captured } });
   if (!error) return;
   // A non-2xx reply; the function also records failures on the link row, which the review screen shows.

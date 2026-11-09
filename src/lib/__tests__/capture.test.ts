@@ -50,6 +50,12 @@ describe('toCaptured', () => {
     });
   });
 
+  it('puts a fetched caption (HAN-18) in the caption field alongside a pasted one', () => {
+    expect(toCaptured([seg('fetched_caption', 'fetched'), seg('caption', 'pasted')])).toEqual({
+      caption: 'fetched\n\npasted',
+    });
+  });
+
   it('omits empty fields', () => {
     expect(toCaptured([seg('caption', '   ')])).toEqual({});
   });

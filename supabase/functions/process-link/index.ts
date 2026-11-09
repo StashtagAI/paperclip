@@ -1,8 +1,12 @@
-// Supabase Edge Function. POST {link_id, captured:{caption?,transcript?,ocr?}} (text captured on the phone).
-// The server never fetches the Instagram/TikTok post (HAN-11).
+// Supabase Edge Function. POST {link_id, captured?:{caption?,transcript?,ocr?}}.
+// With captured text (from the capture screen) it extracts from that. Without, it first fetches the post's caption
+// (fetch-caption.ts, HAN-18); if that fails or yields no items the link goes back to "pending" with
+// error "needs_capture" and the app opens the capture screen.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { processCaptured } from "./pipeline.ts";
-import { parseAllowedUrl } from "./url.ts";
+import { buildContent } from "./retrieval.ts";
+import { fetchCaption } from "./fetch-caption.ts";
+import { parseAllowedUrl, platformOf } from "./url.ts";
 import { cachedSearch, type SearchCache, searchFromEnv, stubSearch } from "./search.ts";
 import { cachedLookup, lookupFromEnv, type PlaceCache, stubLookup } from "./lookup.ts";
 import { findByName, splitNew } from "./merge.ts";
@@ -13,7 +17,7 @@ const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
 
 Deno.serve(async (req) => {
-  const { link_id, captured } = await req.json().catch(() => ({}));
+  const { link_id, captured: sent } = await req.json().catch(() => ({}));
   if (!link_id) return json({ error: "link_id required" }, 400);
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -40,11 +44,39 @@ Deno.serve(async (req) => {
   };
 
   // Server-side re-validation: never trust the client check.
-  if (!parseAllowedUrl(link.url)) return await fail("url_not_allowed");
+  const postUrl = parseAllowedUrl(link.url);
+  if (!postUrl) return await fail("url_not_allowed");
+  const fetching = !buildContent(link.url, sent);
   // Atomic claim: a double tap (or a retry while a run is in flight) must not start a second run.
-  const { data: claimed } = await db.from("links").update({ status: "processing", error: null })
+  // raw_content.reading lets the app show "Reading the post…" until the caption is in.
+  const { data: claimed } = await db.from("links")
+    .update({ status: "processing", error: null, ...(fetching ? { raw_content: { reading: true } } : {}) })
     .eq("id", link_id).neq("status", "processing").select("id");
   if (!claimed?.length) return json({ error: "already_processing" }, 409);
+
+  // Back to "pending" so the capture screen takes over, keeping whatever caption we got to pre-fill it.
+  const needsCapture = async (reason: string, fetch: Record<string, unknown>, caption?: string) => {
+    await Promise.allSettled(pending);
+    await event("final", true, Date.now() - t00, { status: "needs_capture", reason });
+    await db.from("links").update({
+      status: "pending",
+      error: "needs_capture",
+      raw_content: { fetch: { ...fetch, reason }, caption: caption ?? null, caption_source: caption ? "fetched" : null },
+    }).eq("id", link_id);
+    return json({ status: "needs_capture", reason });
+  };
+
+  let captured = sent;
+  let fetched: Record<string, unknown> | null = null;
+  if (fetching) {
+    const f = await fetchCaption(postUrl, (k) => Deno.env.get(k));
+    const detail = { platform: platformOf(postUrl), cost_usd: f.cost_usd, ...(f.ok ? { via: f.via, caption_chars: f.caption.length } : { reason: f.reason, tried: f.tried }) };
+    await event("fetch_caption", f.ok, f.ms, detail);
+    console.log(`[process-link] fetch_caption ${JSON.stringify({ ok: f.ok, ms: f.ms, ...detail })}`);
+    if (!f.ok) return await needsCapture(f.reason, { ms: f.ms, cost_usd: f.cost_usd, tried: f.tried });
+    fetched = { via: f.via, ms: f.ms, cost_usd: f.cost_usd };
+    captured = { caption: f.caption };
+  }
 
   // Keyed by normalized "name + list scope"; stores the resolved place incl. place id.
   const cache: PlaceCache = {
@@ -70,6 +102,9 @@ Deno.serve(async (req) => {
   try {
     const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`), event: sink });
     if (!r.ok) return await fail(r.error);
+    // A fetched caption that names nothing (only hashtags, "recipe in bio"…): let the user add what the video says.
+    if (fetched && "unsorted" in r) return await needsCapture("no_items", fetched, (captured as { caption: string }).caption);
+    if (fetched) r.raw_content = { ...r.raw_content, caption_source: "fetched", fetch: fetched };
     if ("unsorted" in r) {
       // Unsorted bucket: done + no items + raw_content.unsorted, no empty category/list created.
       await db.from("links").update({ status: "done", error: null, raw_content: r.raw_content, processed_at: new Date().toISOString() }).eq("id", link_id);

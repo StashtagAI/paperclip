@@ -9,7 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
-import { fetchRecentLinks, submitLink } from '@/lib/data';
+import { buildCard, fetchLink, fetchRecentLinks, submitLink } from '@/lib/data';
 import { checkLink } from '@/lib/link-filter';
 import { supabase } from '@/lib/supabase';
 import type { LinkRow, LinkStatus } from '@/lib/types';
@@ -17,8 +17,9 @@ import type { LinkRow, LinkStatus } from '@/lib/types';
 type Feedback = { tone: 'danger' | 'success'; text: string } | null;
 
 /**
- * "Stash a link": paste an Instagram/TikTok URL (or arrive here from the share sheet with `?url=`). The link is saved,
- * then the capture screen collects what the post says for process-link.
+ * "Stash a link": paste an Instagram/TikTok URL (or arrive here from the share sheet with `?url=`). The link is saved
+ * and process-link reads the post's caption itself (HAN-18); the card screen follows it live and opens the capture
+ * screen if the caption can't be read or names nothing.
  */
 export default function StashScreen() {
   const { url: sharedUrl } = useLocalSearchParams<{ url?: string }>();
@@ -32,10 +33,19 @@ export default function StashScreen() {
     if (!result.ok) return setFeedback({ tone: 'danger', text: result.message });
     setSaving(true);
     try {
-      const { id } = await submitLink(result);
+      const { id, outcome } = await submitLink(result);
       setInput('');
       setFeedback(null);
-      router.replace({ pathname: '/capture/[linkId]', params: { linkId: id } });
+      // A post stashed before: show where it got to rather than paying to read it again.
+      if (outcome === 'duplicate') {
+        const prev = await fetchLink(id);
+        if (prev.status === 'done' || prev.status === 'processing')
+          return router.replace({ pathname: '/card/[linkId]', params: { linkId: id } });
+        if (prev.error === 'needs_capture') return router.replace({ pathname: '/capture/[linkId]', params: { linkId: id } });
+      }
+      // Don't wait: reading the post can take ~30 s and the card screen shows it live.
+      buildCard(id).catch((e: Error) => console.warn('[process-link]', e.message));
+      router.replace({ pathname: '/card/[linkId]', params: { linkId: id, sent: 'read' } });
     } catch (e) {
       setFeedback({ tone: 'danger', text: `Couldn’t save the link: ${(e as Error).message}` });
     } finally {
@@ -121,7 +131,7 @@ function LinkRowView({ link }: { link: LinkRow }) {
         <ThemedText type="small" numberOfLines={1}>
           {link.url.replace(/^https:\/\/(www\.)?/, '')}
         </ThemedText>
-        {link.error ? (
+        {link.status === 'failed' && link.error ? (
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
             {link.error}
           </ThemedText>
