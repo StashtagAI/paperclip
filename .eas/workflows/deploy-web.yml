@@ -1,0 +1,16 @@
+# Production web deploy (HAN-15): every push to main exports the web build with the "production" EAS environment
+# variables and promotes it to production on Expo Hosting, which app.stashtag.ai serves.
+# Runs on Expo Workflows; needs the GitHub repo connected to the EAS project (expo.dev > Project settings > GitHub).
+name: Deploy web
+
+on:
+  push:
+    branches: ['main']
+
+jobs:
+  deploy:
+    name: Deploy web to production
+    type: deploy
+    environment: production
+    params:
+      prod: true

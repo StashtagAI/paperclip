@@ -22,3 +22,5 @@ jobs:
       # Same Metro bundle step EAS runs ("Bundle JavaScript"), so a missing
       # native-only dependency fails here instead of in a cloud build.
       - run: npx expo export --platform ios --platform android --output-dir /tmp/native-export
+      # The web build that Expo Hosting deploys (.eas/workflows).
+      - run: npx expo export --platform web --output-dir /tmp/web-export

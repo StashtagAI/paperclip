@@ -1,10 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { KindTile } from '@/components/kind-tile';
+import { DESKTOP_MIN_WIDTH, DesktopLibrary } from '@/components/library/desktop-library';
 import { PinMark } from '@/components/pin-mark';
 import { Screen } from '@/components/screen';
 import { PendingLinkRow, StashRow } from '@/components/stash-row';
@@ -22,8 +23,14 @@ const GRID: Kind[][] = [
   ['recipes', 'do'],
 ];
 
+/** Home: the phone layout, or on a desktop-width browser the browse & organize layout (HAN-15). */
+export default function HomeRoute() {
+  const { width } = useWindowDimensions();
+  return Platform.OS === 'web' && width >= DESKTOP_MIN_WIDTH ? <DesktopLibrary /> : <HomeScreen />;
+}
+
 /** Home ("Home screen.pdf"): header + search, the four kinds, and recently stashed items. */
-export default function HomeScreen() {
+function HomeScreen() {
   const recent = useAsync(() => Promise.all([fetchRecentItems(), fetchInFlightLinks()]), []);
   const [query, setQuery] = useState('');
   const search = useDebouncedSearch(query);

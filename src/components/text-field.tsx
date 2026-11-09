@@ -1,9 +1,12 @@
+import type { ComponentRef, Ref } from 'react';
 import { StyleSheet, TextInput, type TextInputProps } from 'react-native';
 
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-export function TextField({ style, invalid, ...rest }: TextInputProps & { invalid?: boolean }) {
+export type TextFieldHandle = ComponentRef<typeof TextInput>;
+
+export function TextField({ style, invalid, ...rest }: TextInputProps & { invalid?: boolean; ref?: Ref<TextFieldHandle> }) {
   const theme = useTheme();
   return (
     <TextInput
