@@ -61,7 +61,13 @@ export type FieldSource = 'capture' | 'linked_site' | 'places_lookup' | 'search'
 
 /** What process-link stores in links.raw_content; every field is optional because older rows predate some of them. */
 export type RawContent = {
+  /** process-link is reading the post's caption (link-first capture, HAN-18). */
+  reading?: boolean;
   caption?: string | null;
+  /** "fetched" when the caption was read from the link server-side rather than captured on the phone. */
+  caption_source?: 'fetched' | null;
+  /** Link-first fetch: how, how long, estimated cost, and why it fell back to capture. */
+  fetch?: { via?: string; ms?: number; cost_usd?: number; reason?: string };
   transcript?: string | null;
   ocr?: string | null;
   linked_sites?: string[];

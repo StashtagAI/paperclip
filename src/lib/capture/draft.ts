@@ -2,7 +2,7 @@ import { clip, dedupeLines } from '@/lib/capture/lines';
 import type { Captured } from '@/lib/types';
 
 /** Where a piece of captured text came from; shown on the capture and review screens. */
-export type SegmentSource = 'caption' | 'screenshot' | 'recording_text' | 'recording_audio';
+export type SegmentSource = 'caption' | 'fetched_caption' | 'screenshot' | 'recording_text' | 'recording_audio';
 
 export type Segment = {
   id: string;
@@ -17,19 +17,20 @@ export type Segment = {
 
 export const SOURCE_LABELS: Record<SegmentSource, string> = {
   caption: 'Pasted caption',
+  fetched_caption: 'Caption (fetched)',
   screenshot: 'Screenshot text',
   recording_text: 'On-screen text',
   recording_audio: 'Spoken audio',
 };
 
 /**
- * Builds the process-link `captured` payload from the ready segments: pasted caption -> caption, spoken audio ->
+ * Builds the process-link `captured` payload from the ready segments: pasted or fetched caption -> caption, spoken audio ->
  * transcript, and every OCR source (screenshots, recording frames) -> ocr, with repeated lines removed.
  */
 export function toCaptured(segments: readonly Segment[]): Captured {
   const ready = segments.filter((s) => s.status === 'ready' && s.text.trim());
   const of = (...sources: SegmentSource[]) => ready.filter((s) => sources.includes(s.source)).map((s) => s.text.trim());
-  const caption = of('caption').join('\n\n');
+  const caption = of('fetched_caption', 'caption').join('\n\n');
   const transcript = of('recording_audio').join('\n\n');
   const ocr = dedupeLines(of('screenshot', 'recording_text')).join('\n');
   const captured: Captured = {};

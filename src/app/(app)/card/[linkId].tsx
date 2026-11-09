@@ -19,6 +19,10 @@ const STATUS_COPY: Record<LinkStatus, string> = {
   failed: 'Couldn’t build this card',
 };
 
+/** Fields the model took from the text: a fetched caption (HAN-18) or text captured on the phone. */
+const sourceCopy = (source: FieldSource, raw: RawContent | null) =>
+  source === 'capture' && raw?.caption_source === 'fetched' ? 'from the caption (fetched)' : SOURCE_COPY[source];
+
 const SOURCE_COPY: Record<FieldSource, string> = {
   capture: 'from the post',
   linked_site: 'from a linked site',
@@ -38,7 +42,8 @@ const ERROR_COPY: Record<string, string> = {
  * can be removed. Status updates arrive over Supabase Realtime.
  */
 export default function CardScreen() {
-  // `sent` = we just came from Build card, so a still-"pending" row means the request is on its way.
+  // `sent` = we just came from Build card ("1") or Stash it ("read"), so a still-"pending" row means the request is on
+  // its way.
   const { linkId, sent } = useLocalSearchParams<{ linkId: string; sent?: string }>();
   const load = useAsync(() => Promise.all([fetchLink(linkId), fetchLinkItems(linkId)]), [linkId]);
   const { refresh } = load;
@@ -47,7 +52,15 @@ export default function CardScreen() {
   const [link, items] = load.data ?? [];
   const raw = link?.raw_content ?? null;
   const first = items?.[0];
-  const sending = sent === '1' && link?.status === 'pending';
+  // After Stash it, "needs_capture" is the reply; after Build card it's the row's old state until the claim lands.
+  const needsCapture = sent === 'read' && link?.status === 'pending' && link.error === 'needs_capture';
+  const sending = !!sent && link?.status === 'pending' && !needsCapture;
+  const reading = (sent === 'read' && sending) || (link?.status === 'processing' && !!raw?.reading);
+
+  // The caption couldn't be read (private post, no caption, kill switch) or named nothing: ask for what the post says.
+  useEffect(() => {
+    if (needsCapture) router.replace({ pathname: '/capture/[linkId]', params: { linkId } });
+  }, [needsCapture, linkId]);
 
   return (
     <Screen
@@ -73,7 +86,7 @@ export default function CardScreen() {
       }>
       <Stack.Screen options={{ title: 'Your card' }} />
       {load.error ? <ThemedText themeColor="danger">{load.error.message}</ThemedText> : null}
-      {!link ? <ActivityIndicator /> : <StatusBanner link={link} sending={sending} />}
+      {!link ? <ActivityIndicator /> : <StatusBanner link={link} sending={sending} reading={reading} />}
 
       {first ? (
         <ThemedText type="sectionTitle">
@@ -100,7 +113,7 @@ export default function CardScreen() {
   );
 }
 
-function StatusBanner({ link, sending }: { link: LinkDetail; sending: boolean }) {
+function StatusBanner({ link, sending, reading }: { link: LinkDetail; sending: boolean; reading: boolean }) {
   const theme = useTheme();
   const color = link.status === 'failed' ? theme.danger : link.status === 'done' ? theme.success : theme.textSecondary;
   return (
@@ -108,7 +121,7 @@ function StatusBanner({ link, sending }: { link: LinkDetail; sending: boolean })
       {link.status === 'processing' || sending ? <ActivityIndicator /> : null}
       <View style={styles.flex}>
         <ThemedText type="defaultBold" style={{ color }} accessibilityLiveRegion="polite">
-          {sending ? 'Sending the text…' : STATUS_COPY[link.status]}
+          {reading ? 'Reading the post…' : sending ? 'Sending the text…' : STATUS_COPY[link.status]}
         </ThemedText>
         {link.status === 'failed' && link.error ? (
           <ThemedText type="small" themeColor="textSecondary">
@@ -162,7 +175,7 @@ function ReviewItem({ item, raw, onRemoved }: { item: LinkItem; raw: RawContent 
           <View key={field} style={styles.field}>
             <ThemedText type="small" themeColor="textSecondary">
               {FIELD_LABELS[field]}
-              {sources[field] ? ` · ${SOURCE_COPY[sources[field]!]}` : ''}
+              {sources[field] ? ` · ${sourceCopy(sources[field]!, raw)}` : ''}
               {urls[field] ? ` (${hostOf(urls[field]!)})` : ''}
             </ThemedText>
             <ThemedText type={field === 'name' ? 'defaultBold' : 'small'} selectable>

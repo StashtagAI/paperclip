@@ -1,4 +1,5 @@
-// Server-side allowlist for the SOURCE link only. The server never fetches Instagram/TikTok URLs (HAN-11).
+// Server-side allowlist for the SOURCE link. Only fetch-caption.ts contacts these hosts (TikTok oEmbed and short-link
+// redirects, HAN-18); linked.ts never fetches them.
 export const ALLOWED_HOSTS = new Set([
   "instagram.com",
   "www.instagram.com",

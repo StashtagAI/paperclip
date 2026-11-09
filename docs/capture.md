@@ -1,4 +1,7 @@
-# Share, capture and review (HAN-7, approach 1A from HAN-11)
+# Share, capture and review (HAN-7, approach 1A from HAN-11; link-first since HAN-18)
+
+> **Since HAN-18 (2026-11-09) the link comes first.** On **Stash it**, `process-link` reads the post's caption
+> server-side. The capture screen below is now the fallback. See [Link-first capture](#link-first-capture-han-18).
 
 **Status:** typecheck, lint, unit tests and the web export pass. `expo prebuild` generates the iOS share extension and
 the Android intent filter. **Nothing native has been compiled or run yet**: there is no Xcode or Android SDK on the build
@@ -21,6 +24,56 @@ on a real phone. No speed or accuracy numbers have been measured.
    items can be removed, and there is a thumbs up/down (`link_feedback`).
 
 Web gets **Paste caption** and **Upload screenshots** only. Screenshots are read in the browser with tesseract.js.
+
+## Link-first capture (HAN-18)
+
+The board reversed approach 1A on 2026-11-09 ("I want the smoothest experience for users") and accepted the Instagram
+terms-of-service risk.
+
+1. **Stash it** (paste or share sheet) saves the link, calls `process-link` with only `{link_id}` (no `captured`), and
+   opens the card screen with `sent=read`.
+2. `process-link` claims the link (`processing`, `raw_content.reading = true`; the card shows **Reading the post…**) and
+   runs `fetch-caption.ts`, with a 30 s budget:
+   - **TikTok:** resolves `vm.tiktok.com` short links (redirects are followed only on allowlisted hosts), then calls the
+     public oEmbed endpoint (`https://www.tiktok.com/oembed?url=…`, no key) and uses `title` as the caption. **As of
+     2026-11-09 oEmbed returned no `title` for every video we tried**, so with `APIFY_TOKEN` set it falls back to the
+     Apify actor `clockworks~tiktok-scraper` (input `postURLs`, caption in `text`, downloads off).
+   - **Instagram:** Apify actor `apify~instagram-scraper`, input
+     `{directUrls:[url], resultsType:"posts", resultsLimit:1}`, caption in `caption`. Private, deleted and
+     login-walled posts come back as an item with `error`.
+   - Apify is called with `POST /v2/acts/<actor>/run-sync-get-dataset-items?timeout=27&maxItems=1&maxTotalChargeUsd=0.05`,
+     with the token in the `Authorization` header. Billing is capped at one result.
+3. If a caption comes back, it goes into the same `captured.caption` field the capture screen uses (the payload agreed
+   with Extraction in HAN-6). Extraction runs as usual, and `raw_content` gets `caption_source: "fetched"` and
+   `fetch: {via, ms, cost_usd}`. The review screen labels those fields **from the caption (fetched)**.
+4. If anything fails (kill switch, no token, private post, empty caption, timeout, actor error), or the fetched caption
+   names no items, the link goes back to `pending` with `error = "needs_capture"`. `raw_content` keeps
+   `fetch.reason` and any caption. The card screen then opens **Add what the post says**, which shows the reason and
+   pre-fills the fetched caption as a **Caption (fetched)** block. The link is never marked `failed` for a fetch problem.
+
+**Kill switches** (Supabase Edge Function secrets; unset means on):
+
+| Secret | Effect |
+| --- | --- |
+| `LINK_FETCH_ENABLED=false` | No fetching at all: every link goes straight to the capture screen. |
+| `LINK_FETCH_INSTAGRAM=false` / `LINK_FETCH_TIKTOK=false` | Turns one platform off. |
+| `APIFY_TOKEN` | Required for Instagram, and for TikTok when oEmbed has no caption. Without it, Instagram falls back to capture. |
+
+`bunx supabase secrets set LINK_FETCH_ENABLED=false` (or the dashboard: Edge Functions › Secrets) takes effect on the
+next call, with no redeploy.
+
+**Cost and time per fetch** are written to `process_events` (stage `fetch_caption`: `ms`, `ok`, `detail.via`,
+`detail.cost_usd`, `detail.reason`, `detail.tried`) and to the function log, and on success also to
+`links.raw_content.fetch`. `cost_usd` is an estimate: results returned × the actor's list price per result on the
+free plan (Instagram $2.70 / 1,000, TikTok $1.70 / 1,000, checked on apify.com 2026-11-09). It is not Apify's
+invoice. TikTok via oEmbed costs $0.
+
+```sql
+select created_at, ok, ms, detail->>'via' via, detail->>'reason' reason, (detail->>'cost_usd')::numeric cost
+from process_events where stage = 'fetch_caption' order by created_at desc limit 50;
+```
+
+Not in this task: server-side audio transcription for posts with an empty caption.
 
 ## Decision: trigger = direct call from the client (deliverable 1)
 
