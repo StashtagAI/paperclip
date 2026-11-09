@@ -92,7 +92,34 @@ EAS profiles (`eas.json`):
 First EAS use: `npx eas-cli@latest login` then `npx eas-cli@latest init` to attach the project ID to `app.json`.
 Bundle ID / package: `ai.stashtag.app`.
 
-Static web build: `npm run build:web` (outputs `dist/`, a single-page app).
+## Web (app.stashtag.ai)
+
+The web app is this same codebase. Phones capture; on a browser 1024 px or wider, Home becomes a desktop layout for
+browsing and organizing (`src/components/library/`): Kinds > Categories > Lists sidebar, a table of saves with search,
+multi-select, bulk move/delete, drag a save onto a list, and a detail pane. Drag and drop and keyboard shortcuts are
+web-only (`*.web.ts(x)`). Narrower browsers get the phone layout.
+
+Shortcuts: `/` or `Cmd/Ctrl+K` search, `j`/`k` or arrows to move, `x` or space to select, `Cmd/Ctrl+A` select all,
+Shift-click for a range, `m` move to, `Delete`/`Backspace` delete, `Esc` clear.
+
+Hosting is Expo Hosting, deployed by Expo Workflows (`.eas/workflows/`):
+
+- `deploy-web.yml`: every push to `main` deploys to production (`app.stashtag.ai`) with the `production` EAS
+  environment variables.
+- `pr-preview-web.yml`: every PR gets its own preview URL with the `preview` environment variables, posted as a PR
+  comment.
+
+These need the GitHub repo connected to the EAS project (expo.dev > project > Project settings > GitHub) and
+`EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` set in both environments. By hand:
+
+```bash
+npx expo export --platform web            # outputs dist/, a single-page app
+npx eas-cli@latest deploy                 # preview URL
+npx eas-cli@latest deploy --prod          # production
+```
+
+The custom domain is set in expo.dev > project > Hosting settings (a paid-plan feature); the DNS records it shows go on
+`app.stashtag.ai`. Add `https://app.stashtag.ai/**` to Supabase Auth Redirect URLs.
 
 Share sheet, OCR and transcription use native modules (`expo-share-intent`, `expo-text-extractor`, `whisper.rn`, the
 local `modules/media-extract`), so they need a development build. They don't work in Expo Go. Flow and package choices:

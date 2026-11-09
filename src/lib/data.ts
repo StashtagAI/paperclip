@@ -179,6 +179,77 @@ export async function deleteItem(itemId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Every category with its lists and item counts, across all kinds: the desktop sidebar. */
+export async function fetchLibrary(): Promise<KindCategory[]> {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, kind, name, lists(id, category_id, name, tags, items(count))')
+    .order('kind')
+    .order('name')
+    .order('name', { referencedTable: 'lists' })
+    .returns<CategoryQueryRow[]>();
+  if (error) throw error;
+  return data.map(({ lists, ...category }) => ({
+    ...category,
+    lists: lists.map(({ items, ...list }) => ({ ...list, itemCount: items[0]?.count ?? 0 })),
+  }));
+}
+
+/** An item as shown in the desktop table and detail pane. */
+export type LibraryItem = ItemRow & {
+  created_at: string;
+  list: Pick<ListRow, 'id' | 'name' | 'tags'> & { category: CategoryRow };
+  link: Pick<LinkRow, 'id' | 'url' | 'platform' | 'tags'> | null;
+};
+
+/** What the desktop table shows: everything, one kind, one category or one list. */
+export type LibraryScope =
+  | { type: 'all' }
+  | { type: 'kind'; kind: Kind }
+  | { type: 'category'; categoryId: string }
+  | { type: 'list'; listId: string };
+
+const LIBRARY_ITEM_COLUMNS =
+  '*, list:lists!inner(id, name, tags, category:categories!inner(id, kind, name)), link:links(id, url, platform, tags)';
+
+/** Items in a scope, newest first, optionally narrowed by the same search as Home. */
+export async function fetchLibraryItems(scope: LibraryScope, query = '', limit = 500): Promise<LibraryItem[]> {
+  let request = supabase.from('items').select(LIBRARY_ITEM_COLUMNS);
+  if (scope.type === 'kind') request = request.eq('list.category.kind', scope.kind);
+  if (scope.type === 'category') request = request.eq('list.category_id', scope.categoryId);
+  if (scope.type === 'list') request = request.eq('list_id', scope.listId);
+  const filter = itemSearchFilter(query);
+  if (filter) request = request.or(filter);
+  const { data, error } = await request
+    .order('created_at', { ascending: false })
+    .limit(limit)
+    .returns<LibraryItem[]>();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Moves items to another list. Each item is updated on its own so one name clash (a list can't hold two items
+ * with the same name) doesn't block the rest; clashing items stay where they were and are returned.
+ */
+export async function moveItems(items: Pick<ItemRow, 'id' | 'name'>[], listId: string): Promise<{ skipped: string[] }> {
+  const results = await Promise.all(
+    items.map(async (item) => {
+      const { error } = await supabase.from('items').update({ list_id: listId }).eq('id', item.id);
+      if (error?.code === '23505') return item.name;
+      if (error) throw error;
+      return null;
+    }),
+  );
+  return { skipped: results.filter((name): name is string => name !== null) };
+}
+
+export async function deleteItems(itemIds: string[]): Promise<void> {
+  if (!itemIds.length) return;
+  const { error } = await supabase.from('items').delete().in('id', itemIds);
+  if (error) throw error;
+}
+
 export async function rateLink(linkId: string, rating: 'up' | 'down', reason?: FeedbackReason): Promise<void> {
   const { error } = await supabase
     .from('link_feedback')

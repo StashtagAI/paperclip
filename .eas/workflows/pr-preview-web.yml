@@ -1,0 +1,17 @@
+# Web preview per pull request (HAN-15): deploys the PR's web build to its own expo.app URL (not production) and
+# comments the link on the PR. Uses the "preview" EAS environment variables.
+name: PR web preview
+
+on:
+  pull_request: {}
+
+jobs:
+  deploy:
+    name: Deploy web preview
+    type: deploy
+    environment: preview
+
+  comment:
+    name: Comment preview URL
+    needs: [deploy]
+    type: github-comment
