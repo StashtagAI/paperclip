@@ -52,4 +52,4 @@ Run tests: `node --experimental-strip-types supabase/functions/process-link/test
 
 - `process_events`: one row per stage (`captured`, `linked_sites`, `extract`, `places`, `search`, `final`) with `ok`, `ms` and a small `detail` json. Detail holds counts, lengths and item names only (including names dropped by grounding and the model output length). Never secrets or full captions. Users can read their own rows; the app may insert `source='client'` rows for diagnostics.
 - `link_feedback`: one row per (link, user). `rating` up/down, `reason` (wrong_category | wrong_items | missed_items, only with down), optional `note`. A trigger fills `snapshot` with the extracted items so feedback matches the output.
-- `sweep_stuck_links()` runs every minute via pg_cron: links `pending`/`processing` for more than 5 minutes become `failed` with `error='timeout'` and a `sweep` event.
+- `sweep_stuck_links()` runs every minute via pg_cron: links `processing` for more than 5 minutes become `failed` with `error='timeout'` and a `sweep` event. `pending` links are left alone: they are waiting for the user to capture text (HAN-7).
