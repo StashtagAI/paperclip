@@ -57,7 +57,7 @@ terms-of-service risk.
 | --- | --- |
 | `LINK_FETCH_ENABLED=false` | No fetching at all: every link goes straight to the capture screen. |
 | `LINK_FETCH_INSTAGRAM=false` / `LINK_FETCH_TIKTOK=false` | Turns one platform off. |
-| `APIFY_TOKEN` | Required for Instagram, and for TikTok when oEmbed has no caption. Without it, Instagram falls back to capture. |
+| `APIFY_TOKEN` (or `Scrapely_API_Key`, the name the board used) | The Apify API token. Required for Instagram, and for TikTok when oEmbed has no caption. Without it, both fall back to capture. `APIFY_TOKEN` wins if both are set. |
 
 `bunx supabase secrets set LINK_FETCH_ENABLED=false` (or the dashboard: Edge Functions › Secrets) takes effect on the
 next call, with no redeploy.

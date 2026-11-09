@@ -24,12 +24,22 @@ const off = (v: string | undefined) => v != null && /^(0|false|off|no)$/i.test(v
 
 /**
  * Kill switches (Supabase secrets): LINK_FETCH_ENABLED turns all fetching off; LINK_FETCH_INSTAGRAM / LINK_FETCH_TIKTOK
- * turn one platform off. Unset means on. Instagram also needs APIFY_TOKEN.
+ * turn one platform off. Unset means on. Instagram also needs the Apify token (see apifyToken).
  */
 export function fetchDisabled(platform: Platform, env: Env): string | null {
   if (off(env("LINK_FETCH_ENABLED"))) return "disabled";
   if (off(env(platform === "instagram" ? "LINK_FETCH_INSTAGRAM" : "LINK_FETCH_TIKTOK"))) return "disabled";
   return null;
+}
+
+/** The Apify API token. The board set it as `Scrapely_API_Key`; `APIFY_TOKEN` is the documented name. */
+export const TOKEN_SECRETS = ["APIFY_TOKEN", "Scrapely_API_Key", "SCRAPELY_API_KEY"] as const;
+export function apifyToken(env: Env): string | undefined {
+  for (const k of TOKEN_SECRETS) {
+    const v = env(k)?.trim();
+    if (v) return v;
+  }
+  return undefined;
 }
 
 const clean = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, MAX_CAPTION) : "");
@@ -88,7 +98,7 @@ export async function fetchCaption(url: URL, env: Env, fetchFn: typeof fetch = f
   const disabled = fetchDisabled(platform, env);
   if (disabled) return fail(disabled);
   const signal = AbortSignal.timeout(timeoutMs);
-  const token = env("APIFY_TOKEN")?.trim();
+  const token = apifyToken(env);
   try {
     if (platform === "tiktok") {
       const full = await resolveShortLink(url, fetchFn, signal);
