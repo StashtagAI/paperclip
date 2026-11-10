@@ -143,7 +143,11 @@ export function subscribeToLink(linkId: string, onChange: () => void): () => voi
   const channel = supabase
     .channel(`link-${linkId}`)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'links', filter: `id=eq.${linkId}` }, onChange)
-    .subscribe();
+    // Updates made before the channel joined are never delivered (process-link can answer in ~2 s), so re-read once
+    // it's live.
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') onChange();
+    });
   return () => {
     supabase.removeChannel(channel);
   };
