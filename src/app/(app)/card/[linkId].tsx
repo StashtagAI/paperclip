@@ -57,6 +57,14 @@ export default function CardScreen() {
   const sending = !!sent && link?.status === 'pending' && !needsCapture;
   const reading = (sent === 'read' && sending) || (link?.status === 'processing' && !!raw?.reading);
 
+  // Safety net if a Realtime update is missed: re-read every 5 s while the card is still being built.
+  const waiting = sending || link?.status === 'processing';
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(refresh, 5000);
+    return () => clearInterval(timer);
+  }, [waiting, refresh]);
+
   // The caption couldn't be read (private post, no caption, kill switch) or named nothing: ask for what the post says.
   useEffect(() => {
     if (needsCapture) router.replace({ pathname: '/capture/[linkId]', params: { linkId } });
