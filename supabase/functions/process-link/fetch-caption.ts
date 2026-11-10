@@ -12,11 +12,14 @@ export type FetchOutcome =
 type Env = (k: string) => string | undefined;
 
 const APIFY = "https://api.apify.com/v2/acts";
-// Actors and list prices checked on apify.com on 2026-11-09 (pay per result; the free plan's per-result price).
+// Actors and prices checked against the Apify API on 2026-11-10 (pay per event; the free plan's per-result price).
+// `maxChargeUsd` is the run's spend cap. It must be at least the actor's `minimalMaxTotalChargeUsd` or Apify answers
+// 400 (clockworks' minimum is $0.50). maxItems=1 still means one result, so a run costs one result's price.
 export const ACTORS = {
-  instagram: { id: "apify~instagram-scraper", usdPerResult: 2.7 / 1000 },
-  tiktok: { id: "clockworks~tiktok-scraper", usdPerResult: 1.7 / 1000 },
+  instagram: { id: "apify~instagram-scraper", usdPerResult: 2.7 / 1000, maxChargeUsd: 0.05 },
+  tiktok: { id: "clockworks~tiktok-scraper", usdPerResult: 3.7 / 1000, maxChargeUsd: 0.5 },
 } as const;
+type Actor = (typeof ACTORS)[keyof typeof ACTORS];
 export const TIMEOUT_MS = 30_000;
 const MAX_CAPTION = 20_000;
 
@@ -44,10 +47,13 @@ export function apifyToken(env: Env): string | undefined {
 
 const clean = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, MAX_CAPTION) : "");
 
-/** vm.tiktok.com/x short links redirect to the full video URL; oEmbed and Apify both want the full one. */
+/** Short links (vm.tiktok.com/x, or tiktok.com/t/x from the share sheet) that redirect to the full video URL. */
+const isShortLink = (u: URL) => u.hostname.toLowerCase() === "vm.tiktok.com" || /^\/t\/[^/]+\/?$/.test(u.pathname);
+
+/** Resolves a TikTok short link to the full video URL; oEmbed and Apify both want the full one. */
 export async function resolveShortLink(u: URL, fetchFn: typeof fetch, signal: AbortSignal): Promise<URL> {
   let cur = new URL(u);
-  for (let i = 0; i < 3 && cur.hostname.toLowerCase() === "vm.tiktok.com"; i++) {
+  for (let i = 0; i < 3 && isShortLink(cur); i++) {
     const r = await fetchFn(cur.toString(), { method: "GET", redirect: "manual", signal });
     await r.body?.cancel();
     const loc = r.headers.get("location");
@@ -69,10 +75,14 @@ async function tiktokOembed(u: URL, fetchFn: typeof fetch, signal: AbortSignal):
 }
 
 /** One synchronous actor run; returns the dataset items. Billing is capped at one result and a few cents. */
-async function apifyRun(actor: string, input: unknown, token: string, fetchFn: typeof fetch, signal: AbortSignal) {
+async function apifyRun(actor: Actor, input: unknown, token: string, fetchFn: typeof fetch, signal: AbortSignal) {
   // Ask Apify to stop the run (and the billing) a little before our own abort.
-  const q = new URLSearchParams({ timeout: String(Math.floor(TIMEOUT_MS / 1000) - 3), maxItems: "1", maxTotalChargeUsd: "0.05" });
-  const r = await fetchFn(`${APIFY}/${actor}/run-sync-get-dataset-items?${q}`, {
+  const q = new URLSearchParams({
+    timeout: String(Math.floor(TIMEOUT_MS / 1000) - 3),
+    maxItems: "1",
+    maxTotalChargeUsd: String(actor.maxChargeUsd),
+  });
+  const r = await fetchFn(`${APIFY}/${actor.id}/run-sync-get-dataset-items?${q}`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify(input),
@@ -107,7 +117,7 @@ export async function fetchCaption(url: URL, env: Env, fetchFn: typeof fetch = f
       if (title) return okay(title, "tiktok_oembed");
       if (!token) return fail("empty_caption");
       tried.push("apify_tiktok");
-      const items = await apifyRun(ACTORS.tiktok.id, {
+      const items = await apifyRun(ACTORS.tiktok, {
         postURLs: [full.toString()],
         resultsPerPage: 1,
         shouldDownloadVideos: false,
@@ -126,7 +136,7 @@ export async function fetchCaption(url: URL, env: Env, fetchFn: typeof fetch = f
     tried.push("apify_instagram");
     const post = new URL(url);
     post.search = ""; // drop share-tracking params (?igsh=…)
-    const items = await apifyRun(ACTORS.instagram.id, {
+    const items = await apifyRun(ACTORS.instagram, {
       directUrls: [post.toString()],
       resultsType: "posts",
       resultsLimit: 1,

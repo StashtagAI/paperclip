@@ -34,15 +34,16 @@ terms-of-service risk.
    opens the card screen with `sent=read`.
 2. `process-link` claims the link (`processing`, `raw_content.reading = true`; the card shows **Reading the post…**) and
    runs `fetch-caption.ts`, with a 30 s budget:
-   - **TikTok:** resolves `vm.tiktok.com` short links (redirects are followed only on allowlisted hosts), then calls the
+   - **TikTok:** resolves `vm.tiktok.com` and `tiktok.com/t/…` short links (redirects are followed only on allowlisted hosts), then calls the
      public oEmbed endpoint (`https://www.tiktok.com/oembed?url=…`, no key) and uses `title` as the caption. **As of
      2026-11-09 oEmbed returned no `title` for every video we tried**, so with `APIFY_TOKEN` set it falls back to the
      Apify actor `clockworks~tiktok-scraper` (input `postURLs`, caption in `text`, downloads off).
    - **Instagram:** Apify actor `apify~instagram-scraper`, input
      `{directUrls:[url], resultsType:"posts", resultsLimit:1}`, caption in `caption`. Private, deleted and
      login-walled posts come back as an item with `error`.
-   - Apify is called with `POST /v2/acts/<actor>/run-sync-get-dataset-items?timeout=27&maxItems=1&maxTotalChargeUsd=0.05`,
-     with the token in the `Authorization` header. Billing is capped at one result.
+   - Apify is called with `POST /v2/acts/<actor>/run-sync-get-dataset-items?timeout=27&maxItems=1&maxTotalChargeUsd=<cap>`,
+     with the token in the `Authorization` header. Billing is capped at one result. `<cap>` is $0.05 for Instagram
+     and $0.50 for TikTok: each actor sets a minimum spend cap (`minimalMaxTotalChargeUsd`) and answers 400 below it.
 3. If a caption comes back, it goes into the same `captured.caption` field the capture screen uses (the payload agreed
    with Extraction in HAN-6). Extraction runs as usual, and `raw_content` gets `caption_source: "fetched"` and
    `fetch: {via, ms, cost_usd}`. The review screen labels those fields **from the caption (fetched)**.
@@ -65,7 +66,7 @@ next call, with no redeploy.
 **Cost and time per fetch** are written to `process_events` (stage `fetch_caption`: `ms`, `ok`, `detail.via`,
 `detail.cost_usd`, `detail.reason`, `detail.tried`) and to the function log, and on success also to
 `links.raw_content.fetch`. `cost_usd` is an estimate: results returned × the actor's list price per result on the
-free plan (Instagram $2.70 / 1,000, TikTok $1.70 / 1,000, checked on apify.com 2026-11-09). It is not Apify's
+free plan (Instagram $2.70 / 1,000, TikTok $3.70 / 1,000, checked against the Apify API 2026-11-10). It is not Apify's
 invoice. TikTok via oEmbed costs $0.
 
 ```sql
