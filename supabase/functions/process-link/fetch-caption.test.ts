@@ -109,6 +109,9 @@ for (const [reply, reason] of [
   const r = await fetchCaption(TT, env({ APIFY_TOKEN: "t" }), m.fn);
   assert.ok(r.ok && r.via === "apify_tiktok" && r.caption.startsWith("Shakshuka"));
   assert.match(m.calls[1].url, /clockworks~tiktok-scraper/);
+  // clockworks rejects (400) any spend cap under its $0.50 minimum
+  assert.ok(Number(new URL(m.calls[1].url).searchParams.get("maxTotalChargeUsd")) >= 0.5);
+  assert.equal(new URL(m.calls[0].url).searchParams.get("maxTotalChargeUsd"), null);
   assert.equal(JSON.parse(String(m.calls[1].init?.body)).shouldDownloadVideos, false);
 
   const m2 = mock([[/tiktok\.com\/oembed/, () => j({}, 400)]]);
@@ -133,6 +136,25 @@ for (const [reply, reason] of [
   ]);
   await fetchCaption(new URL("https://vm.tiktok.com/ZMabc/"), env({}), evil.fn);
   assert.ok(evil.calls.every((c) => !c.url.includes("169.254")));
+}
+
+// tiktok.com/t/x share-sheet short link (HAN-18: sent to Apify unresolved and got apify_400)
+{
+  const full = "https://www.tiktok.com/@crowdedkitchen/video/7684280650819521806?_r=1&_t=ZP-9BIRtkI5Sc2";
+  const m = mock([
+    [/www\.tiktok\.com\/t\//, () => new Response(null, { status: 301, headers: { location: full } })],
+    [/tiktok\.com\/oembed/, () => j({ type: "video" })],
+    [/api\.apify\.com/, () => j([{ text: "Meatball sub bites" }])],
+  ]);
+  const r = await fetchCaption(new URL("https://www.tiktok.com/t/ZPLsKo72W/"), env({ APIFY_TOKEN: "t" }), m.fn);
+  assert.ok(r.ok && r.via === "apify_tiktok");
+  assert.equal(r.cost_usd, ACTORS.tiktok.usdPerResult);
+  assert.deepEqual(JSON.parse(String(m.calls[2].init?.body)).postURLs, ["https://www.tiktok.com/@crowdedkitchen/video/7684280650819521806"]);
+
+  // a full video URL is never fetched as a short link
+  const m2 = mock([[/tiktok\.com\/oembed/, () => j({ title: "caption" })]]);
+  await fetchCaption(TT, env({}), m2.fn);
+  assert.equal(m2.calls.length, 1);
 }
 
 console.log("fetch-caption tests passed");
