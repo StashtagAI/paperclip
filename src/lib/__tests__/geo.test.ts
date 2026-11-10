@@ -17,7 +17,7 @@ describe('fitViewport', () => {
 
   it('centres a single pin at the max zoom', () => {
     const v = fitViewport([{ id: 'a', ...scottsdale }], 300, 200)!;
-    expect(v.zoom).toBe(15);
+    expect(v.zoom).toBe(14);
     expect(v.pins[0].left).toBeCloseTo(150);
     expect(v.pins[0].top).toBeCloseTo(100);
   });

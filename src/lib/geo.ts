@@ -3,7 +3,7 @@ import type { ItemRow } from '@/lib/types';
 /** Web Mercator tile maths and directions links for the Eats/Trips list map (HAN-24). */
 
 export const TILE_SIZE = 256;
-const MAX_ZOOM = 15;
+const MAX_ZOOM = 14;
 const MAX_LAT = 85.05112878;
 
 export type LatLng = { lat: number; lng: number };
