@@ -1,16 +1,17 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, type ScrollViewInstance } from 'react-native';
 
 import { DirectionsSheet } from '@/components/directions-sheet';
 import { PlaceMap } from '@/components/place-map';
+import { RenameForm } from '@/components/rename-form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { TagChip } from '@/components/tag-chip';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
-import { fetchList } from '@/lib/data';
+import { fetchList, NAME_LIMITS, renameCategory, renameList } from '@/lib/data';
 import { hasCoords } from '@/lib/geo';
 import type { ItemRow, Kind } from '@/lib/types';
 
@@ -42,11 +43,51 @@ export default function ListScreen() {
     select(item);
   };
 
+  const [editing, setEditing] = useState(false);
+  const theme = useTheme();
+
+  // Pick up a stash deleted from its card.
+  const firstFocus = useRef(true);
+  const { refresh } = list;
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) firstFocus.current = false;
+      else refresh();
+    }, [refresh]),
+  );
+
   return (
     <Screen edges="none" scrollRef={scrollRef}>
-      <Stack.Screen options={{ title: data ? `${data.category.name} › ${data.name}` : '' }} />
+      <Stack.Screen
+        options={{
+          title: data ? `${data.category.name} › ${data.name}` : '',
+          headerRight: () =>
+            data && !editing ? (
+              <Pressable onPress={() => setEditing(true)} accessibilityRole="button" accessibilityLabel="Rename" hitSlop={12}>
+                <ThemedText type="defaultBold" style={{ color: theme.tint }}>
+                  Edit
+                </ThemedText>
+              </Pressable>
+            ) : null,
+        }}
+      />
       {list.error ? <ThemedText themeColor="danger">{list.error.message}</ThemedText> : null}
       {list.loading && !data ? <ActivityIndicator /> : null}
+      {data && editing ? (
+        <RenameForm
+          fields={[
+            { key: 'category', label: 'Category', value: data.category.name, maxLength: NAME_LIMITS.category },
+            { key: 'list', label: 'List', value: data.name, maxLength: NAME_LIMITS.list },
+          ]}
+          onCancel={() => setEditing(false)}
+          onSave={async (changed) => {
+            if (changed.category !== undefined) await renameCategory(data.category, changed.category);
+            if (changed.list !== undefined) await renameList(data, changed.list);
+            await refresh();
+            setEditing(false);
+          }}
+        />
+      ) : null}
       {pins.length ? <PlaceMap pins={pins} selectedId={selectedId} onPinPress={selectPin} /> : null}
       {data?.tags.length ? <Tags kind={data.category.kind} tags={data.tags} /> : null}
       {data?.items.length === 0 ? <ThemedText themeColor="textSecondary">No items in this list yet.</ThemedText> : null}
@@ -70,7 +111,6 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
   const theme = useTheme();
   return (
     <Pressable
-      disabled={!onPress}
       onPress={onPress}
       onLayout={(e) => onLayoutY(e.nativeEvent.layout.y)}
       accessibilityRole={onPress ? 'button' : undefined}
@@ -80,7 +120,7 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
         {
           backgroundColor: selected ? theme.backgroundSelected : theme.backgroundElement,
           borderColor: selected ? theme.tint : theme.border,
-          opacity: pressed ? 0.8 : 1,
+          opacity: pressed && onPress ? 0.8 : 1,
         },
       ]}>
       <ThemedText type="defaultBold">{item.name}</ThemedText>
@@ -89,6 +129,17 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
         <ThemedText type="small" themeColor="textSecondary" selectable>
           {item.address}
         </ThemedText>
+      ) : null}
+      {item.link_id ? (
+        <Pressable
+          onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: item.link_id! } })}
+          accessibilityRole="button"
+          hitSlop={8}
+          style={styles.source}>
+          <ThemedText type="small" style={{ color: theme.tint }}>
+            Source post ›
+          </ThemedText>
+        </Pressable>
       ) : null}
     </Pressable>
   );
@@ -106,5 +157,6 @@ function Tags({ kind, tags }: { kind: Kind; tags: string[] }) {
 
 const styles = StyleSheet.create({
   card: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.one },
+  source: { alignSelf: 'flex-start', marginTop: Spacing.one },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
 });

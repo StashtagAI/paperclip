@@ -8,9 +8,10 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
-import { deleteItem, fetchLink, fetchLinkItems, rateLink, subscribeToLink } from '@/lib/data';
+import { deleteItem, deleteLink, fetchLink, fetchLinkItems, rateLink, subscribeToLink } from '@/lib/data';
 import type { FieldSource, LinkDetail, LinkItem, LinkStatus, RawContent } from '@/lib/types';
 import { KIND_LABELS } from '@/lib/types';
+import { confirmDestructive } from '@/lib/confirm';
 
 const STATUS_COPY: Record<LinkStatus, string> = {
   pending: 'Waiting for what the post says',
@@ -117,6 +118,7 @@ export default function CardScreen() {
         </ThemedText>
       ) : null}
       {link?.status === 'done' ? <Feedback linkId={linkId} /> : null}
+      {link ? <DeleteStash linkId={linkId} itemCount={items?.length ?? 0} /> : null}
     </Screen>
   );
 }
@@ -197,6 +199,37 @@ function ReviewItem({ item, raw, onRemoved }: { item: LinkItem; raw: RawContent 
   );
 }
 
+/** Deletes the link and everything it added (HAN-20); empty lists and categories go with it. */
+function DeleteStash({ linkId, itemCount }: { linkId: string; itemCount: number }) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    const what = itemCount === 1 ? 'the 1 item it added' : itemCount ? `the ${itemCount} items it added` : 'the link';
+    if (!(await confirmDestructive('Delete this stash?', `This removes ${what}. It can’t be undone.`, 'Delete'))) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteLink(linkId);
+      router.dismissTo('/');
+    } catch (e) {
+      setError(`Couldn’t delete: ${(e as Error).message}`);
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <View style={styles.delete}>
+      <Button title="Delete this stash" variant="secondary" onPress={remove} loading={deleting} />
+      {error ? (
+        <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+          {error}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
 function Feedback({ linkId }: { linkId: string }) {
   const [sent, setSent] = useState<'up' | 'down' | null>(null);
   const send = (rating: 'up' | 'down') =>
@@ -240,4 +273,5 @@ const styles = StyleSheet.create({
   field: { gap: 2 },
   feedback: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   flex: { flex: 1 },
+  delete: { marginTop: Spacing.four, gap: Spacing.two },
 });

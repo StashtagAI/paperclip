@@ -184,6 +184,44 @@ export async function deleteItem(itemId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Deletes a stashed link, the items it added, and any list or category that leaves empty (HAN-20). */
+export async function deleteLink(linkId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_link', { p_link_id: linkId });
+  if (error) throw error;
+}
+
+/** Name limits from the schema's check constraints. */
+export const NAME_LIMITS = { category: 80, list: 120 } as const;
+
+/**
+ * Throws a user-facing error if `name` can't be used. process-link matches names case-insensitively, so two siblings
+ * that differ only in case would be ambiguous: treat that as taken too.
+ */
+function checkName(name: string, max: number, siblings: { name: string }[], what: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error(`The ${what} needs a name.`);
+  if (trimmed.length > max) throw new Error(`Keep the name to ${max} characters or fewer.`);
+  if (siblings.some((s) => s.name.toLowerCase() === trimmed.toLowerCase()))
+    throw new Error(`You already have a ${what} called “${trimmed}”.`);
+  return trimmed;
+}
+
+export async function renameCategory(category: Pick<CategoryRow, 'id' | 'kind'>, name: string): Promise<void> {
+  const siblings = await supabase.from('categories').select('name').eq('kind', category.kind).neq('id', category.id);
+  if (siblings.error) throw siblings.error;
+  const trimmed = checkName(name, NAME_LIMITS.category, siblings.data, 'category');
+  const { error } = await supabase.from('categories').update({ name: trimmed }).eq('id', category.id);
+  if (error) throw error.code === '23505' ? new Error(`You already have a category called “${trimmed}”.`) : error;
+}
+
+export async function renameList(list: Pick<ListRow, 'id' | 'category_id'>, name: string): Promise<void> {
+  const siblings = await supabase.from('lists').select('name').eq('category_id', list.category_id).neq('id', list.id);
+  if (siblings.error) throw siblings.error;
+  const trimmed = checkName(name, NAME_LIMITS.list, siblings.data, 'list');
+  const { error } = await supabase.from('lists').update({ name: trimmed }).eq('id', list.id);
+  if (error) throw error.code === '23505' ? new Error(`You already have a list called “${trimmed}” here.`) : error;
+}
+
 export async function rateLink(linkId: string, rating: 'up' | 'down', reason?: FeedbackReason): Promise<void> {
   const { error } = await supabase
     .from('link_feedback')
