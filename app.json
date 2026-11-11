@@ -3,6 +3,12 @@
     "name": "StashtagAI",
     "slug": "stashtag",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/53c50a71-a627-4beb-94bc-e77360d022e9"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "stashtag",

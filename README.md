@@ -92,6 +92,18 @@ EAS profiles (`eas.json`):
 First EAS use: `npx eas-cli@latest login` then `npx eas-cli@latest init` to attach the project ID to `app.json`.
 Bundle ID / package: `ai.stashtag.app`.
 
+Over-the-air updates (`expo-updates`): each profile builds on its own channel (`development`,
+`preview`, `production`; `development-device` inherits `development`). JS-only changes ship
+without a new build:
+
+```bash
+npx eas-cli@latest update --channel preview --environment preview --message "..."
+```
+
+`runtimeVersion` uses the `fingerprint` policy, so an update only reaches builds with the same
+native code. After adding or upgrading a native module, or changing plugins in `app.json`, make a
+new build. `npx expo-updates fingerprint:generate` prints the current fingerprint to compare.
+
 Static web build: `npm run build:web` (outputs `dist/`, a single-page app).
 
 Share sheet, OCR and transcription use native modules (`expo-share-intent`, `expo-text-extractor`, `whisper.rn`, the
