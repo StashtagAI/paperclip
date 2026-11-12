@@ -46,6 +46,7 @@ export function PlaceMap({ pins, selectedId, onPinPress }: Props) {
           cachePolicy="disk"
           transition={150}
           accessible={false}
+          accessibilityIgnoresInvertColors
         />
       ))}
       {ordered.map((p) => {
