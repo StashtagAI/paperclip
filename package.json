@@ -42,10 +42,12 @@
     "whisper.rn": "^0.7.4"
   },
   "devDependencies": {
+    "@eslint/compat": "^2.1.1",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.3.0",
     "eslint": "^9.39.5",
     "eslint-config-expo": "^58.0.4",
+    "eslint-plugin-react-native-a11y": "^3.5.1",
     "jest": "^30.5.2",
     "jest-expo": "^58.0.14",
     "sharp": "^0.35.5",
@@ -69,5 +71,10 @@
       "/node_modules/",
       "/supabase/functions/"
     ]
+  },
+  "overrides": {
+    "eslint-plugin-react-native-a11y": {
+      "eslint": "$eslint"
+    }
   }
 }
