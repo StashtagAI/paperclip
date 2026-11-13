@@ -4,7 +4,7 @@
 #   push:
 #     branches: ['main']
 #
-# Needs an App Store Connect API key on the Expo project (`eas credentials --platform ios`)
+# Uses the App Store Connect API key on the Expo project (`eas credentials --platform ios`)
 # and `submit.production.ios.ascAppId` in eas.json; see README "Releasing to the App Store".
 name: Release iOS
 
