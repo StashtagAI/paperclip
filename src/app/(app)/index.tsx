@@ -15,6 +15,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchInFlightLinks, fetchRecentItems, searchItems, type StashItem } from '@/lib/data';
+import { nudgesSupported } from '@/lib/nudge-service';
 import type { Kind } from '@/lib/types';
 
 const GRID: Kind[][] = [
@@ -106,9 +107,19 @@ function Header() {
   const theme = useTheme();
   return (
     <View style={styles.header}>
-      <ThemedText type="heading" accessibilityRole="header">
+      <ThemedText type="heading" accessibilityRole="header" style={styles.headerTitle}>
         Your stash
       </ThemedText>
+      {nudgesSupported ? (
+        <Pressable
+          onPress={() => router.push('/nudges')}
+          accessibilityRole="button"
+          accessibilityLabel="Nudges"
+          accessibilityHint="Reminders for saved places near you and a weekly digest"
+          style={({ pressed }) => [styles.iconButton, pressed && { opacity: 0.6 }]}>
+          <SymbolView name={{ ios: 'bell', android: 'notifications', web: 'notifications' }} tintColor={theme.tint} size={26} />
+        </Pressable>
+      ) : null}
       {Features.shared ? (
         <Pressable style={[styles.pill, { backgroundColor: theme.backgroundSelected }]} accessibilityRole="button">
           <ThemedText type="smallBold" themeColor="textSecondary">
@@ -190,7 +201,9 @@ function useDebouncedSearch(query: string): SearchState {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.two },
+  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginTop: Spacing.two },
+  headerTitle: { flex: 1 },
+  iconButton: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   pill: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.chip },
   grid: { gap: Spacing.three - 2 },
   gridRow: { flexDirection: 'row', gap: Spacing.three - 2 },
