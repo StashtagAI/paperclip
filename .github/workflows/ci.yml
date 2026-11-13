@@ -19,6 +19,7 @@ jobs:
       - run: npm run lint
       - run: npm test -- --ci
       - run: node --experimental-strip-types supabase/functions/process-link/fetch-caption.test.ts
+      - run: node --experimental-strip-types supabase/functions/process-link/benchmark.test.ts
       # Same Metro bundle step EAS runs ("Bundle JavaScript"), so a missing
       # native-only dependency fails here instead of in a cloud build.
       - run: npx expo export --platform ios --platform android --output-dir /tmp/native-export
