@@ -51,6 +51,8 @@ export type ItemRow = {
   lat: number | null;
   lng: number | null;
   tags: string[];
+  /** Set when the user changed the item, so it no longer reads as the post's own words. */
+  edited_at: string | null;
 };
 
 /** Text captured on the phone, the process-link request body's `captured` field (docs/extraction.md). */
@@ -84,3 +86,16 @@ export type LinkDetail = LinkRow & { raw_content: RawContent | null };
 export type LinkItem = ItemRow & { list: Pick<ListRow, 'id' | 'name'> & { category: Pick<CategoryRow, 'kind' | 'name'> } };
 
 export type FeedbackReason = 'wrong_category' | 'wrong_items' | 'missed_items';
+
+/** Why a user reported an item (item_reports.reason). */
+export const REPORT_REASONS = ['not_in_post', 'wrong_place', 'wrong_category', 'wrong_details', 'duplicate', 'other'] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
+  not_in_post: 'The post doesn’t mention this',
+  wrong_place: 'Wrong address or map pin',
+  wrong_category: 'Filed in the wrong list',
+  wrong_details: 'Name or description is wrong',
+  duplicate: 'Duplicate of another item',
+  other: 'Something else',
+};

@@ -1,4 +1,5 @@
 import type { LinkCheck } from '@/lib/link-filter';
+import type { ItemSources } from '@/lib/provenance';
 import { itemSearchFilter } from '@/lib/search';
 import { supabase } from '@/lib/supabase';
 import type {
@@ -11,11 +12,17 @@ import type {
   LinkItem,
   LinkRow,
   ListRow,
+  ReportReason,
 } from '@/lib/types';
 
 export type KindList = ListRow & { itemCount: number };
 export type KindCategory = CategoryRow & { lists: KindList[] };
-export type ListDetail = ListRow & { category: CategoryRow; items: ItemRow[] };
+export type ListDetail = ListRow & {
+  category: CategoryRow;
+  items: ItemRow[];
+  /** process-link's per-field sources, by link id then item name (for the "From the post" badge). */
+  sources: Record<string, Record<string, ItemSources>>;
+};
 
 /** An item as shown in "Recently stashed" and search results. */
 export type StashItem = Pick<ItemRow, 'id' | 'name' | 'tags'> & {
@@ -99,9 +106,20 @@ export async function fetchList(listId: string): Promise<ListDetail> {
     .select('id, category_id, name, tags, category:categories(id, kind, name), items(*)')
     .eq('id', listId)
     .order('name', { referencedTable: 'items' })
-    .single<ListDetail>();
+    .single<Omit<ListDetail, 'sources'>>();
   if (error) throw error;
-  return data;
+  const linkIds = [...new Set(data.items.flatMap((i) => (i.link_id ? [i.link_id] : [])))];
+  const sources: ListDetail['sources'] = {};
+  if (linkIds.length) {
+    const links = await supabase
+      .from('links')
+      .select('id, item_sources:raw_content->item_sources')
+      .in('id', linkIds)
+      .returns<{ id: string; item_sources: Record<string, ItemSources> | null }[]>();
+    // Without sources the badge says "Source not recorded"; that is honest, so don't fail the whole list over it.
+    if (!links.error) for (const l of links.data) sources[l.id] = l.item_sources ?? {};
+  }
+  return { ...data, sources };
 }
 
 export async function fetchRecentLinks(): Promise<LinkRow[]> {
@@ -180,6 +198,34 @@ export async function fetchLinkItems(linkId: string): Promise<LinkItem[]> {
     .returns<LinkItem[]>();
   if (error) throw error;
   return data;
+}
+
+/** Name limits from the schema's check constraints (items.name <= 200). */
+export const ITEM_NAME_MAX = 200;
+
+export type ItemEdit = Pick<ItemRow, 'name' | 'description' | 'address'>;
+
+/**
+ * Saves a user's edit and marks the item edited. A changed address drops the map pin: it belonged to the old address,
+ * and a pin that disagrees with the text is worse than no pin.
+ */
+export async function updateItem(item: ItemRow, edit: ItemEdit): Promise<void> {
+  const name = edit.name.trim();
+  if (!name) throw new Error('The item needs a name.');
+  if (name.length > ITEM_NAME_MAX) throw new Error(`Keep the name to ${ITEM_NAME_MAX} characters or fewer.`);
+  const address = edit.address?.trim() || null;
+  const patch: Partial<ItemRow> = { name, description: edit.description.trim(), address, edited_at: new Date().toISOString() };
+  if (address !== item.address) Object.assign(patch, { lat: null, lng: null });
+  const { error } = await supabase.from('items').update(patch).eq('id', item.id);
+  if (error) throw error.code === '23505' ? new Error(`This list already has an item called “${name}”.`) : error;
+}
+
+/** Reports an item as wrong for extraction QA (the server snapshots the item and its sources). Re-reporting replaces. */
+export async function reportItem(itemId: string, reason: ReportReason, note: string, removed: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('item_reports')
+    .upsert({ item_id: itemId, reason, note: note.trim() || null, removed }, { onConflict: 'item_id,user_id' });
+  if (error) throw error;
 }
 
 export async function deleteItem(itemId: string): Promise<void> {
