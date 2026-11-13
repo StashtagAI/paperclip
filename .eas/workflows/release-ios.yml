@@ -1,0 +1,27 @@
+# Production iOS build from GitHub, then upload to App Store Connect (TestFlight).
+# Manual only: run it with `npx eas-cli@latest workflow:run release-ios.yml --ref main`.
+# To release on every push to main instead, replace `workflow_dispatch` with:
+#   push:
+#     branches: ['main']
+#
+# Uses the App Store Connect API key on the Expo project (`eas credentials --platform ios`)
+# and `submit.production.ios.ascAppId` in eas.json; see README "Releasing to the App Store".
+name: Release iOS
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build_ios:
+    name: Build iOS (production)
+    type: build
+    params:
+      platform: ios
+      profile: production
+
+  submit_ios:
+    name: Upload to TestFlight
+    needs: [build_ios]
+    type: testflight
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}

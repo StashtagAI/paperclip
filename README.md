@@ -104,6 +104,24 @@ npx eas-cli@latest update --channel preview --environment preview --message "...
 native code. After adding or upgrading a native module, or changing plugins in `app.json`, make a
 new build. `npx expo-updates fingerprint:generate` prints the current fingerprint to compare.
 
+### Releasing to the App Store
+
+`.eas/workflows/release-ios.yml` builds the `production` profile on EAS from the pushed GitHub
+commit and uploads it to App Store Connect (TestFlight). It runs only when started:
+
+```bash
+npx eas-cli@latest workflow:run release-ios.yml --ref main
+```
+
+Progress is on expo.dev › stashtag › Workflows. Send the build for review from App Store Connect.
+The workflow can't prompt for an Apple login, so it relies on (both already in place):
+
+- An App Store Connect API key assigned to the project, kept in Expo's credential store, not in
+  the repo. Check or replace it with `npx eas-cli@latest credentials --platform ios` › `production`
+  › App Store Connect: Manage your API Key.
+- `submit.production.ios.ascAppId` in `eas.json`: the app's numeric Apple ID (App Store Connect ›
+  the app › App Information › General Information › Apple ID).
+
 Static web build: `npm run build:web` (outputs `dist/`, a single-page app).
 
 Share sheet, OCR and transcription use native modules (`expo-share-intent`, `expo-text-extractor`, `whisper.rn`, the
