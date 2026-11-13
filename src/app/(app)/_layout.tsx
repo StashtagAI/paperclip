@@ -41,6 +41,7 @@ export default function AppLayout() {
       <Stack.Screen name="share" options={{ headerShown: false }} />
       <Stack.Screen name="capture/[linkId]" options={{ title: '' }} />
       <Stack.Screen name="card/[linkId]" options={{ title: '' }} />
+      <Stack.Screen name="item/[itemId]" options={{ title: '' }} />
       <Stack.Screen
         name="stash"
         options={{ title: 'Stash a link', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.7, 1] }}

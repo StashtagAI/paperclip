@@ -7,6 +7,7 @@ import { PlaceMap } from '@/components/place-map';
 import { RenameForm } from '@/components/rename-form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
+import { ratingLabel } from '@/components/star-rating';
 import { TagChip } from '@/components/tag-chip';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
@@ -64,7 +65,7 @@ export default function ListScreen() {
           headerRight: () =>
             data && !editing ? (
               <Pressable onPress={() => setEditing(true)} accessibilityRole="button" accessibilityLabel="Rename" hitSlop={12}>
-                <ThemedText type="defaultBold" style={{ color: theme.tint }}>
+                <ThemedText type="defaultBold" style={{ color: theme.link }}>
                   Edit
                 </ThemedText>
               </Pressable>
@@ -109,39 +110,67 @@ type ItemCardProps = { item: ItemRow; selected: boolean; onPress?: () => void; o
 
 function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
   const theme = useTheme();
+  // The card is a plain View so VoiceOver can reach the links below; on iOS an accessible Pressable would swallow them.
   return (
-    <Pressable
-      onPress={onPress}
+    <View
       onLayout={(e) => onLayoutY(e.nativeEvent.layout.y)}
-      accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityHint={onPress ? 'Get directions' : undefined}
-      style={({ pressed }) => [
+      style={[
         styles.card,
         {
           backgroundColor: selected ? theme.backgroundSelected : theme.backgroundElement,
           borderColor: selected ? theme.tint : theme.border,
-          opacity: pressed && onPress ? 0.8 : 1,
         },
       ]}>
-      <ThemedText type="defaultBold">{item.name}</ThemedText>
-      {item.description ? <ThemedText type="small">{item.description}</ThemedText> : null}
-      {item.address ? (
-        <ThemedText type="small" themeColor="textSecondary" selectable>
-          {item.address}
+      <Pressable
+        onPress={onPress}
+        disabled={!onPress}
+        accessible={!!onPress}
+        accessibilityRole={onPress ? 'button' : undefined}
+        accessibilityHint={onPress ? 'Get directions' : undefined}
+        accessibilityState={onPress ? { selected } : undefined}
+        style={({ pressed }) => [styles.main, { opacity: pressed ? 0.8 : 1 }]}>
+        <ThemedText type="defaultBold">{item.name}</ThemedText>
+        {item.description ? <ThemedText type="small">{item.description}</ThemedText> : null}
+        {item.address ? (
+          <ThemedText type="small" themeColor="textSecondary" selectable>
+            {item.address}
+          </ThemedText>
+        ) : null}
+      </Pressable>
+      {item.rating ? (
+        <ThemedText type="small" style={{ color: theme.link }} accessibilityLabel={`Your rating: ${ratingLabel(item.rating)}`}>
+          {'★'.repeat(item.rating)}
+          {'☆'.repeat(5 - item.rating)}
         </ThemedText>
       ) : null}
-      {item.link_id ? (
+      {item.note ? (
+        <ThemedText type="small" numberOfLines={2} accessibilityLabel={`Your note: ${item.note}`}>
+          {item.note}
+        </ThemedText>
+      ) : null}
+      <View style={styles.links}>
         <Pressable
-          onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: item.link_id! } })}
+          onPress={() => router.push({ pathname: '/item/[itemId]', params: { itemId: item.id } })}
           accessibilityRole="button"
-          hitSlop={8}
-          style={styles.source}>
-          <ThemedText type="small" style={{ color: theme.tint }}>
-            Source post ›
+          accessibilityLabel={`Notes and photos for ${item.name}`}
+          style={styles.link}>
+          <ThemedText type="small" style={{ color: theme.link }}>
+            Notes & photos ›
           </ThemedText>
         </Pressable>
-      ) : null}
-    </Pressable>
+        {item.link_id ? (
+          <Pressable
+            onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: item.link_id! } })}
+            accessibilityRole="button"
+            accessibilityLabel={`Source post for ${item.name}`}
+            style={styles.link}>
+            <ThemedText type="small" style={{ color: theme.link }}>
+              Source post ›
+            </ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -157,6 +186,8 @@ function Tags({ kind, tags }: { kind: Kind; tags: string[] }) {
 
 const styles = StyleSheet.create({
   card: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.one },
-  source: { alignSelf: 'flex-start', marginTop: Spacing.one },
+  main: { gap: Spacing.one },
+  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.four },
+  link: { minHeight: 44, justifyContent: 'center' },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
 });
