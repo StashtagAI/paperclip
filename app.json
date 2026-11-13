@@ -89,7 +89,9 @@
       ],
       [
         "expo-notifications",
-        {}
+        {
+          "enableRemoteNotifications": false
+        }
       ]
     ],
     "experiments": {
