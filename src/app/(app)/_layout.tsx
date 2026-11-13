@@ -27,10 +27,15 @@ export default function AppLayout() {
         contentStyle: { backgroundColor: theme.background },
       }}>
       <Stack.Screen name="index" options={{ headerShown: false, title: 'Your stash' }} />
-      {/* Title set here, not via <Stack.Screen> in the screen, so the large title exists from the first frame. */}
+      {/* Title set here, not via <Stack.Screen> in the screen, so the large title exists from the first frame.
+          No header background: on iOS 26 a background color with a large title hides the title after going back (HAN-31). */}
       <Stack.Screen
         name="kind/[kind]"
-        options={({ route }) => ({ title: kindLabel((route.params as { kind?: string } | undefined)?.kind), headerLargeTitle: true })}
+        options={({ route }) => ({
+          title: kindLabel((route.params as { kind?: string } | undefined)?.kind),
+          headerLargeTitle: true,
+          headerStyle: {},
+        })}
       />
       <Stack.Screen name="list/[listId]" options={{ title: '' }} />
       <Stack.Screen name="share" options={{ headerShown: false }} />
