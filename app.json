@@ -74,6 +74,22 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Stashtag uses your location to tell you when you're near a place you saved. It never leaves your phone.",
+          "locationAlwaysAndWhenInUsePermission": "Allow “Always” so Stashtag can nudge you about saved places nearby while the app is closed. Your location never leaves your phone.",
+          "locationAlwaysPermission": "Allow “Always” so Stashtag can nudge you about saved places nearby while the app is closed. Your location never leaves your phone.",
+          "locationFullAccuracyPermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {}
       ]
     ],
     "experiments": {

@@ -1,4 +1,6 @@
 import '@/global.css';
+// Defines the background geofencing task; must load before the app can be woken for it (HAN-43).
+import '@/lib/nudge-service';
 
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { ShareIntentProvider } from 'expo-share-intent';

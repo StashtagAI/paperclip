@@ -1,4 +1,6 @@
+import { hasCoords } from '@/lib/geo';
 import type { LinkCheck } from '@/lib/link-filter';
+import type { DigestStats, NudgePlace } from '@/lib/nudges';
 import { itemSearchFilter } from '@/lib/search';
 import { supabase } from '@/lib/supabase';
 import type {
@@ -230,4 +232,41 @@ export async function rateLink(linkId: string, rating: 'up' | 'down', reason?: F
     .from('link_feedback')
     .upsert({ link_id: linkId, rating, reason: rating === 'down' ? (reason ?? null) : null }, { onConflict: 'link_id,user_id' });
   if (error) throw error;
+}
+
+type NudgeItemRow = Pick<ItemRow, 'id' | 'name' | 'lat' | 'lng'> & {
+  created_at: string;
+  list: Pick<ListRow, 'id' | 'name'> & { category: Pick<CategoryRow, 'kind'> };
+};
+
+/** Every saved place with coordinates, for nearby nudges (HAN-43). */
+export async function fetchNudgePlaces(): Promise<NudgePlace[]> {
+  const { data, error } = await supabase
+    .from('items')
+    .select('id, name, lat, lng, created_at, list:lists!inner(id, name, category:categories!inner(kind))')
+    .not('lat', 'is', null)
+    .not('lng', 'is', null)
+    .limit(1000)
+    .returns<NudgeItemRow[]>();
+  if (error) throw error;
+  return data.flatMap((i) =>
+    hasCoords(i)
+      ? [{ id: i.id, name: i.name, lat: i.lat, lng: i.lng, listId: i.list.id, listName: i.list.name, kind: i.list.category.kind }]
+      : [],
+  );
+}
+
+/** Item count and the newest saves, for the weekly digest (HAN-43). */
+export async function fetchDigestStats(): Promise<DigestStats> {
+  const { data, error, count } = await supabase
+    .from('items')
+    .select('id, name, created_at, list:lists!inner(id, name)', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .limit(200)
+    .returns<(Pick<NudgeItemRow, 'id' | 'name' | 'created_at'> & { list: Pick<ListRow, 'id' | 'name'> })[]>();
+  if (error) throw error;
+  return {
+    total: count ?? data.length,
+    picks: data.map((i) => ({ id: i.id, name: i.name, listId: i.list.id, listName: i.list.name, createdAt: i.created_at })),
+  };
 }
