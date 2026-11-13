@@ -18,9 +18,14 @@ export function useAsync<T>(load: () => Promise<T>, deps: readonly unknown[]) {
     }
   }, [run]);
 
+  /** Local edit to the loaded data, e.g. an optimistic toggle; no-op before the first load. */
+  const update = useCallback((f: (data: T) => T) => {
+    setState((s) => (s.data === undefined ? s : { ...s, data: f(s.data) }));
+  }, []);
+
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  return { ...state, refresh };
+  return { ...state, refresh, update };
 }

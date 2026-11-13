@@ -10,6 +10,7 @@ import { Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchKind, NAME_LIMITS, renameCategory, type KindCategory } from '@/lib/data';
+import { progressText } from '@/lib/progress';
 import { KIND_SUBTITLES, KINDS, type Kind } from '@/lib/types';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -79,7 +80,12 @@ export default function KindScreen() {
               key={list.id}
               href={{ pathname: '/list/[listId]', params: { listId: list.id } }}
               title={list.name}
-              subtitle={plural(list.itemCount, 'item')}
+              subtitle={
+                list.doneCount
+                  ? progressText(kind, list.doneCount, list.itemCount)
+                  : plural(list.itemCount, 'item')
+              }
+              progress={list.doneCount ? { done: list.doneCount, total: list.itemCount } : undefined}
             />
           ))}
         </View>
