@@ -1,4 +1,4 @@
-import { Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
@@ -10,7 +10,7 @@ import { Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchKind, NAME_LIMITS, renameCategory, type KindCategory } from '@/lib/data';
-import { KIND_LABELS, KIND_SUBTITLES, KINDS, type Kind } from '@/lib/types';
+import { KIND_SUBTITLES, KINDS, type Kind } from '@/lib/types';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -31,6 +31,15 @@ export default function KindScreen() {
     }, [refresh]),
   );
 
+  // Only a pull drives the spinner: setting `refreshing` from code (the focus refresh above) shifts the
+  // scroll view under the iOS large title and leaves the title hidden on return (HAN-31).
+  const [pulling, setPulling] = useState(false);
+  const onPull = useCallback(async () => {
+    setPulling(true);
+    await refresh();
+    setPulling(false);
+  }, [refresh]);
+
   if (!kind) {
     return (
       <Screen edges="none">
@@ -42,8 +51,7 @@ export default function KindScreen() {
   return (
     <Screen
       edges="none"
-      refreshControl={<RefreshControl refreshing={categories.loading && !!categories.data} onRefresh={categories.refresh} />}>
-      <Stack.Screen options={{ title: KIND_LABELS[kind] }} />
+      refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} />}>
       {categories.error ? <ThemedText themeColor="danger">{categories.error.message}</ThemedText> : null}
       {!categories.data && !categories.error ? <ActivityIndicator /> : null}
       {categories.data?.length === 0 ? (
