@@ -74,6 +74,12 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Stashtag uses Face ID to unlock the app when you turn on Face ID lock in Profile."
+        }
       ]
     ],
     "experiments": {
