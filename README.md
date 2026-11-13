@@ -128,7 +128,14 @@ The workflow can't prompt for an Apple login, so it relies on (both already in p
 - `submit.production.ios.ascAppId` in `eas.json`: the app's numeric Apple ID (App Store Connect ›
   the app › App Information › General Information › Apple ID).
 
-Static web build: `npm run build:web` (outputs `dist/`, a single-page app).
+Static web build: `npm run build:web` (outputs `dist/`, one pre-rendered HTML page per route).
+
+Web security headers (CSP, HSTS, `X-Frame-Options`, referrer and permissions policy) live in `app.json` under the
+`expo-router` plugin's `headers`. Expo Hosting only serves them with `web.output: "static"`: the export writes them to
+`dist/_expo/.routes.json`. `npx expo serve` serves `dist/` with the same headers for a local check. If the web app
+starts loading from a new origin, add it to the CSP. CI runs `scripts/check-web-headers.mjs` on the export, which
+also fails if an inline script isn't allowed by its hash. CI also scans for secrets (gitleaks) and vulnerable
+dependencies (dependency review on PRs, `npm audit --audit-level=high`).
 
 Share sheet, OCR and transcription use native modules (`expo-share-intent`, `expo-text-extractor`, `whisper.rn`, the
 local `modules/media-extract`), so they need a development build. They don't work in Expo Go. Flow and package choices:

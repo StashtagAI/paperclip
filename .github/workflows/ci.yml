@@ -22,3 +22,35 @@ jobs:
       # Same Metro bundle step EAS runs ("Bundle JavaScript"), so a missing
       # native-only dependency fails here instead of in a cloud build.
       - run: npx expo export --platform ios --platform android --output-dir /tmp/native-export
+      # Web build as Expo Hosting deploys it: the security headers must be in _expo/.routes.json and the CSP must
+      # allow every inline script the static export writes (HAN-39).
+      - run: npx expo export --platform web --output-dir /tmp/web-export
+      - run: node scripts/check-web-headers.mjs /tmp/web-export
+
+  # HAN-39: secret and dependency scanning.
+  security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan (gitleaks, full history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Dependency review (new or changed dependencies in this PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Known advisories across the whole lockfile. High and critical fail the build; moderate ones are mostly in
+      # Expo's build tooling and wait for SDK upgrades.
+      - name: npm audit
+        run: npm audit --audit-level=high
