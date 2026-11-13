@@ -24,6 +24,9 @@ export interface Extraction {
   items: Item[];
 }
 
+/** Per-run item cap: each item can cost a Places lookup and a web search. */
+export const MAX_ITEMS = 20;
+
 const str = (v: unknown, max: number) =>
   typeof v === "string" && v.trim() && v.length <= max ? v.trim() : null;
 
@@ -40,7 +43,7 @@ export function validateExtraction(raw: unknown): Extraction {
     : [];
   if (!Array.isArray(o.items)) throw new Error("items not an array");
   const items: Item[] = [];
-  for (const it of o.items.slice(0, 50)) {
+  for (const it of o.items.slice(0, MAX_ITEMS)) {
     if (!it || typeof it !== "object") continue;
     const i = it as Record<string, unknown>;
     const name = str(i.name, 200);

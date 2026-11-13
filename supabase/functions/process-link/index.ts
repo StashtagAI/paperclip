@@ -9,9 +9,13 @@ import { fetchCaption } from "./fetch-caption.ts";
 import { parseAllowedUrl, platformOf } from "./url.ts";
 import { cachedSearch, type SearchCache, searchFromEnv, stubSearch } from "./search.ts";
 import { cachedLookup, lookupFromEnv, type PlaceCache, stubLookup } from "./lookup.ts";
+import { claimBlock, errorCode, UNCLAIMABLE } from "./errors.ts";
 import { findByName, splitNew } from "./merge.ts";
 
 declare const Deno: { env: { get(k: string): string | undefined }; serve(h: (r: Request) => Promise<Response>): void };
+
+const CACHE_DAYS = 30;
+const cacheCutoff = () => new Date(Date.now() - CACHE_DAYS * 86_400_000).toISOString();
 
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
@@ -21,7 +25,7 @@ Deno.serve(async (req) => {
   if (!link_id) return json({ error: "link_id required" }, 400);
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-  const { data: link, error: le } = await db.from("links").select("id,url,user_id").eq("id", link_id).single();
+  const { data: link, error: le } = await db.from("links").select("id,url,user_id,status").eq("id", link_id).single();
   if (le || !link) return json({ error: "link not found" }, 404);
   // The app calls this directly with the user's session (HAN-7). verify_jwt only proves the token is valid (the anon
   // key is too), so check that the caller owns the link before spending model/lookup calls or touching its rows.
@@ -51,8 +55,12 @@ Deno.serve(async (req) => {
   // raw_content.reading lets the app show "Reading the post…" until the caption is in.
   const { data: claimed } = await db.from("links")
     .update({ status: "processing", error: null, ...(fetching ? { raw_content: { reading: true } } : {}) })
-    .eq("id", link_id).neq("status", "processing").select("id");
-  if (!claimed?.length) return json({ error: "already_processing" }, 409);
+    .eq("id", link_id).not("status", "in", `(${UNCLAIMABLE.join(",")})`).select("id");
+  if (!claimed?.length) {
+    // A done link is never re-run: each run can spend on extraction, Places and web search for up to MAX_ITEMS items.
+    // To read a post again the user adds it again, which creates a new link and goes through the quota (HAN-37).
+    return json({ error: claimBlock(link.status) ?? "already_processing" }, 409);
+  }
 
   // Back to "pending" so the capture screen takes over, keeping whatever caption we got to pre-fill it.
   const needsCapture = async (reason: string, fetch: Record<string, unknown>, caption?: string) => {
@@ -81,27 +89,29 @@ Deno.serve(async (req) => {
   // Keyed by normalized "name + list scope"; stores the resolved place incl. place id.
   const cache: PlaceCache = {
     async get(key) {
-      const { data } = await db.from("place_lookups").select("place_id,name,address,lat,lng,maps_uri").eq("query_key", key).maybeSingle();
+      const { data } = await db.from("place_lookups").select("place_id,name,address,lat,lng,maps_uri").eq("query_key", key).gt("created_at", cacheCutoff()).maybeSingle();
       return data ? { placeId: data.place_id, name: data.name, address: data.address, lat: data.lat ?? undefined, lng: data.lng ?? undefined, mapsUri: data.maps_uri ?? undefined } : null;
     },
     async set(key, p) {
-      await db.from("place_lookups").upsert({ query_key: key, place_id: p.placeId, name: p.name, address: p.address, lat: p.lat, lng: p.lng, maps_uri: p.mapsUri });
+      await db.from("place_lookups").upsert({ query_key: key, place_id: p.placeId, name: p.name, address: p.address, lat: p.lat, lng: p.lng, maps_uri: p.mapsUri, source: "places_api", created_at: new Date().toISOString() });
     },
   };
+  // Search results are steered by caption text, so they are cached per user: one user's caption can't plant steps or
+  // addresses in another user's cards. Entries expire (CACHE_DAYS) and record where they came from.
   const sCache: SearchCache = {
     async get(key) {
-      const { data } = await db.from("search_lookups").select("fill").eq("query_key", key).maybeSingle();
+      const { data } = await db.from("search_lookups").select("fill").eq("query_key", `${link.user_id}:${key}`).gt("created_at", cacheCutoff()).maybeSingle();
       return data?.fill ?? null;
     },
     async set(key, fill) {
-      await db.from("search_lookups").upsert({ query_key: key, fill });
+      await db.from("search_lookups").upsert({ query_key: `${link.user_id}:${key}`, user_id: link.user_id, source: "web_search", fill, created_at: new Date().toISOString() });
     },
   };
   const sBase = searchFromEnv((k) => Deno.env.get(k));
   const base = lookupFromEnv((k) => Deno.env.get(k));
   try {
     const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`), event: sink });
-    if (!r.ok) return await fail(r.error);
+    if (!r.ok) return await fail(errorCode(r.error).code);
     // A fetched caption that names nothing (only hashtags, "recipe in bio"…): let the user add what the video says.
     if (fetched && "unsorted" in r) return await needsCapture("no_items", fetched, (captured as { caption: string }).caption);
     if (fetched) r.raw_content = { ...r.raw_content, caption_source: "fetched", fetch: fetched };
@@ -160,6 +170,8 @@ Deno.serve(async (req) => {
     await event("final", true, Date.now() - t00, { status: "done", items: fresh.length, already_listed: already.length });
     return json({ status: "done", items: fresh.length, already_listed: already.length, list_id: list!.id });
   } catch (e) {
-    return await fail(String((e as Error).message ?? e).slice(0, 200));
+    const { code, detail } = errorCode(e);
+    console.error(`[process-link] run failed: ${detail}`);
+    return await fail(code);
   }
 });

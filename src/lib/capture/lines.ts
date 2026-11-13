@@ -28,8 +28,8 @@ export function dedupeLines(chunks: readonly string[]): string[] {
   return kept.map((k) => k.line);
 }
 
-/** Server limit per captured field (process-link clips at 20k chars). */
-export const MAX_CAPTURED_CHARS = 20_000;
+/** Server limit per captured field (process-link clips at 8k chars). */
+export const MAX_CAPTURED_CHARS = 8_000;
 
 export function clip(text: string): string {
   return text.length > MAX_CAPTURED_CHARS ? text.slice(0, MAX_CAPTURED_CHARS) : text;

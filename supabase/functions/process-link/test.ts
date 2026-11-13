@@ -31,6 +31,9 @@ assert.equal(v.items[1].lat, 39.7);
 assert.deepEqual(v.tags, ["brunch"]);
 assert.throws(() => validateExtraction({ kind: "food", category: "x", items: [] }));
 
+// Linked-site DNS check: the default resolver is Deno.resolveDns, stubbed here to a public address.
+(globalThis as Record<string, unknown>).Deno = { resolveDns: async () => ["93.184.216.34"] };
+
 // ---- captured-text pipeline on FIXTURE text (synthetic: not real posts, no accuracy claim) ----
 import { findUrls, parseJsonLd, readLinkedSites, safePublicUrl } from "./linked.ts";
 import { processCaptured } from "./pipeline.ts";
@@ -272,3 +275,53 @@ assert.equal(findByName([{ id: 1, name: "Denver" }], "Boulder"), undefined);
   assert.deepEqual(already, ["Sap Sua"]);
 }
 console.log("merge ok");
+
+// ---- HAN-55 ----
+import { isPrivateIp, resolvesPublic } from "./linked.ts";
+import { claimBlock, errorCode } from "./errors.ts";
+import { MAX_ITEMS } from "./schema.ts";
+
+for (const ip of ["127.0.0.1", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "::", "fe80::1", "fd00::1", "fc00::1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a9fe:a9fe", "ff02::1", "garbage"])
+  assert.equal(isPrivateIp(ip), true, ip);
+for (const ip of ["93.184.216.34", "8.8.8.8", "172.32.0.1", "2606:4700::1111", "2001:4860:4860::8888"])
+  assert.equal(isPrivateIp(ip), false, ip);
+
+// a public-looking name that resolves inward is rejected, also when only one of several answers is private
+const u = new URL("https://sneaky.example.com/");
+assert.equal(await resolvesPublic(u, async () => ["169.254.169.254"]), false);
+assert.equal(await resolvesPublic(u, async () => ["93.184.216.34", "fd00::1"]), false);
+assert.equal(await resolvesPublic(u, async () => []), false);
+assert.equal(await resolvesPublic(u, async () => { throw new Error("nxdomain"); }), false);
+assert.equal(await resolvesPublic(u, async () => ["93.184.216.34"]), true);
+{
+  const hits: string[] = [];
+  const spy = (async (x: string | URL | Request) => { hits.push(String(x)); return html(recipeHtml); }) as unknown as typeof fetch;
+  assert.deepEqual(await readLinkedSites("https://sneaky.example.com/r", spy, async () => ["10.0.0.5"]), []);
+  assert.deepEqual(hits, []); // never fetched
+  // every redirect hop is resolved again: the first hop is public, the second name points at the metadata range
+  const hop = (async (x: string | URL | Request) => {
+    hits.push(String(x));
+    return String(x).includes("first.") ? new Response(null, { status: 302, headers: { location: "https://second.example.com/" } }) : html(recipeHtml);
+  }) as unknown as typeof fetch;
+  const res = async (h: string) => (h.startsWith("second.") ? ["169.254.169.254"] : ["93.184.216.34"]);
+  assert.deepEqual(await readLinkedSites("https://first.example.com/", hop, res), []);
+  assert.deepEqual(hits, ["https://first.example.com/"]);
+  assert.equal((await readLinkedSites("https://ok.example.com/", spy, async () => ["93.184.216.34"])).length, 1);
+}
+
+// a done link can't be re-run; neither can one in flight
+assert.equal(claimBlock("done"), "already_done");
+assert.equal(claimBlock("processing"), "already_processing");
+for (const s of ["pending", "failed"]) assert.equal(claimBlock(s), null);
+
+// links.error only ever gets a code
+assert.deepEqual(errorCode(new Error("anthropic_529")).code, "anthropic_529");
+assert.equal(errorCode({ message: 'duplicate key value violates unique constraint "items_list_id_name_key"' }).code, "internal_error");
+assert.equal(errorCode(new Error("bad kind: <script>")).code, "internal_error");
+assert.equal(errorCode("x".repeat(100)).code, "internal_error");
+assert.match(errorCode({ message: "relation \"x\" does not exist" }).detail, /does not exist/);
+
+// caps
+assert.equal(validateExtraction({ kind: "eats", category: "c", items: Array.from({ length: 60 }, (_, i) => ({ name: `n${i}` })) }).items.length, MAX_ITEMS);
+assert.equal(buildContent("https://www.instagram.com/reel/a/", { caption: "x".repeat(60_000) })!.caption!.length, 8_000);
+console.log("HAN-55 ok");
