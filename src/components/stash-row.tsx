@@ -96,7 +96,7 @@ export function PendingLinkRow({ link, onRemoved }: { link: InFlightLink; onRemo
         accessibilityHint="Add what the post says"
         onPress={() => router.push({ pathname: '/capture/[linkId]', params: { linkId: link.id } })}
         style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-        <View style={[styles.thumb, { backgroundColor: theme.backgroundSelected }]} importantForAccessibility="no-hide-descendants">
+        <View style={[styles.thumb, { backgroundColor: theme.backgroundSelected }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <SymbolView name={{ ios: 'square.and.pencil', android: 'edit', web: 'edit' }} tintColor={theme.textSecondary} size={24} />
         </View>
         <View style={styles.text}>
