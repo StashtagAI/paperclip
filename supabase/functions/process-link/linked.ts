@@ -46,7 +46,8 @@ export function isPrivateIp(ip: string): boolean {
   }
   if (v === "::" || v === "::1") return true;
   const first = parseInt(v.split(":")[0] || "0", 16);
-  return (first & 0xfe00) === 0xfc00 || // fc00::/7 unique-local
+  return first === 0 || // ::/16 holds no public unicast: v4-compatible, v4-translated, expanded v4-mapped forms
+    (first & 0xfe00) === 0xfc00 || // fc00::/7 unique-local
     (first & 0xffc0) === 0xfe80 || // fe80::/10 link-local
     (first & 0xffc0) === 0xfec0 || // fec0::/10 site-local (deprecated)
     (first & 0xff00) === 0xff00 || // multicast
