@@ -77,4 +77,11 @@ describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
   it('primary button label on tint', () => {
     expect(contrast(c.onTint, c.tint)).toBeGreaterThanOrEqual(AA);
   });
+
+  it('success text, and step icons (3:1) on background and cards (HAN-42)', () => {
+    for (const bg of [c.background, c.backgroundElement]) {
+      expect(contrast(c.success, bg)).toBeGreaterThanOrEqual(AA);
+      for (const icon of [c.tint, c.success, c.textSecondary]) expect(contrast(icon, bg)).toBeGreaterThanOrEqual(3);
+    }
+  });
 });
