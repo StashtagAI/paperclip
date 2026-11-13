@@ -77,6 +77,8 @@ export type FieldSource = 'capture' | 'linked_site' | 'places_lookup' | 'search'
 export type RawContent = {
   /** process-link is reading the post's caption (link-first capture, HAN-18). */
   reading?: boolean;
+  /** Which step process-link is on while the link is "processing" (HAN-42, src/lib/progress.ts). */
+  stage?: 'reading' | 'finding' | 'filing';
   caption?: string | null;
   /** "fetched" when the caption was read from the link server-side rather than captured on the phone. */
   caption_source?: 'fetched' | null;

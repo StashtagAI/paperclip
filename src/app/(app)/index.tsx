@@ -116,7 +116,7 @@ export default function HomeScreen() {
               {items?.slice(0, RECENT_COUNT).map((item) => <StashRow key={item.id} item={item} />)}
             </View>
           ) : (
-            <EmptyStash />
+            <FirstStashGuide />
           )}
         </>
       )}
@@ -167,15 +167,46 @@ function Results({ label, state, empty }: { label: string; state: SearchState; e
   );
 }
 
-function EmptyStash() {
+const FIRST_STEPS = [
+  'Find a post worth keeping: a café list, a weekend trip, a recipe.',
+  'Tap Share, then StashtagAI. Or copy the link and tap Stash a link below.',
+  'We read the post and sort what it names into Eats, Trips, Recipes or Do.',
+];
+
+/** First run (HAN-42): how to stash a first post, and an example of what comes back. Shown while the stash is empty. */
+function FirstStashGuide() {
   const theme = useTheme();
   return (
     <View style={[styles.empty, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <PinMark size={44} />
-      <ThemedText type="defaultBold">Nothing stashed yet</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-        Tap Stash a link and paste an Instagram or TikTok post. We’ll sort it into Eats, Trips, Recipes or Do.
+      <ThemedText type="defaultBold" accessibilityRole="header">
+        Stash your first post
       </ThemedText>
+      <View style={styles.guide}>
+        {FIRST_STEPS.map((text, i) => (
+          <View
+            key={text}
+            style={styles.guideRow}
+            accessible
+            accessibilityLabel={`Step ${i + 1} of ${FIRST_STEPS.length}: ${text}`}>
+            <View style={[styles.badge, { backgroundColor: theme.tint }]}>
+              <ThemedText type="smallBold" style={{ color: theme.onTint }}>
+                {i + 1}
+              </ThemedText>
+            </View>
+            <ThemedText type="small" style={styles.flex}>
+              {text}
+            </ThemedText>
+          </View>
+        ))}
+      </View>
+      <Button
+        title="See an example"
+        variant="secondary"
+        style={styles.stretch}
+        onPress={() => router.push('/sample')}
+        accessibilityHint="Shows a made-up post and the card StashtagAI builds from it"
+      />
     </View>
   );
 }
@@ -226,6 +257,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.row,
     borderWidth: StyleSheet.hairlineWidth * 2,
   },
-  center: { textAlign: 'center' },
+  guide: { alignSelf: 'stretch', gap: Spacing.three, marginVertical: Spacing.two },
+  guideRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.three },
+  badge: { minWidth: 28, minHeight: 28, borderRadius: Radius.chip, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.one },
+  flex: { flex: 1 },
+  stretch: { alignSelf: 'stretch' },
   error: { gap: Spacing.two },
 });
