@@ -90,7 +90,7 @@ export default function HomeScreen() {
             <ActivityIndicator style={styles.loading} />
           ) : items?.length || pending?.length ? (
             <View style={styles.list}>
-              {pending?.map((link) => <PendingLinkRow key={link.id} link={link} />)}
+              {pending?.map((link) => <PendingLinkRow key={link.id} link={link} onRemoved={refresh} />)}
               {items?.map((item) => <StashRow key={item.id} item={item} />)}
             </View>
           ) : (

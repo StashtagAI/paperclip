@@ -59,15 +59,18 @@ export async function searchItems(query: string, limit = 30): Promise<StashItem[
   return data;
 }
 
+/** A link on Home that isn't filed yet, with what process-link managed to read so the row can say which post it is. */
+export type InFlightLink = LinkRow & { caption: string | null; fetch_reason: string | null };
+
 /** Links that haven't been sorted into items yet, so a fresh stash shows up on Home straight away. */
-export async function fetchInFlightLinks(): Promise<LinkRow[]> {
+export async function fetchInFlightLinks(): Promise<InFlightLink[]> {
   const { data, error } = await supabase
     .from('links')
-    .select('id, url, platform, status, error, tags, created_at')
+    .select('id, url, platform, status, error, tags, created_at, caption:raw_content->>caption, fetch_reason:raw_content->fetch->>reason')
     .in('status', ['pending', 'processing'])
     .order('created_at', { ascending: false })
     .limit(5)
-    .returns<LinkRow[]>();
+    .returns<InFlightLink[]>();
   if (error) throw error;
   return data;
 }
