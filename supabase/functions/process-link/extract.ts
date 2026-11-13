@@ -58,7 +58,8 @@ export async function extract(
   fetchFn: typeof fetch = fetch,
   onEvent?: (stage: string, ok: boolean, ms: number | undefined, detail: Record<string, unknown>) => void,
 ): Promise<Extraction> {
-  const strip = (s: string) => s.replaceAll("</post>", "").replaceAll("</linked_site>", "");
+  // Untrusted text must not close its own wrapper tag, in any case or spacing ("</POST >").
+  const strip = (s: string) => s.replace(/<\s*\/\s*(post|linked_site)\s*>/gi, "");
   const post = [
     c.caption && `caption: ${c.caption}`,
     c.transcript && `transcript: ${c.transcript}`,
@@ -87,7 +88,15 @@ export async function extract(
     onEvent?.("extract", false, Date.now() - t0, { error: "no_json", output_chars: text.length });
     throw new Error("no_json");
   }
-  const raw = validateExtraction(JSON.parse(m[0]));
+  // Parse/validation messages quote the model's output, which a post can steer, and links.error is shown in the app:
+  // keep them out of it (HAN-46).
+  let raw: Extraction;
+  try {
+    raw = validateExtraction(JSON.parse(m[0]));
+  } catch {
+    onEvent?.("extract", false, Date.now() - t0, { error: "bad_output", output_chars: text.length });
+    throw new Error("bad_output");
+  }
   const dropped: string[] = [];
   const out = ground(raw, c, linked, dropped);
   // names only, no captions; grounding drops are what explained the St. Moritz variation
