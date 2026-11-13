@@ -1,0 +1,35 @@
+name: Extraction benchmark
+
+# Live run: real captured text -> real Claude call -> scored against hand-written expectations
+# (fixtures/benchmark). Needs the ANTHROPIC_API_KEY repo secret; costs a few cents per run (see docs/extraction.md).
+on:
+  pull_request:
+    paths:
+      - supabase/functions/process-link/**
+      - fixtures/benchmark/**
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    # forks and PRs without the secret skip instead of failing
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run benchmark (3 runs, gate on the worst)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node --experimental-strip-types supabase/functions/process-link/benchmark-run.ts --runs 3 --out /tmp/benchmark.json | tee /tmp/benchmark.txt
+      - if: always()
+        run: |
+          { echo '### Extraction benchmark'; echo '```'; tail -n 40 /tmp/benchmark.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extraction-benchmark
+          path: /tmp/benchmark.json
