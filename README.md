@@ -53,6 +53,18 @@ Schema: `links` (url, platform, status `pending|processing|done|failed`, raw_con
 (name, description, address, lat/lng, source `link_id`). RLS limits every table to the signed-in user's rows; clients may
 only insert links as `pending` and cannot update them; `process-link` uses the service role.
 
+Security tests (HAN-46, both run in CI):
+
+```bash
+# RLS: every table, user A against user B's rows and anon. Needs an EMPTY Supabase Postgres, never a real project.
+docker run -d --name rls-test -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:55432:5432 public.ecr.aws/supabase/postgres:17.11.0.011
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/postgres scripts/test-db.sh
+# process-link: other users' link_id, and the prompt-injection fixtures in injection-fixtures.ts
+node --experimental-strip-types supabase/functions/process-link/security.test.ts
+```
+
+A new table fails `supabase/tests/database/rls.test.sql` until it has RLS and tests of its own.
+
 ### Auth
 
 Supabase dashboard › Authentication:
