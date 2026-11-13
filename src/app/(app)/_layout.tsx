@@ -3,6 +3,7 @@ import { useShareIntentContext } from 'expo-share-intent';
 import { useEffect } from 'react';
 
 import { useTheme } from '@/hooks/use-theme';
+import { pendingShare } from '@/lib/share';
 import { KIND_LABELS, KINDS, type Kind } from '@/lib/types';
 
 const kindLabel = (kind?: string) => ((KINDS as readonly string[]).includes(kind ?? '') ? KIND_LABELS[kind as Kind] : '');
@@ -15,6 +16,12 @@ export default function AppLayout() {
   useEffect(() => {
     if (hasShareIntent && pathname !== '/share') router.push('/share');
   }, [hasShareIntent, pathname]);
+  // Someone opened a friend's shared list, tapped "Sign in to add it", and has now signed in: take them back to it.
+  useEffect(() => {
+    pendingShare.take().then((token) => {
+      if (token) router.push({ pathname: '/s/[token]', params: { token } });
+    });
+  }, []);
   return (
     <Stack
       screenOptions={{

@@ -142,6 +142,9 @@ The workflow can't prompt for an Apple login, so it relies on (both already in p
 
 Static web build: `npm run build:web` (outputs `dist/`, a single-page app).
 
+Shared lists (HAN-50) open at `/s/<token>`, so the web host must serve `index.html` for unknown paths (SPA fallback).
+Set `EXPO_PUBLIC_WEB_URL` to that host so links shared from a phone open for friends without the app.
+
 Share sheet, OCR and transcription use native modules (`expo-share-intent`, `expo-text-extractor`, `whisper.rn`, the
 local `modules/media-extract`), so they need a development build. They don't work in Expo Go. Flow and package choices:
 [`docs/capture.md`](docs/capture.md).
@@ -153,6 +156,9 @@ npm run typecheck
 npm run lint
 npm test
 ```
+
+Database checks for shared lists run against a scratch Postgres with every migration applied (for example the
+`public.ecr.aws/supabase/postgres` image): `psql -v ON_ERROR_STOP=1 -f supabase/tests/list_shares_test.sql`.
 
 Screenshots for the design brief live in `docs/design/`. App Store listing artwork (product page header, search result
 image) lives in `docs/store/`; it is uploaded in App Store Connect and is not bundled into the app. The board keeps the
