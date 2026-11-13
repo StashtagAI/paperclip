@@ -10,6 +10,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { buildCard, fetchLink, fetchRecentLinks, submitLink } from '@/lib/data';
+import { shortUrl } from '@/lib/link-summary';
 import { checkLink } from '@/lib/link-filter';
 import { supabase } from '@/lib/supabase';
 import type { LinkRow, LinkStatus } from '@/lib/types';
@@ -129,7 +130,7 @@ function LinkRowView({ link }: { link: LinkRow }) {
       style={[styles.linkRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <View style={styles.linkText}>
         <ThemedText type="small" numberOfLines={1}>
-          {link.url.replace(/^https:\/\/(www\.)?/, '')}
+          {shortUrl(link.url)}
         </ThemedText>
         {link.status === 'failed' && link.error ? (
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
