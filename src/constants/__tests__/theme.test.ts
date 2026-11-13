@@ -64,4 +64,17 @@ describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
   it('primary button label on tint', () => {
     expect(contrast(c.onTint, c.tint)).toBeGreaterThanOrEqual(AA);
   });
+
+  it('destructive button label on danger', () => {
+    expect(contrast(c.onDanger, c.danger)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it('toast: background-coloured text on a text-coloured fill', () => {
+    expect(contrast(c.background, c.text)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it('selected option on its fill', () => {
+    expect(contrast(c.text, c.backgroundSelected)).toBeGreaterThanOrEqual(AA);
+    expect(contrast(c.tint, c.backgroundSelected)).toBeGreaterThanOrEqual(3);
+  });
 });

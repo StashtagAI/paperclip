@@ -4,32 +4,47 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { ShareIntentProvider } from 'expo-share-intent';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { StyleSheet, useColorScheme, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { ToastProvider } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
+import { ColorSchemeProvider, useColorScheme, useSchemePreference } from '@/hooks/use-color-scheme';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { supabaseConfigured } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   return (
     // Share sheet entry (expo-share-intent); disabled on web by the library.
     <ShareIntentProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <AuthProvider>
-          <RootStack />
-        </AuthProvider>
-      </ThemeProvider>
+      <ColorSchemeProvider>
+        <ThemedRoot />
+      </ColorSchemeProvider>
     </ShareIntentProvider>
   );
 }
 
+function ThemedRoot() {
+  const colorScheme = useColorScheme();
+  return (
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <AuthProvider>
+        <ToastProvider>
+          <RootStack />
+        </ToastProvider>
+      </AuthProvider>
+    </ThemeProvider>
+  );
+}
+
 function RootStack() {
-  const { session, loading } = useAuth();
+  const { session, loading: authLoading } = useAuth();
+  // Wait for the saved appearance too, so the first frame is already in the user's chosen theme.
+  const { ready } = useSchemePreference();
+  const loading = authLoading || !ready;
 
   useEffect(() => {
     if (!loading) SplashScreen.hideAsync();

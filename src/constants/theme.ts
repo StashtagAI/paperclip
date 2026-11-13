@@ -26,6 +26,8 @@ export const Colors = {
     tint: L.cobalt,
     onTint: L.white,
     danger: '#C9252B',
+    /** Text on a `danger` fill, e.g. the Delete account button. */
+    onDanger: L.white,
     success: '#0A7A55',
   },
   dark: {
@@ -40,6 +42,8 @@ export const Colors = {
     // White on dark Cobalt is only 2.8:1, so primary buttons use Night text in dark mode.
     onTint: D.night,
     danger: '#FF6B6B',
+    // White on the light red is 2.8:1, so dark mode uses Night, like onTint.
+    onDanger: D.night,
     success: D.mint,
   },
 } as const;

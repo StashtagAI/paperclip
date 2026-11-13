@@ -1,16 +1,19 @@
 # StashtagAI Data Deletion Policy (Right to Deletion)
 
 **Effective date:** November 7, 2026
-**Last updated:** November 7, 2026
+**Last updated:** November 13, 2026
 
 You have the right to ask [COMPANY LEGAL NAME] ("StashtagAI", "we", "us") to delete the personal information we hold about you. This page explains how to make a request, what gets deleted, and how long it takes. It supplements our [Privacy Policy](./privacy-policy.md).
 
 ## 1. How to request deletion
 
 **Option A: in the app**
-1. Open StashtagAI and go to **Settings → Account**.
-2. Tap **Delete account**.
-3. Confirm the request.
+1. Open StashtagAI and tap the **profile** button (the person icon at the top of the home screen).
+2. Under **Account**, tap **Delete account**.
+3. Read what will be deleted and tap **Continue**.
+4. Type **DELETE** and tap **Delete my account**.
+
+Your account is deleted straight away and you are signed out.
 
 **Option B: by email**
 Send an email from the address linked to your account to **[PRIVACY EMAIL]** with the subject line **"Delete my account"**. If you no longer have access to that address, tell us, and we will work with you to verify your identity another way.
@@ -30,16 +33,19 @@ When your account is deleted, we permanently delete:
 - your account and login information (email address and authentication records);
 - every link you submitted;
 - the post content we retrieved for those links (captions, author names, transcripts, and other text);
-- your categories, lists, items, tags, and notes; and
+- your categories, lists, items, tags, and notes;
+- any feedback you sent us, in the app or on a saved post;
+- any files stored for your account; and
 - processing records tied to your account.
 
 ## 4. Timeline
 
-- **Live systems:** deleted within **30 days** of a verified request, and usually much sooner.
+- **In the app:** deleted from live systems immediately.
+- **By email or through an agent:** deleted from live systems within **30 days** of a verified request, and usually much sooner.
 - **Backups:** removed as backups are overwritten on their regular schedule, within **90 days**. Until then, backups are kept secure and are not used for any other purpose.
 - **Service providers:** we instruct our processors (such as Supabase) to delete the data as well. The content we send to our AI provider for extraction is processed under commercial terms that do not allow it to be used for model training, and it is kept only for the provider's limited retention period.
 
-We will confirm by email once your deletion is complete.
+The app confirms on screen when an in-app deletion is complete. For requests made by email, we will confirm by email once your deletion is complete.
 
 ## 5. What we may keep
 
