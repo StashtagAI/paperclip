@@ -51,6 +51,8 @@ export type ItemRow = {
   lat: number | null;
   lng: number | null;
   tags: string[];
+  /** How many saved posts recommend this item (HAN-44); 1 when only the post it came from does. */
+  post_count?: number;
   /** The user's own note and 1–5 star rating (HAN-45); process-link never writes these. */
   note: string;
   rating: number | null;

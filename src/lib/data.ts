@@ -99,15 +99,17 @@ export async function fetchKind(kind: Kind): Promise<KindCategory[]> {
   }));
 }
 
+type ListQueryItem = ItemRow & { item_posts: { count: number }[] };
+
 export async function fetchList(listId: string): Promise<ListDetail> {
   const { data, error } = await supabase
     .from('lists')
-    .select('id, category_id, name, tags, category:categories(id, kind, name), items(*)')
+    .select('id, category_id, name, tags, category:categories(id, kind, name), items(*, item_posts(count))')
     .eq('id', listId)
     .order('name', { referencedTable: 'items' })
-    .single<ListDetail>();
+    .single<Omit<ListDetail, 'items'> & { items: ListQueryItem[] }>();
   if (error) throw error;
-  return data;
+  return { ...data, items: data.items.map(({ item_posts, ...item }) => ({ ...item, post_count: item_posts[0]?.count ?? 1 })) };
 }
 
 export async function fetchRecentLinks(): Promise<LinkRow[]> {

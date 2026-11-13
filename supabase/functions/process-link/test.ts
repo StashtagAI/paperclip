@@ -259,7 +259,7 @@ import { ground } from "./extract.ts";
 }
 
 // ---- merge into existing lists (HAN-7) ----
-import { findByName, nameKey, splitNew } from "./merge.ts";
+import { findByName, mergeItems, nameKey, samePlace, similarNames, splitNew } from "./merge.ts";
 assert.equal(nameKey("  Sap  Sua "), "sap sua");
 assert.equal(findByName([{ id: 1, name: "Denver" }], "denver ")?.id, 1);
 assert.equal(findByName([{ id: 1, name: "Denver" }], "Boulder"), undefined);
@@ -317,3 +317,41 @@ assert.deepEqual(
   await assert.rejects(lookup.findPlace("Sap Sua", "Denver"), RunBudgetError);
 }
 console.log("quota ok");
+// ---- cross-post duplicate merge (HAN-44) ----
+{
+  const denver = { lat: 39.7392, lng: -104.9903 };
+  const nearby = { lat: 39.7395, lng: -104.9899 }; // ~50 m
+  const farAway = { lat: 39.9, lng: -105.1 }; // ~20 km
+  // accents, punctuation, "&", leading "the"
+  assert.ok(samePlace({ name: "Sắp Sửa" }, { name: "Sap Sua" }));
+  assert.ok(samePlace({ name: "The Corner Office" }, { name: "Corner Office" }));
+  assert.ok(samePlace({ name: "Tom's Diner" }, { name: "Toms Diner" }));
+  assert.ok(samePlace({ name: "Salt & Straw" }, { name: "Salt and Straw" }));
+  // same name, far-apart coordinates: two branches, not one place
+  assert.ok(!samePlace({ name: "Blue Bottle", ...denver }, { name: "Blue Bottle.", ...farAway }));
+  assert.ok(samePlace({ name: "Blue Bottle", ...denver }, { name: "Blue Bottle.", ...nearby }));
+  // similar names need coordinates or an address to agree
+  assert.ok(similarNames("Corner Office Restaurant", "Corner Office"));
+  assert.ok(!samePlace({ name: "Corner Office Restaurant" }, { name: "Corner Office" }));
+  assert.ok(samePlace({ name: "Corner Office Restaurant", ...denver }, { name: "Corner Office", ...nearby }));
+  assert.ok(!samePlace({ name: "Corner Office Restaurant", ...denver }, { name: "Corner Office", ...farAway }));
+  assert.ok(samePlace({ name: "Corner Office Restaurant", address: "1401 Curtis St, Denver" }, { name: "Corner Office", address: "1401 Curtis St Denver" }));
+  assert.ok(samePlace({ name: "Tavernetta", ...denver }, { name: "Tavernetta Denver", ...nearby }));
+  assert.ok(samePlace({ name: "Tavernetta", ...denver }, { name: "Tavernetto", ...nearby })); // typo // extra word
+  // different places that share a generic word never match
+  assert.ok(!similarNames("Hotel Eden", "Hotel Metropole"));
+  assert.ok(!samePlace({ name: "Sushi Den", ...denver }, { name: "Sushi Ran", ...nearby }));
+  assert.ok(!similarNames("Kitchen", "Bakery"));
+
+  const existing = [
+    { id: "a", name: "Sap Sua", address: null, lat: denver.lat, lng: denver.lng },
+    { id: "b", name: "Annette", address: null, lat: null, lng: null },
+  ];
+  const { fresh, matched } = mergeItems(
+    [{ name: "Sắp Sửa", ...nearby }, { name: "annette" }, { name: "Hey Kiddo" }, { name: "hey kiddo" }, { name: "Tavernetta" }],
+    existing,
+  );
+  assert.deepEqual(fresh.map((i) => i.name), ["Hey Kiddo", "Tavernetta"]);
+  assert.deepEqual(matched.map((m) => [m.item.name, m.existing.id]), [["Sắp Sửa", "a"], ["annette", "b"]]);
+}
+console.log("cross-post merge ok");
