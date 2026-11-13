@@ -1,10 +1,12 @@
 import type { LinkCheck } from '@/lib/link-filter';
+import { photoBytes } from '@/lib/photo-bytes';
 import { itemSearchFilter } from '@/lib/search';
 import { supabase } from '@/lib/supabase';
 import type {
   Captured,
   CategoryRow,
   FeedbackReason,
+  ItemPhotoRow,
   ItemRow,
   Kind,
   LinkDetail,
@@ -182,15 +184,131 @@ export async function fetchLinkItems(linkId: string): Promise<LinkItem[]> {
   return data;
 }
 
+/** Limits from the HAN-45 migration's check constraints. */
+export const ITEM_LIMITS = { note: 4000, alt: 300, photoBytes: 10 * 1024 * 1024 } as const;
+
+const PHOTO_BUCKET = 'item-photos';
+
+/** A photo with a short-lived signed URL (the bucket is private); `url` is null if signing failed. */
+export type ItemPhoto = ItemPhotoRow & { url: string | null };
+export type ItemDetail = LinkItem & { photos: ItemPhoto[] };
+
+/** One item with its list, category, and the user's note, rating and photos. */
+export async function fetchItem(itemId: string): Promise<ItemDetail> {
+  const { data, error } = await supabase
+    .from('items')
+    .select(
+      '*, list:lists!inner(id, name, category:categories!inner(kind, name)), photos:item_photos(id, item_id, path, alt, width, height, created_at)',
+    )
+    .eq('id', itemId)
+    .single<LinkItem & { photos: ItemPhotoRow[] }>();
+  if (error) throw error;
+  const rows = [...data.photos].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  let urls = new Map<string, string>();
+  if (rows.length) {
+    const signed = await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(rows.map((p) => p.path), 60 * 60);
+    if (signed.error) throw signed.error;
+    urls = new Map(signed.data.flatMap((s) => (s.path && s.signedUrl ? [[s.path, s.signedUrl] as const] : [])));
+  }
+  return { ...data, photos: rows.map((p) => ({ ...p, url: urls.get(p.path) ?? null })) };
+}
+
+export async function saveItemNote(itemId: string, note: string): Promise<void> {
+  const trimmed = note.trim();
+  if (trimmed.length > ITEM_LIMITS.note) throw new Error(`Keep the note to ${ITEM_LIMITS.note} characters or fewer.`);
+  const { error } = await supabase.from('items').update({ note: trimmed }).eq('id', itemId);
+  if (error) throw error;
+}
+
+/** 1–5 stars, or null to clear. */
+export async function rateItem(itemId: string, rating: number | null): Promise<void> {
+  const { error } = await supabase.from('items').update({ rating }).eq('id', itemId);
+  if (error) throw error;
+}
+
+function checkAlt(alt: string): string {
+  const trimmed = alt.trim();
+  if (!trimmed) throw new Error('Describe the photo so it can be read out by VoiceOver and TalkBack.');
+  if (trimmed.length > ITEM_LIMITS.alt) throw new Error(`Keep the description to ${ITEM_LIMITS.alt} characters or fewer.`);
+  return trimmed;
+}
+
+const PHOTO_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+};
+
+export type PickedPhoto = { uri: string; mimeType?: string | null; width?: number; height?: number };
+
+/** Uploads a picked photo to {user}/{item}/ in the private bucket, then records it with its description. */
+export async function addItemPhoto(itemId: string, photo: PickedPhoto, alt: string): Promise<void> {
+  const description = checkAlt(alt);
+  const contentType = photo.mimeType ?? 'image/jpeg';
+  const ext = PHOTO_EXTENSIONS[contentType];
+  if (!ext) throw new Error('That file type isn’t supported. Pick a JPEG, PNG, WebP or HEIC photo.');
+  const { data: auth } = await supabase.auth.getSession();
+  const userId = auth.session?.user.id;
+  if (!userId) throw new Error('You’re signed out. Sign in again to add photos.');
+
+  const bytes = await photoBytes(photo.uri);
+  if (bytes.byteLength > ITEM_LIMITS.photoBytes) throw new Error('That photo is over 10 MB. Pick a smaller one.');
+  const path = `${userId}/${itemId}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+  const upload = await supabase.storage.from(PHOTO_BUCKET).upload(path, bytes, { contentType });
+  if (upload.error) throw upload.error;
+
+  const { error } = await supabase.from('item_photos').insert({
+    item_id: itemId,
+    path,
+    alt: description,
+    width: photo.width || null,
+    height: photo.height || null,
+  });
+  if (error) {
+    await supabase.storage.from(PHOTO_BUCKET).remove([path]);
+    throw error;
+  }
+}
+
+export async function updatePhotoAlt(photoId: string, alt: string): Promise<void> {
+  const { error } = await supabase.from('item_photos').update({ alt: checkAlt(alt) }).eq('id', photoId);
+  if (error) throw error;
+}
+
+/** Deletes the row, then the file. A file left behind by a failed removal is cleared with the account (HAN-34). */
+export async function deleteItemPhoto(photo: Pick<ItemPhotoRow, 'id' | 'path'>): Promise<void> {
+  const { error } = await supabase.from('item_photos').delete().eq('id', photo.id);
+  if (error) throw error;
+  await supabase.storage.from(PHOTO_BUCKET).remove([photo.path]);
+}
+
+/**
+ * Photo rows go with their item (on delete cascade) but the files don't, so these remove them afterwards. Best effort:
+ * anything left behind is cleared with the account (HAN-34).
+ */
+async function photoPaths(column: 'item_id' | 'items.link_id', id: string): Promise<string[]> {
+  const { data, error } = await supabase.from('item_photos').select('path, items!inner(link_id)').eq(column, id);
+  if (error) throw error;
+  return data.map((p) => p.path as string);
+}
+async function removePhotoFiles(paths: string[]) {
+  if (paths.length) await supabase.storage.from(PHOTO_BUCKET).remove(paths);
+}
+
 export async function deleteItem(itemId: string): Promise<void> {
+  const paths = await photoPaths('item_id', itemId);
   const { error } = await supabase.from('items').delete().eq('id', itemId);
   if (error) throw error;
+  await removePhotoFiles(paths);
 }
 
 /** Deletes a stashed link, the items it added, and any list or category that leaves empty (HAN-20). */
 export async function deleteLink(linkId: string): Promise<void> {
+  const paths = await photoPaths('items.link_id', linkId);
   const { error } = await supabase.rpc('delete_link', { p_link_id: linkId });
   if (error) throw error;
+  await removePhotoFiles(paths);
 }
 
 /** Name limits from the schema's check constraints. */
