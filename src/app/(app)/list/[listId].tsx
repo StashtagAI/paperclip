@@ -131,6 +131,11 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
         style={({ pressed }) => [styles.main, { opacity: pressed ? 0.8 : 1 }]}>
         <ThemedText type="defaultBold">{item.name}</ThemedText>
         {item.description ? <ThemedText type="small">{item.description}</ThemedText> : null}
+        {item.post_count && item.post_count > 1 ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {recommendedIn(item.post_count)}
+          </ThemedText>
+        ) : null}
         {item.address ? (
           <ThemedText type="small" themeColor="textSecondary" selectable>
             {item.address}
@@ -173,6 +178,9 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
     </View>
   );
 }
+
+/** Plain text, read aloud as-is: no icon or colour carries the count. */
+const recommendedIn = (n: number) => `Recommended in ${n} posts`;
 
 function Tags({ kind, tags }: { kind: Kind; tags: string[] }) {
   return (

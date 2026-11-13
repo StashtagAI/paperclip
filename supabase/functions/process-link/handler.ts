@@ -9,7 +9,7 @@ import { fetchCaption } from "./fetch-caption.ts";
 import { parseAllowedUrl, platformOf } from "./url.ts";
 import { cachedSearch, type SearchCache, searchFromEnv, stubSearch } from "./search.ts";
 import { cachedLookup, lookupFromEnv, type PlaceCache, stubLookup } from "./lookup.ts";
-import { findByName, splitNew } from "./merge.ts";
+import { findByName, mergeItems } from "./merge.ts";
 import { book, costDetail, limitsFromEnv, type Meter, meteredFetch, newMeter } from "./quota.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -188,16 +188,36 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
     } else if (ex.tags.some((t) => !list!.tags.includes(t))) {
       await db.from("lists").update({ tags: [...new Set([...list.tags, ...ex.tags])] }).eq("id", list.id);
     }
-    const { data: existing, error: ee } = await db.from("items").select("name").eq("list_id", list!.id);
+    const { data: existing, error: ee } = await db.from("items").select("id,name,description,address,lat,lng").eq("list_id", list!.id);
     if (ee) throw ee;
-    // Items already in the list are kept as they are (no duplicate, no overwrite of the earlier post's details).
-    const { fresh, already } = splitNew(ex.items, (existing ?? []).map((i) => i.name));
+    // A place already in the list (same name, or a close name at the same spot) is not added again: this post is
+    // recorded as another one recommending it (item_posts) and gaps in the earlier row are filled, never overwritten.
+    const { fresh, matched } = mergeItems(ex.items, existing ?? []);
+    const already = matched.map((m) => m.item.name);
     if (fresh.length) {
-      const { error: ie } = await db.from("items").upsert(
+      const { data: inserted, error: ie } = await db.from("items").upsert(
         fresh.map(({ name, description, address, lat, lng }) => ({ name, description, address, lat, lng, list_id: list!.id, link_id, user_id: link.user_id })),
         { onConflict: "list_id,name", ignoreDuplicates: true },
-      );
+      ).select("id");
       if (ie) throw ie;
+      if (inserted?.length) {
+        const { error } = await db.from("item_posts").upsert(inserted.map((i) => ({ item_id: i.id, link_id, user_id: link.user_id })), { onConflict: "item_id,link_id", ignoreDuplicates: true });
+        if (error) throw error;
+      }
+    }
+    if (matched.length) {
+      const { error } = await db.from("item_posts").upsert(
+        matched.map((m) => ({ item_id: m.existing.id, link_id, user_id: link.user_id })),
+        { onConflict: "item_id,link_id", ignoreDuplicates: true },
+      );
+      if (error) throw error;
+      for (const { item, existing: e } of matched) {
+        const fill: Record<string, unknown> = {};
+        if (!e.description && item.description) fill.description = item.description;
+        if (!e.address && item.address) fill.address = item.address;
+        if ((e.lat == null || e.lng == null) && item.lat != null && item.lng != null) Object.assign(fill, { lat: item.lat, lng: item.lng });
+        if (Object.keys(fill).length) await db.from("items").update(fill).eq("id", e.id);
+      }
     }
     await db.from("links").update({
       status: "done",
