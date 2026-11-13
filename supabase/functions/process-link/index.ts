@@ -10,13 +10,39 @@ import { parseAllowedUrl, platformOf } from "./url.ts";
 import { cachedSearch, type SearchCache, searchFromEnv, stubSearch } from "./search.ts";
 import { cachedLookup, lookupFromEnv, type PlaceCache, stubLookup } from "./lookup.ts";
 import { findByName, splitNew } from "./merge.ts";
+import { book, costDetail, limitsFromEnv, type Meter, meteredFetch, newMeter } from "./quota.ts";
 
 declare const Deno: { env: { get(k: string): string | undefined }; serve(h: (r: Request) => Promise<Response>): void };
+const env = (k: string) => Deno.env.get(k);
 
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
 
+// HAN-37: once a run passes the quota it books its estimated spend ("cost" event) whichever way it ends.
 Deno.serve(async (req) => {
+  const run: Run = { meter: newMeter(), record: null };
+  try {
+    return await handle(req, run);
+  } finally {
+    await run.record?.();
+  }
+});
+
+interface Run { meter: Meter; record: (() => Promise<void>) | null }
+
+/** Logs the alert and, when ALERT_WEBHOOK_URL is set (Slack-style incoming webhook), posts it there. Never throws. */
+async function sendAlert(kind: string, userId: string, q: Record<string, unknown>) {
+  const text = `StashtagAI process-link alert: ${kind} (user ${userId.slice(0, 8)}, ${q.hour_runs} runs in the last hour, `
+    + `$${Number(q.user_usd).toFixed(2)} this user / $${Number(q.all_usd).toFixed(2)} all users today)`;
+  console.error(`[process-link] ALERT ${text}`);
+  const hook = env("ALERT_WEBHOOK_URL");
+  if (!hook) return;
+  try {
+    await fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }), signal: AbortSignal.timeout(5000) });
+  } catch { /* alerting is best-effort */ }
+}
+
+async function handle(req: Request, run: Run): Promise<Response> {
   const { link_id, captured: sent } = await req.json().catch(() => ({}));
   if (!link_id) return json({ error: "link_id required" }, 400);
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -36,11 +62,11 @@ Deno.serve(async (req) => {
   };
   const pending: Promise<void>[] = [];
   const sink = (...a: Parameters<typeof event>) => { pending.push(event(...a)); };
-  const fail = async (code: string) => {
+  const fail = async (code: string, http = 200) => {
     await Promise.allSettled(pending);
     await event("final", false, Date.now() - t00, { status: "failed", error: code });
     await db.from("links").update({ status: "failed", error: code }).eq("id", link_id);
-    return json({ status: "failed", error: code });
+    return json({ status: "failed", error: code }, http);
   };
 
   // Server-side re-validation: never trust the client check.
@@ -53,6 +79,23 @@ Deno.serve(async (req) => {
     .update({ status: "processing", error: null, ...(fetching ? { raw_content: { reading: true } } : {}) })
     .eq("id", link_id).neq("status", "processing").select("id");
   if (!claimed?.length) return json({ error: "already_processing" }, 409);
+
+  // Rate limit and daily caps, before any paid call. Fails closed: no quota answer, no spend.
+  const limits = limitsFromEnv(env);
+  const { data: q, error: qe } = await db.rpc("claim_process_quota", {
+    p_user: link.user_id, p_link: link_id, p_per_hour: limits.perHour,
+    p_user_daily_usd: limits.userDailyUsd, p_global_daily_usd: limits.globalDailyUsd,
+  });
+  if (qe || !q) {
+    console.error(`[process-link] quota check failed: ${qe?.message}`);
+    return await fail("quota_unavailable");
+  }
+  if (q.alert) await sendAlert(q.alert, link.user_id, q);
+  if (!q.allowed) return await fail(q.reason, 429);
+  const meter = run.meter;
+  run.record = () => event("cost", meter.refused === 0, undefined, costDetail(meter));
+  // Paid calls go through the meter; past the run budget they are refused (search/Places skip, extraction fails).
+  const paidFetch = meteredFetch(meter, limits.runUsd);
 
   // Back to "pending" so the capture screen takes over, keeping whatever caption we got to pre-fill it.
   const needsCapture = async (reason: string, fetch: Record<string, unknown>, caption?: string) => {
@@ -69,7 +112,8 @@ Deno.serve(async (req) => {
   let captured = sent;
   let fetched: Record<string, unknown> | null = null;
   if (fetching) {
-    const f = await fetchCaption(postUrl, (k) => Deno.env.get(k));
+    const f = await fetchCaption(postUrl, env, paidFetch);
+    book(meter, f.cost_usd);
     const detail = { platform: platformOf(postUrl), cost_usd: f.cost_usd, ...(f.ok ? { via: f.via, caption_chars: f.caption.length } : { reason: f.reason, tried: f.tried }) };
     await event("fetch_caption", f.ok, f.ms, detail);
     console.log(`[process-link] fetch_caption ${JSON.stringify({ ok: f.ok, ms: f.ms, ...detail })}`);
@@ -97,10 +141,10 @@ Deno.serve(async (req) => {
       await db.from("search_lookups").upsert({ query_key: key, fill });
     },
   };
-  const sBase = searchFromEnv((k) => Deno.env.get(k));
-  const base = lookupFromEnv((k) => Deno.env.get(k));
+  const sBase = searchFromEnv(env, paidFetch);
+  const base = lookupFromEnv(env, paidFetch);
   try {
-    const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`), event: sink });
+    const r = await processCaptured(link.url, captured, { apiKey: Deno.env.get("ANTHROPIC_API_KEY")!, fetchFn: paidFetch, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`), event: sink });
     if (!r.ok) return await fail(r.error);
     // A fetched caption that names nothing (only hashtags, "recipe in bio"…): let the user add what the video says.
     if (fetched && "unsorted" in r) return await needsCapture("no_items", fetched, (captured as { caption: string }).caption);
@@ -162,4 +206,4 @@ Deno.serve(async (req) => {
   } catch (e) {
     return await fail(String((e as Error).message ?? e).slice(0, 200));
   }
-});
+}
