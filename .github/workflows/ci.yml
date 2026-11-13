@@ -22,3 +22,25 @@ jobs:
       # Same Metro bundle step EAS runs ("Bundle JavaScript"), so a missing
       # native-only dependency fails here instead of in a cloud build.
       - run: npx expo export --platform ios --platform android --output-dir /tmp/native-export
+
+  # HAN-46: apply every migration to an empty Supabase Postgres and run the RLS tests (supabase/tests/database).
+  db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: public.ecr.aws/supabase/postgres:17.11.0.011
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -h 127.0.0.1"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      # Two migrations with the same version clash in Supabase's history, and one is skipped.
+      - run: |
+          dupes=$(ls supabase/migrations | cut -c1-14 | sort | uniq -d)
+          if [ -n "$dupes" ]; then echo "Duplicate migration versions: $dupes"; exit 1; fi
+      - run: scripts/test-db.sh
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
