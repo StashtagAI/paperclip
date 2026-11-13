@@ -65,6 +65,16 @@ Supabase dashboard › Authentication:
    `http://localhost:8081/auth/callback` and the deployed web URL.
 3. Optional but recommended on iOS: in **Email Templates › Magic Link** add `{{ .Token }}` so the email also carries a
    6-digit code that can be typed into the app when the link opens in a different browser.
+4. **Rate Limits** (HAN-38, abuse limits on sign-in): keep Supabase's throttles on, with these values or tighter:
+   emails sent **30/hour** for the project (the built-in email service is fixed at 2/hour until custom SMTP is set
+   up), sign-ups and sign-ins **30 per 5 minutes per IP**, token verifications **30 per 5 minutes per IP**. Under
+   **Providers › Email**, keep the minimum interval between emails to one address at **60 seconds**. The app counts down
+   that 60 seconds on its resend button (`EMAIL_RESEND_SECONDS` in `src/lib/rate-limit.ts`) and turns any 429 from Auth
+   into a plain "wait and try again" message.
+
+Feedback inserts are capped in the database: 5 per account in any 10 minutes and 20 in any 24 hours
+(`feedback_rate_limit` trigger). Over the cap, PostgREST returns HTTP 429 (`PT429`) and the feedback sheet keeps the
+draft and says to try later.
 
 ## Running
 
