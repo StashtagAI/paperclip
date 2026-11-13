@@ -69,6 +69,28 @@ next call, with no redeploy.
 free plan (Instagram $2.70 / 1,000, TikTok $3.70 / 1,000, checked against the Apify API 2026-11-10). It is not Apify's
 invoice. TikTok via oEmbed costs $0.
 
+**Usage limits (HAN-37).** After claiming a link and before any paid call, `process-link` asks
+`claim_process_quota()` (migration `20261113180000`) whether the run may go ahead. If not, the link is marked
+`failed`, the function answers 429, and the card screen says why and when to try again.
+
+| Secret | Default | Effect |
+| --- | --- | --- |
+| `PROCESS_LINKS_PER_HOUR` | 20 | Runs per user per rolling hour. Over it: error `rate_limited`. Refused attempts don't count. |
+| `PROCESS_USER_DAILY_USD` | 3 | Estimated spend per user per UTC day. Over it: error `daily_limit`. |
+| `PROCESS_GLOBAL_DAILY_USD` | 10 | Estimated spend for all users per UTC day. Over it: error `daily_limit` for everyone. |
+| `PROCESS_RUN_MAX_USD` | 1 | Spend for one run. Past it, further paid calls are refused: web search and Places skip the remaining cards, and if extraction itself is refused the link fails with `run_budget`. |
+| `ALERT_WEBHOOK_URL` | unset | Slack-style incoming webhook that receives alerts as `{"text": …}`. Alerts always go to the function log as `ALERT`. |
+
+Spend is metered per run (`process-link/quota.ts`): Anthropic tokens and web searches from each response's `usage`
+(Sonnet 5.5 at $2 / $10 per MTok, $10 / 1,000 searches), Places Text Search at $32 / 1,000, Geocoding at $5 / 1,000,
+and fetch-caption's Apify estimate. Each run writes one `process_events` row with stage `cost` (`detail.usd` plus call
+counts); every quota check writes stage `quota`. **Alerts** (stage `alert`, `detail.kind`): `rate_limited` or
+`daily_limit` the first time a user hits it in an hour, and `global_spend_80` once a day when everyone's spend passes
+80% of the global cap. If the quota check itself fails, the link fails with `quota_unavailable` (no spend without a check).
+
+Today's spend: `select user_id, sum((detail->>'usd')::numeric) from process_events where stage = 'cost' and
+created_at >= date_trunc('day', now(), 'UTC') group by 1;`
+
 ```sql
 select created_at, ok, ms, detail->>'via' via, detail->>'reason' reason, (detail->>'cost_usd')::numeric cost
 from process_events where stage = 'fetch_caption' order by created_at desc limit 50;

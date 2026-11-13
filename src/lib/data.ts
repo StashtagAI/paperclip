@@ -167,6 +167,7 @@ export async function buildCard(linkId: string, captured?: Captured): Promise<vo
   // A non-2xx reply; the function also records failures on the link row, which the review screen shows.
   const status = (error as { context?: Response }).context?.status;
   if (status === 409) return; // already processing: the live status will pick it up
+  if (status === 429) return; // over a usage limit (HAN-37): the link is marked failed with the reason
   throw error;
 }
 

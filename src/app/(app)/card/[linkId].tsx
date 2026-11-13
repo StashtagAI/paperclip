@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
@@ -36,6 +36,11 @@ const ERROR_COPY: Record<string, string> = {
   no_items_found: 'No places, recipes or things to do were named in the text.',
   timeout: 'This took too long and was stopped.',
   url_not_allowed: 'Only Instagram and TikTok links are supported.',
+  // Usage limits (HAN-37)
+  rate_limited: 'You’ve added a lot of links in the last hour. Try this one again in a little while.',
+  daily_limit: 'Today’s limit for building cards is reached. Try this one again tomorrow.',
+  run_budget: 'This post needed more lookups than one card is allowed. Try adding less text.',
+  quota_unavailable: 'Something went wrong on our side. Try again in a minute.',
 };
 
 /**
@@ -126,16 +131,26 @@ export default function CardScreen() {
 function StatusBanner({ link, sending, reading }: { link: LinkDetail; sending: boolean; reading: boolean }) {
   const theme = useTheme();
   const color = link.status === 'failed' ? theme.danger : link.status === 'done' ? theme.success : theme.textSecondary;
+  const title = reading ? 'Reading the post…' : sending ? 'Sending the text…' : STATUS_COPY[link.status];
+  const detail = link.status === 'failed' && link.error ? (ERROR_COPY[link.error] ?? link.error) : null;
+  const message = detail ? `${title}. ${detail}` : title;
+  // iOS has no live regions: announce changes after the first render (Android reads the polite live region below).
+  const shown = useRef(message);
+  useEffect(() => {
+    if (shown.current === message) return;
+    shown.current = message;
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(message);
+  }, [message]);
   return (
     <View style={[styles.banner, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       {link.status === 'processing' || sending ? <ActivityIndicator /> : null}
       <View style={styles.flex}>
         <ThemedText type="defaultBold" style={{ color }} accessibilityLiveRegion="polite">
-          {reading ? 'Reading the post…' : sending ? 'Sending the text…' : STATUS_COPY[link.status]}
+          {title}
         </ThemedText>
-        {link.status === 'failed' && link.error ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {ERROR_COPY[link.error] ?? link.error}
+        {detail ? (
+          <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
+            {detail}
           </ThemedText>
         ) : null}
       </View>
