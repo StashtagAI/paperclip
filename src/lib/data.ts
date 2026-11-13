@@ -13,7 +13,7 @@ import type {
   ListRow,
 } from '@/lib/types';
 
-export type KindList = ListRow & { itemCount: number };
+export type KindList = ListRow & { itemCount: number; doneCount: number };
 export type KindCategory = CategoryRow & { lists: KindList[] };
 export type ListDetail = ListRow & { category: CategoryRow; items: ItemRow[] };
 
@@ -75,13 +75,13 @@ export async function fetchInFlightLinks(): Promise<InFlightLink[]> {
   return data;
 }
 
-type CategoryQueryRow = CategoryRow & { lists: (ListRow & { items: { count: number }[] })[] };
+type CategoryQueryRow = CategoryRow & { lists: (ListRow & { items: { done_at: string | null }[] })[] };
 
-/** Categories > lists (with item counts) under one kind, e.g. Eats > Restaurants > Denver. */
+/** Categories > lists (with item and done counts) under one kind, e.g. Eats > Restaurants > Denver. */
 export async function fetchKind(kind: Kind): Promise<KindCategory[]> {
   const { data, error } = await supabase
     .from('categories')
-    .select('id, kind, name, lists(id, category_id, name, tags, items(count))')
+    .select('id, kind, name, lists(id, category_id, name, tags, items(done_at))')
     .eq('kind', kind)
     .order('name')
     .order('name', { referencedTable: 'lists' })
@@ -89,7 +89,11 @@ export async function fetchKind(kind: Kind): Promise<KindCategory[]> {
   if (error) throw error;
   return data.map(({ lists, ...category }) => ({
     ...category,
-    lists: lists.map(({ items, ...list }) => ({ ...list, itemCount: items[0]?.count ?? 0 })),
+    lists: lists.map(({ items, ...list }) => ({
+      ...list,
+      itemCount: items.length,
+      doneCount: items.filter((i) => i.done_at).length,
+    })),
   }));
 }
 
@@ -180,6 +184,18 @@ export async function fetchLinkItems(linkId: string): Promise<LinkItem[]> {
     .returns<LinkItem[]>();
   if (error) throw error;
   return data;
+}
+
+/** Marks an item Visited/Tried/Cooked/Done, or clears the mark (HAN-41). Returns the stored `done_at`. */
+export async function setItemDone(itemId: string, done: boolean): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('items')
+    .update({ done_at: done ? new Date().toISOString() : null })
+    .eq('id', itemId)
+    .select('done_at')
+    .single<{ done_at: string | null }>();
+  if (error) throw error;
+  return data.done_at;
 }
 
 export async function deleteItem(itemId: string): Promise<void> {

@@ -20,6 +20,14 @@ export const KIND_SUBTITLES: Record<Kind, string> = {
   do: 'Things to try',
 };
 
+/** What "done" means for an item of each kind, e.g. "3 of 8 tried" (HAN-41). */
+export const DONE_LABELS: Record<Kind, string> = {
+  eats: 'Tried',
+  trips: 'Visited',
+  recipes: 'Cooked',
+  do: 'Done',
+};
+
 export const PLATFORM_LABELS: Record<Platform, string> = {
   instagram: 'Instagram',
   tiktok: 'TikTok',
@@ -51,6 +59,8 @@ export type ItemRow = {
   lat: number | null;
   lng: number | null;
   tags: string[];
+  /** When the user marked it Visited/Tried/Cooked/Done (HAN-41); null if not yet. */
+  done_at: string | null;
 };
 
 /** Text captured on the phone, the process-link request body's `captured` field (docs/extraction.md). */

@@ -27,6 +27,8 @@ export const Colors = {
     onTint: L.white,
     danger: '#C9252B',
     success: '#0A7A55',
+    /** Check mark drawn on a `success` fill (HAN-41). */
+    onSuccess: L.white,
   },
   dark: {
     text: D.cloud,
@@ -41,6 +43,7 @@ export const Colors = {
     onTint: D.night,
     danger: '#FF6B6B',
     success: D.mint,
+    onSuccess: D.night,
   },
 } as const;
 
