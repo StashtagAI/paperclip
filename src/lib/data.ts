@@ -1,5 +1,6 @@
 import type { LinkCheck } from '@/lib/link-filter';
 import { photoBytes } from '@/lib/photo-bytes';
+import type { PickItem } from '@/lib/picks';
 import { itemSearchFilter } from '@/lib/search';
 import { supabase } from '@/lib/supabase';
 import type {
@@ -35,14 +36,17 @@ export function primaryTag(item: StashItem): string | null {
 const STASH_ITEM_COLUMNS =
   'id, name, tags, created_at, list:lists!inner(id, name, tags, category:categories!inner(kind, name)), link:links(platform, tags)';
 
-/** Newest extracted items across every kind. */
-export async function fetchRecentItems(limit = 20): Promise<StashItem[]> {
+/**
+ * Newest extracted items across every kind, with coordinates. Home shows the first few as "Recently stashed" and
+ * chooses its Tonight / Near you / Try this week picks from the rest (HAN-48); a single user's stash fits in one page.
+ */
+export async function fetchHomeItems(limit = 300): Promise<PickItem[]> {
   const { data, error } = await supabase
     .from('items')
-    .select(STASH_ITEM_COLUMNS)
+    .select(`${STASH_ITEM_COLUMNS}, lat, lng, address`)
     .order('created_at', { ascending: false })
     .limit(limit)
-    .returns<StashItem[]>();
+    .returns<PickItem[]>();
   if (error) throw error;
   return data;
 }
@@ -169,6 +173,7 @@ export async function buildCard(linkId: string, captured?: Captured): Promise<vo
   // A non-2xx reply; the function also records failures on the link row, which the review screen shows.
   const status = (error as { context?: Response }).context?.status;
   if (status === 409) return; // already processing: the live status will pick it up
+  if (status === 429) return; // over a usage limit (HAN-37): the link is marked failed with the reason
   throw error;
 }
 

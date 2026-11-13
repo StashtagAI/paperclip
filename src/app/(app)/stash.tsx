@@ -1,6 +1,7 @@
+import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
@@ -29,9 +30,17 @@ export default function StashScreen() {
   const [saving, setSaving] = useState(false);
   const links = useAsync(fetchRecentLinks, []);
 
+  const theme = useTheme();
+
+  function fail(text: string) {
+    setFeedback({ tone: 'danger', text });
+    // accessibilityRole="alert" is only spoken on Android.
+    AccessibilityInfo.announceForAccessibility(text);
+  }
+
   async function save(value: string) {
     const result = checkLink(value);
-    if (!result.ok) return setFeedback({ tone: 'danger', text: result.message });
+    if (!result.ok) return fail(result.message);
     setSaving(true);
     try {
       const { id, outcome } = await submitLink(result);
@@ -48,12 +57,27 @@ export default function StashScreen() {
       buildCard(id).catch((e: Error) => console.warn('[process-link]', e.message));
       router.replace({ pathname: '/card/[linkId]', params: { linkId: id, sent: 'read' } });
     } catch (e) {
-      setFeedback({ tone: 'danger', text: `Couldn’t save the link: ${(e as Error).message}` });
+      fail(`Couldn’t save the link: ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
   }
   const onSubmit = () => save(input);
+
+  // One tap from "Copy link" to stashed (HAN-56): the pasted text goes in the field and is saved straight away.
+  function onPaste(text: string) {
+    if (saving) return;
+    if (!text.trim()) return fail('Nothing to paste. In Instagram or TikTok, tap Share › Copy link first.');
+    setInput(text.trim());
+    save(text);
+  }
+  async function pasteFromClipboard() {
+    try {
+      onPaste(await Clipboard.getStringAsync());
+    } catch (e) {
+      fail(`Couldn’t read the clipboard: ${(e as Error).message}`);
+    }
+  }
 
   // A link from the share sheet is saved straight away, once.
   const autoSaved = useRef(false);
@@ -69,6 +93,21 @@ export default function StashScreen() {
       edges="none"
       refreshControl={<RefreshControl refreshing={links.loading && !!links.data} onRefresh={links.refresh} />}>
       <ThemedText themeColor="textSecondary">Paste an Instagram post or reel, or a TikTok video link.</ThemedText>
+
+      {/* iOS 16+: Apple's own Paste control reads the clipboard without the "Allow Paste?" prompt. */}
+      {Clipboard.isPasteButtonAvailable ? (
+        <Clipboard.ClipboardPasteButton
+          onPress={(data) => data.type === 'text' && onPaste(data.text)}
+          acceptedContentTypes={['url', 'plain-text']}
+          backgroundColor={theme.tint}
+          foregroundColor={theme.onTint}
+          cornerStyle="medium"
+          displayMode="iconAndLabel"
+          style={styles.pasteButton}
+        />
+      ) : (
+        <Button title="Paste copied link" onPress={pasteFromClipboard} disabled={saving} />
+      )}
 
       <TextField
         value={input}
@@ -146,6 +185,8 @@ function LinkRowView({ link }: { link: LinkRow }) {
 }
 
 const styles = StyleSheet.create({
+  // UIPasteControl needs an explicit size; 48pt clears the touch-target minimum.
+  pasteButton: { height: 48, alignSelf: 'stretch' },
   sectionTitle: { marginTop: Spacing.three },
   linkRow: {
     flexDirection: 'row',
