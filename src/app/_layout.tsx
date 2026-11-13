@@ -47,6 +47,8 @@ function RootStack() {
         <Stack.Screen name="sign-in" />
       </Stack.Protected>
       <Stack.Screen name="auth/callback" />
+      {/* A friend's shared list opens signed in or out (HAN-50). */}
+      <Stack.Screen name="s/[token]" />
     </Stack>
   );
 }

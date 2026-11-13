@@ -14,6 +14,7 @@ import type {
   LinkItem,
   LinkRow,
   ListRow,
+  SharedList,
 } from '@/lib/types';
 
 export type KindList = ListRow & { itemCount: number };
@@ -346,6 +347,47 @@ export async function renameList(list: Pick<ListRow, 'id' | 'category_id'>, name
   const trimmed = checkName(name, NAME_LIMITS.list, siblings.data, 'list');
   const { error } = await supabase.from('lists').update({ name: trimmed }).eq('id', list.id);
   if (error) throw error.code === '23505' ? new Error(`You already have a list called “${trimmed}” here.`) : error;
+}
+
+/** The share token for one of the user's lists, or null if it isn't shared (HAN-50). */
+export async function fetchListShare(listId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('list_shares')
+    .select('token')
+    .eq('list_id', listId)
+    .maybeSingle<{ token: string }>();
+  if (error) throw error;
+  return data?.token ?? null;
+}
+
+/** Shares a list, or returns its existing token. */
+export async function shareList(listId: string): Promise<string> {
+  const { data, error } = await supabase.from('list_shares').insert({ list_id: listId }).select('token').single<{ token: string }>();
+  if (!error) return data.token;
+  if (error.code !== '23505') throw error;
+  const existing = await fetchListShare(listId);
+  if (!existing) throw error;
+  return existing;
+}
+
+/** Stops sharing: the old link stops working. */
+export async function stopSharingList(listId: string): Promise<void> {
+  const { error } = await supabase.from('list_shares').delete().eq('list_id', listId);
+  if (error) throw error;
+}
+
+/** A shared list by its token; null when the link was never valid or sharing was stopped. Works signed out. */
+export async function fetchSharedList(token: string): Promise<SharedList | null> {
+  const { data, error } = await supabase.rpc('get_shared_list', { p_token: token });
+  if (error) throw error;
+  return (data as SharedList | null) ?? null;
+}
+
+/** Copies a shared list into the user's stash; `own` when it's their own list. */
+export async function addSharedList(token: string): Promise<{ list_id: string; added: number; own: boolean }> {
+  const { data, error } = await supabase.rpc('add_shared_list', { p_token: token });
+  if (error) throw error.code === 'P0002' ? new Error('This list is no longer shared.') : error;
+  return data as { list_id: string; added: number; own: boolean };
 }
 
 export async function rateLink(linkId: string, rating: 'up' | 'down', reason?: FeedbackReason): Promise<void> {

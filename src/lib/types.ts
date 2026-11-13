@@ -97,4 +97,18 @@ export type LinkDetail = LinkRow & { raw_content: RawContent | null };
 
 export type LinkItem = ItemRow & { list: Pick<ListRow, 'id' | 'name'> & { category: Pick<CategoryRow, 'kind' | 'name'> } };
 
-export type FeedbackReason = 'wrong_category' | 'wrong_items' | 'missed_items';
+/** A friend's list as returned by get_shared_list (HAN-50): the list as it is now, without the owner's ids. */
+export type SharedList = {
+  kind: Kind;
+  category: string;
+  list: string;
+  tags: string[];
+  items: SharedItem[];
+};
+
+export type SharedItem = Pick<ItemRow, 'name' | 'description' | 'address' | 'lat' | 'lng' | 'tags'> & {
+  source_url: string | null;
+  platform: Platform | null;
+};
+
+export type FeedbackReason ='wrong_category' | 'wrong_items' | 'missed_items';
