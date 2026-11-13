@@ -1,16 +1,17 @@
 import { router } from 'expo-router';
-import type { ReactNode } from 'react';
-import { Alert, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Alert, Linking, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
+import { useToast } from '@/components/toast';
 import { Radius, Spacing, type ThemeColor } from '@/constants/theme';
 import { useSchemePreference, type SchemePreference } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
-import { SUPPORT_EMAIL, appVersion, supportMailto } from '@/lib/account';
+import { SUPPORT_EMAIL, appVersion, signOutEverywhere, signOutHere, supportMailto } from '@/lib/account';
+import { appLockSupported, authenticate, biometricName, useAppLock } from '@/lib/app-lock';
 import { useAuth } from '@/lib/auth';
 import { confirmDestructive } from '@/lib/confirm';
-import { supabase } from '@/lib/supabase';
 
 const SCHEMES: { value: SchemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -18,18 +19,40 @@ const SCHEMES: { value: SchemePreference; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
-/** Profile (HAN-34): appearance, feedback, support, billing (later) and account deletion. */
+function showAlert(title: string, message: string) {
+  if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
+  else Alert.alert(title, message);
+}
+
+/** Profile (HAN-34): appearance, security (HAN-49), feedback, support, billing (later) and account deletion. */
 export default function ProfileScreen() {
   const { session } = useAuth();
+  const toast = useToast();
+  const [signingOut, setSigningOut] = useState(false);
 
   async function contactSupport() {
     const url = supportMailto();
     try {
       await Linking.openURL(url);
     } catch {
-      const message = `Email us at ${SUPPORT_EMAIL}.`;
-      if (Platform.OS === 'web') window.alert(message);
-      else Alert.alert('No email app found', message);
+      showAlert('No email app found', `Email us at ${SUPPORT_EMAIL}.`);
+    }
+  }
+
+  async function startSignOutEverywhere() {
+    const ok = await confirmDestructive(
+      'Sign out everywhere?',
+      'This signs you out on every phone and browser, including this one. Other devices are signed out within an hour. You can sign in again with your email.',
+      'Sign out everywhere',
+    );
+    if (!ok) return;
+    setSigningOut(true);
+    try {
+      await signOutEverywhere();
+      toast('Signed out on all your devices');
+    } catch (e) {
+      setSigningOut(false);
+      showAlert('Couldn’t sign out everywhere', `${(e as Error).message}. Check your connection and try again.`);
     }
   }
 
@@ -58,6 +81,17 @@ export default function ProfileScreen() {
         <SchemePicker />
       </Section>
 
+      <Section title="Security">
+        {appLockSupported ? <AppLockRow /> : null}
+        <Row
+          title={signingOut ? 'Signing out…' : 'Sign out everywhere'}
+          subtitle="Sign out on all your phones and browsers"
+          hint="Asks you to confirm"
+          disabled={signingOut}
+          onPress={startSignOutEverywhere}
+        />
+      </Section>
+
       <Section title="Help">
         <Row title="Send feedback" subtitle="Report a bug or share an idea" onPress={() => router.push('/feedback')} />
         <Row
@@ -74,7 +108,7 @@ export default function ProfileScreen() {
       </Section>
 
       <Section title="Account">
-        <Row title="Sign out" onPress={() => supabase.auth.signOut()} />
+        <Row title="Sign out" subtitle="On this device" onPress={signOutHere} />
         <Row
           title="Delete account"
           subtitle="Permanently delete your account and data"
@@ -134,6 +168,61 @@ function SchemePicker() {
         );
       })}
     </View>
+  );
+}
+
+/**
+ * Face ID lock on/off (HAN-49). Both directions ask for Face ID first: turning it on proves it works on this phone,
+ * and turning it off can't be done by someone holding the unlocked phone without it.
+ */
+function AppLockRow() {
+  const theme = useTheme();
+  const toast = useToast();
+  const { enabled, setEnabled } = useAppLock();
+  const [name, setName] = useState('Face ID');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    biometricName().then(setName);
+  }, []);
+
+  async function toggle() {
+    if (busy) return;
+    const next = !enabled;
+    setBusy(true);
+    const result = await authenticate(next ? `Turn on ${name} lock` : `Turn off ${name} lock`);
+    setBusy(false);
+    if (result.ok) {
+      setEnabled(next);
+      toast(next ? `${name} lock is on` : `${name} lock is off`);
+    } else if (result.message) {
+      showAlert(`Couldn’t turn ${next ? 'on' : 'off'} ${name} lock`, result.message);
+    }
+  }
+
+  // One control for VoiceOver/TalkBack: the row is the switch, and the visual Switch inside is hidden from them.
+  return (
+    <Pressable
+      onPress={toggle}
+      accessibilityRole="switch"
+      accessibilityLabel={`${name} lock`}
+      accessibilityHint={`Asks for ${name} when you open Stashtag`}
+      accessibilityState={{ checked: enabled, busy }}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+        pressed && styles.pressed,
+      ]}>
+      <View style={styles.rowText}>
+        <ThemedText type="defaultBold">{name} lock</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {enabled ? 'On. ' : 'Off. '}Ask for {name} when you open Stashtag
+        </ThemedText>
+      </View>
+      <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden pointerEvents="none">
+        <Switch value={enabled} disabled={busy} trackColor={{ true: theme.tint }} />
+      </View>
+    </Pressable>
   );
 }
 
