@@ -1,0 +1,14 @@
+# HAN-39. npm: security-update PRs only (limit 0 turns off routine version bumps; Expo SDK upgrades are done by hand
+# with `npx expo install --fix`). Needs Settings > Code security > Dependabot security updates switched on.
+# GitHub Actions: weekly bumps so pinned action versions keep getting fixes.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
