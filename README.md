@@ -110,8 +110,14 @@ new build. `npx expo-updates fingerprint:generate` prints the current fingerprin
 commit and uploads it to App Store Connect (TestFlight). It runs only when started:
 
 ```bash
-npx eas-cli@latest workflow:run release-ios.yml --ref main
+git fetch origin main
+npx eas-cli@latest workflow:run release-ios.yml --ref $(git rev-parse origin/main)
 ```
+
+`--ref` resolves against your local checkout, so `--ref main` uses a possibly stale local `main`
+(it fails with "Failed to read .eas/workflows/release-ios.yml" if that predates the workflow).
+Passing the fetched commit SHA always runs GitHub's latest `main`. You can also start it from
+expo.dev › stashtag › Workflows.
 
 Progress is on expo.dev › stashtag › Workflows. Send the build for review from App Store Connect.
 The workflow can't prompt for an Apple login, so it relies on (both already in place):
