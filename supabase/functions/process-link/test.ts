@@ -281,7 +281,7 @@ import { isPrivateIp, resolvesPublic } from "./linked.ts";
 import { claimBlock, errorCode } from "./errors.ts";
 import { MAX_ITEMS } from "./schema.ts";
 
-for (const ip of ["127.0.0.1", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "::", "fe80::1", "fd00::1", "fc00::1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a9fe:a9fe", "ff02::1", "garbage"])
+for (const ip of ["127.0.0.1", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "::", "fe80::1", "fd00::1", "fc00::1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a9fe:a9fe", "ff02::1", "garbage", "::7f00:1", "::a9fe:a9fe", "::ffff:0:7f00:1", "0:0:0:0:0:ffff:7f00:1"])
   assert.equal(isPrivateIp(ip), true, ip);
 for (const ip of ["93.184.216.34", "8.8.8.8", "172.32.0.1", "2606:4700::1111", "2001:4860:4860::8888"])
   assert.equal(isPrivateIp(ip), false, ip);
