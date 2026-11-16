@@ -43,6 +43,8 @@ export default function AppLayout() {
       <Stack.Screen name="share" options={{ headerShown: false }} />
       <Stack.Screen name="capture/[linkId]" options={{ title: '' }} />
       <Stack.Screen name="card/[linkId]" options={{ title: '' }} />
+      <Stack.Screen name="item/[itemId]" options={{ title: '' }} />
+      <Stack.Screen name="sample" options={{ title: 'Example card' }} />
       <Stack.Screen name="nudges" options={{ title: 'Nudges' }} />
       <Stack.Screen
         name="stash"

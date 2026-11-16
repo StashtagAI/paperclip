@@ -272,3 +272,48 @@ assert.equal(findByName([{ id: 1, name: "Denver" }], "Boulder"), undefined);
   assert.deepEqual(already, ["Sap Sua"]);
 }
 console.log("merge ok");
+
+// ---- rate limit and spend metering (HAN-37) ----
+import { book, DEFAULT_LIMITS, limitsFromEnv, meteredFetch, newMeter, PRICES, RunBudgetError } from "./quota.ts";
+assert.deepEqual(limitsFromEnv(() => undefined), DEFAULT_LIMITS);
+assert.deepEqual(
+  limitsFromEnv((k) => ({ PROCESS_LINKS_PER_HOUR: "5", PROCESS_USER_DAILY_USD: "abc", PROCESS_GLOBAL_DAILY_USD: "-1", PROCESS_RUN_MAX_USD: "0.25" })[k]),
+  { ...DEFAULT_LIMITS, perHour: 5, runUsd: 0.25 },
+);
+{
+  const calls: string[] = [];
+  const fake = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(new URL(url).hostname);
+    if (url.startsWith("https://api.anthropic.com/"))
+      return new Response(JSON.stringify({ usage: { input_tokens: 100_000, output_tokens: 10_000, server_tool_use: { web_search_requests: 3 } } }));
+    return new Response("{}");
+  }) as typeof fetch;
+  const m = newMeter();
+  const f = meteredFetch(m, 0.5, fake);
+  // the caller still reads the body after the meter read the usage
+  const res = await f("https://api.anthropic.com/v1/messages", { method: "POST" });
+  assert.equal((await res.json()).usage.input_tokens, 100_000);
+  const claude = 100_000 * PRICES.anthropicIn + 10_000 * PRICES.anthropicOut + 3 * PRICES.webSearch; // 0.2 + 0.1 + 0.03
+  assert.ok(Math.abs(m.usd - claude) < 1e-9);
+  assert.equal(m.web_searches, 3);
+  await f("https://places.googleapis.com/v1/places:searchText", { method: "POST" });
+  await f("https://maps.googleapis.com/maps/api/geocode/json?address=x");
+  await f("https://example.com/recipe"); // linked sites are free and never refused
+  book(m, 0.0027);
+  assert.deepEqual([m.places_calls, m.geocode_calls], [1, 1]);
+  assert.ok(Math.abs(m.usd - (claude + PRICES.placesText + PRICES.geocode + 0.0027)) < 1e-9);
+  // over budget: the next paid call is refused before it is made; free hosts still pass
+  await f("https://api.anthropic.com/v1/messages", { method: "POST" });
+  assert.ok(m.usd >= 0.5);
+  const before = calls.length;
+  await assert.rejects(f("https://places.googleapis.com/v1/places:searchText"), RunBudgetError);
+  await assert.rejects(f("https://api.apify.com/v2/acts/x/run-sync-get-dataset-items"), RunBudgetError);
+  assert.equal(calls.length, before);
+  assert.equal(m.refused, 2);
+  await f("https://example.com/");
+  // a refused search or Places call is skipped by the pipeline (best-effort), it never fails the run
+  const lookup = lookupFromEnv((k) => (k === "GOOGLE_PLACES_API_KEY" ? "k" : undefined), f);
+  await assert.rejects(lookup.findPlace("Sap Sua", "Denver"), RunBudgetError);
+}
+console.log("quota ok");
