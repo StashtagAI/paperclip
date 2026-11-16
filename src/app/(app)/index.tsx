@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { HomePicks } from '@/components/home-picks';
 import { KindTile } from '@/components/kind-tile';
 import { PinMark } from '@/components/pin-mark';
 import { Screen } from '@/components/screen';
@@ -13,8 +14,10 @@ import { ThemedText } from '@/components/themed-text';
 import { Features } from '@/constants/features';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
+import { useHere } from '@/hooks/use-here';
 import { useTheme } from '@/hooks/use-theme';
-import { fetchInFlightLinks, fetchRecentItems, searchItems, type StashItem } from '@/lib/data';
+import { fetchHomeItems, fetchInFlightLinks, searchItems, type StashItem } from '@/lib/data';
+import { hasPlaces } from '@/lib/picks';
 import type { Kind } from '@/lib/types';
 
 const GRID: Kind[][] = [
@@ -22,28 +25,45 @@ const GRID: Kind[][] = [
   ['recipes', 'do'],
 ];
 
-/** Home ("Home screen.pdf"): header + search, the four kinds, and recently stashed items. */
+const RECENT_COUNT = 20;
+
+/**
+ * Home ("Home screen.pdf"): header + search, the four kinds, picks from the stash (Tonight / Near you / Try this week,
+ * HAN-48), and recently stashed items.
+ */
 export default function HomeScreen() {
-  const recent = useAsync(() => Promise.all([fetchRecentItems(), fetchInFlightLinks()]), []);
+  const recent = useAsync(() => Promise.all([fetchHomeItems(), fetchInFlightLinks()]), []);
   const [query, setQuery] = useState('');
   const search = useDebouncedSearch(query);
+  const [now, setNow] = useState(() => new Date());
 
-  // Pick up new items when coming back from "Stash a link" or a list.
+  const [items, pending] = recent.data ?? [];
+  const location = useHere(!!items && hasPlaces(items));
+
+  // Pick up new items (and the time of day) when coming back from "Stash a link" or a list.
   const firstFocus = useRef(true);
   const { refresh } = recent;
   useFocusEffect(
     useCallback(() => {
       if (firstFocus.current) firstFocus.current = false;
-      else refresh();
+      else {
+        refresh();
+        setNow(new Date());
+      }
     }, [refresh]),
   );
 
-  const [items, pending] = recent.data ?? [];
+  function pullToRefresh() {
+    refresh();
+    setNow(new Date());
+    location.refresh();
+  }
+
   const searching = query.trim().length > 0;
 
   return (
     <Screen
-      refreshControl={<RefreshControl refreshing={recent.loading && !!recent.data} onRefresh={recent.refresh} />}
+      refreshControl={<RefreshControl refreshing={recent.loading && !!recent.data} onRefresh={pullToRefresh} />}
       footer={
         <Button
           title="Stash a link"
@@ -81,7 +101,9 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          <ThemedText type="sectionTitle" style={styles.sectionTitle}>
+          {items?.length ? <HomePicks items={items} now={now} here={location.here} onUseLocation={location.request} /> : null}
+
+          <ThemedText type="sectionTitle" style={styles.sectionTitle} accessibilityRole="header">
             Recently stashed
           </ThemedText>
           {recent.error ? (
@@ -91,7 +113,7 @@ export default function HomeScreen() {
           ) : items?.length || pending?.length ? (
             <View style={styles.list}>
               {pending?.map((link) => <PendingLinkRow key={link.id} link={link} onRemoved={refresh} />)}
-              {items?.map((item) => <StashRow key={item.id} item={item} />)}
+              {items?.slice(0, RECENT_COUNT).map((item) => <StashRow key={item.id} item={item} />)}
             </View>
           ) : (
             <EmptyStash />
