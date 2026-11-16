@@ -17,6 +17,7 @@ import { useAsync } from '@/hooks/use-async';
 import { useHere } from '@/hooks/use-here';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchHomeItems, fetchInFlightLinks, searchItems, type StashItem } from '@/lib/data';
+import { toError } from '@/lib/errors';
 import { hasPlaces } from '@/lib/picks';
 import type { Kind } from '@/lib/types';
 
@@ -200,7 +201,7 @@ function useDebouncedSearch(query: string): SearchState {
     const timer = setTimeout(() => {
       searchItems(query)
         .then((data) => !cancelled && setResult({ query, data }))
-        .catch((e: Error) => !cancelled && setResult({ query, error: e }));
+        .catch((e: unknown) => !cancelled && setResult({ query, error: toError(e) }));
     }, 250);
     return () => {
       cancelled = true;
