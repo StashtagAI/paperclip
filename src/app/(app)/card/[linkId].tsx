@@ -1,21 +1,26 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Animated, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { ProgressSteps } from '@/components/progress-steps';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
+import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import { useTheme } from '@/hooks/use-theme';
+import { announce } from '@/lib/announce';
 import { deleteItem, deleteLink, fetchLink, fetchLinkItems, rateLink, subscribeToLink } from '@/lib/data';
 import type { FieldSource, LinkDetail, LinkItem, LinkStatus, RawContent } from '@/lib/types';
 import { KIND_LABELS } from '@/lib/types';
 import { confirmDestructive } from '@/lib/confirm';
+import { currentStep, stepAnnouncement, type StepKey } from '@/lib/progress';
 
 const STATUS_COPY: Record<LinkStatus, string> = {
   pending: 'Waiting for what the post says',
-  processing: 'Reading the text and building your card…',
+  processing: 'Building your card…',
   done: 'Filed',
   failed: 'Couldn’t build this card',
 };
@@ -61,7 +66,22 @@ export default function CardScreen() {
   // After Stash it, "needs_capture" is the reply; after Build card it's the row's old state until the claim lands.
   const needsCapture = sent === 'read' && link?.status === 'pending' && link.error === 'needs_capture';
   const sending = !!sent && link?.status === 'pending' && !needsCapture;
-  const reading = (sent === 'read' && sending) || (link?.status === 'processing' && !!raw?.reading);
+  const step = link ? currentStep(link, sending, sent) : null;
+  const outcome = link ? outcomeCopy(link, items ?? []) : null;
+
+  // Read out each step, then how it ended, but only for a card built while the screen was open (HAN-42).
+  const [justFinished, setJustFinished] = useState(false);
+  const watched = useRef(false);
+  useEffect(() => {
+    if (step) {
+      watched.current = true;
+      announce(stepAnnouncement(step));
+    } else if (outcome && watched.current) {
+      watched.current = false;
+      setJustFinished(true);
+      announce(outcome);
+    }
+  }, [step, outcome]);
 
   // Safety net if a Realtime update is missed: re-read every 5 s while the card is still being built.
   const waiting = sending || link?.status === 'processing';
@@ -100,7 +120,11 @@ export default function CardScreen() {
       }>
       <Stack.Screen options={{ title: 'Your card' }} />
       {load.error ? <ThemedText themeColor="danger">{load.error.message}</ThemedText> : null}
-      {!link ? <ActivityIndicator /> : <StatusBanner link={link} sending={sending} reading={reading} />}
+      {!link ? (
+        <ActivityIndicator />
+      ) : (
+        <StatusBanner link={link} step={step} outcome={outcome} celebrate={justFinished && link.status === 'done'} />
+      )}
 
       {first ? (
         <ThemedText type="sectionTitle">
@@ -128,25 +152,53 @@ export default function CardScreen() {
   );
 }
 
-function StatusBanner({ link, sending, reading }: { link: LinkDetail; sending: boolean; reading: boolean }) {
+/** "Filed 3 items in Brunch › Lisbon": the banner headline once a card is done or failed, also read out. */
+function outcomeCopy(link: LinkDetail, items: LinkItem[]): string | null {
+  if (link.status === 'failed') {
+    const why = link.error ? (ERROR_COPY[link.error] ?? link.error) : '';
+    return why ? `${STATUS_COPY.failed}. ${why}` : STATUS_COPY.failed;
+  }
+  if (link.status !== 'done') return null;
+  const first = items[0];
+  if (!first) return link.raw_content?.unsorted ? 'Filed, but nothing could be sorted into a list' : STATUS_COPY.done;
+  const n = items.length === 1 ? '1 item' : `${items.length} items`;
+  return `Filed ${n} in ${first.list.category.name} › ${first.list.name}`;
+}
+
+/**
+ * While the card is being built: "Step 2 of 4: …" and the steps. Afterwards: how it ended. The headline is a polite
+ * live region so TalkBack and web screen readers hear changes; VoiceOver gets the same words from `announce`.
+ */
+function StatusBanner({
+  link,
+  step,
+  outcome,
+  celebrate,
+}: {
+  link: LinkDetail;
+  step: StepKey | null;
+  outcome: string | null;
+  celebrate: boolean;
+}) {
   const theme = useTheme();
   const color = link.status === 'failed' ? theme.danger : link.status === 'done' ? theme.success : theme.textSecondary;
-  const title = reading ? 'Reading the post…' : sending ? 'Sending the text…' : STATUS_COPY[link.status];
   const detail = link.status === 'failed' && link.error ? (ERROR_COPY[link.error] ?? link.error) : null;
-  const message = detail ? `${title}. ${detail}` : title;
-  // iOS has no live regions: announce changes after the first render (Android reads the polite live region below).
-  const shown = useRef(message);
-  useEffect(() => {
-    if (shown.current === message) return;
-    shown.current = message;
-    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(message);
-  }, [message]);
+  if (step) {
+    return (
+      <View style={[styles.banner, styles.steps, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+        <ThemedText type="smallBold" themeColor="textSecondary" accessibilityLiveRegion="polite">
+          {stepAnnouncement(step)}
+        </ThemedText>
+        <ProgressSteps current={step} />
+      </View>
+    );
+  }
   return (
     <View style={[styles.banner, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      {link.status === 'processing' || sending ? <ActivityIndicator /> : null}
+      {link.status === 'done' ? <DoneMark color={theme.success} pop={celebrate} /> : null}
       <View style={styles.flex}>
         <ThemedText type="defaultBold" style={{ color }} accessibilityLiveRegion="polite">
-          {title}
+          {link.status === 'failed' ? STATUS_COPY.failed : (outcome ?? STATUS_COPY[link.status])}
         </ThemedText>
         {detail ? (
           <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
@@ -155,6 +207,31 @@ function StatusBanner({ link, sending, reading }: { link: LinkDetail; sending: b
         ) : null}
       </View>
     </View>
+  );
+}
+
+/** The done check. Springs in when the card finished while you watched, unless Reduce Motion is on. Decorative. */
+function DoneMark({ color, pop }: { color: string; pop: boolean }) {
+  const reduceMotion = useReduceMotion();
+  const scale = useState(() => new Animated.Value(pop && !reduceMotion ? 0.4 : 1))[0];
+  useEffect(() => {
+    if (!pop || reduceMotion) return scale.setValue(1);
+    const anim = Animated.spring(scale, { toValue: 1, friction: 4, tension: 120, useNativeDriver: Platform.OS !== 'web' });
+    anim.start();
+    return () => anim.stop();
+  }, [pop, reduceMotion, scale]);
+  return (
+    <Animated.View
+      style={{ transform: [{ scale }] }}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants">
+      <SymbolView
+        name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }}
+        tintColor={color}
+        size={28}
+        weight="semibold"
+      />
+    </Animated.View>
   );
 }
 
@@ -284,6 +361,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.row,
     borderWidth: StyleSheet.hairlineWidth * 2,
   },
+  steps: { flexDirection: 'column', alignItems: 'stretch' },
   card: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.two },
   field: { gap: 2 },
   feedback: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },

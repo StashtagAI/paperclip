@@ -53,7 +53,7 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
   const { link_id, captured: sent } = await req.json().catch(() => ({}));
   if (typeof link_id !== "string" || !UUID.test(link_id)) return json({ error: "link_id required" }, 400);
 
-  const { data: link, error: le } = await db.from("links").select("id,url,user_id").eq("id", link_id).single();
+  const { data: link, error: le } = await db.from("links").select("id,url,user_id,raw_content").eq("id", link_id).single();
   if (le || !link) return json({ error: "link not found" }, 404);
   // The app calls this directly with the user's session (HAN-7). verify_jwt only proves the token is valid (the anon
   // key is too), so check that the caller owns the link before spending model/lookup calls or touching its rows.
@@ -67,7 +67,24 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
     try { await db.from("process_events").insert({ link_id, user_id: link.user_id, source: "function", stage, ok, ms, detail }); } catch { /* ignore */ }
   };
   const pending: Promise<void>[] = [];
-  const sink = (...a: Parameters<typeof event>) => { pending.push(event(...a)); };
+  // raw_content.stage tells the card screen which step it's on (HAN-42): "finding" once the text is in, "filing" once
+  // the model has answered and place lookups start. Writes are chained so they land in order, and only while the row is
+  // still "processing" so a late one can't overwrite the finished row.
+  let raw: Record<string, unknown> = {};
+  let stageWrites = Promise.resolve();
+  const setStage = (stage: "finding" | "filing") => {
+    raw = { ...raw, reading: false, stage };
+    const next = raw;
+    stageWrites = stageWrites.then(async () => {
+      try { await db.from("links").update({ raw_content: next }).eq("id", link_id).eq("status", "processing"); } catch { /* best-effort */ }
+    });
+    pending.push(stageWrites);
+  };
+  const STAGE_AFTER: Record<string, "finding" | "filing"> = { captured: "finding", extract: "filing" };
+  const sink = (...a: Parameters<typeof event>) => {
+    pending.push(event(...a));
+    if (a[1] && STAGE_AFTER[a[0]]) setStage(STAGE_AFTER[a[0]]);
+  };
   const fail = async (code: string, http = 200) => {
     await Promise.allSettled(pending);
     await event("final", false, Date.now() - t00, { status: "failed", error: code });
@@ -80,9 +97,11 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
   if (!postUrl) return await fail("url_not_allowed");
   const fetching = !buildContent(link.url, sent);
   // Atomic claim: a double tap (or a retry while a run is in flight) must not start a second run.
-  // raw_content.reading lets the app show "Reading the post…" until the caption is in.
+  // raw_content.reading lets the app show "Reading the post…" until the caption is in. With captured text the earlier
+  // raw_content (the fetched caption the capture screen pre-fills from) is kept, minus any stage from a previous run.
+  raw = fetching ? { reading: true, stage: "reading" } : { ...(link.raw_content ?? {}), reading: false, stage: "finding" };
   const { data: claimed } = await db.from("links")
-    .update({ status: "processing", error: null, ...(fetching ? { raw_content: { reading: true } } : {}) })
+    .update({ status: "processing", error: null, raw_content: raw })
     .eq("id", link_id).neq("status", "processing").select("id");
   if (!claimed?.length) return json({ error: "already_processing" }, 409);
 
