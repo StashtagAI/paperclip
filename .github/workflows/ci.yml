@@ -19,6 +19,7 @@ jobs:
       - run: npm run lint
       - run: npm test -- --ci
       - run: node --experimental-strip-types supabase/functions/process-link/fetch-caption.test.ts
+      - run: node --experimental-strip-types supabase/functions/process-link/benchmark.test.ts
       - run: node --experimental-strip-types supabase/functions/process-link/test.ts
       # HAN-46: other users' link_id and prompt-injection fixtures against the process-link handler.
       - run: node --experimental-strip-types supabase/functions/process-link/security.test.ts
