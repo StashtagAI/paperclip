@@ -33,8 +33,10 @@ export function primaryTag(item: StashItem): string | null {
   return tag ? tag.replace(/^#+/, '') : null;
 }
 
+// `link` names the items.link_id foreign key: item_posts (HAN-44) also joins items to links, and an unnamed embed is
+// then ambiguous (PGRST201), which broke Home (HAN-60).
 const STASH_ITEM_COLUMNS =
-  'id, name, tags, created_at, list:lists!inner(id, name, tags, category:categories!inner(kind, name)), link:links(platform, tags)';
+  'id, name, tags, created_at, list:lists!inner(id, name, tags, category:categories!inner(kind, name)), link:links!items_link_id_fkey(platform, tags)';
 
 /**
  * Newest extracted items across every kind, with coordinates. Home shows the first few as "Recently stashed" and
