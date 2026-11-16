@@ -26,18 +26,20 @@ const counting: typeof fetch = async (u, init) => {
   return res;
 };
 
+// raw model items vs items kept after grounding, so a miss can be told apart: never returned, merged, or dropped by grounding
+const trace = new Map<string, Record<string, unknown>>();
 const all = [];
 for (let r = 0; r < runs; r++) {
   const scores = [];
   for (const p of posts) {
-    const res = await processCaptured(p.url, p.captured, { apiKey, fetchFn: counting }).catch((e) => ({ ok: false as const, error: String(e.message ?? e) }));
+    const res = await processCaptured(p.url, p.captured, { apiKey, fetchFn: counting, event: (stage, _ok, _ms, d) => { if (stage === "extract") trace.set(p.id, d); } }).catch((e) => ({ ok: false as const, error: String(e.message ?? e) }));
     if (!res.ok) { scores.push({ ...scorePost(p, { unsorted: true }), failures: [`pipeline error: ${res.error}`], recall: p.expect.empty ? null : 0, emptyCorrect: p.expect.empty ? false : null }); continue; }
     scores.push(scorePost(p, "extraction" in res ? res.extraction : { unsorted: true }));
   }
   all.push(scores);
   const sum = summarize(scores);
   console.log(`\n== run ${r + 1}/${runs} (${MODEL}) ==`);
-  for (const s of scores) console.log(`${s.failures.length ? "FAIL" : "ok  "} ${s.id}${s.failures.map((f) => `\n       - ${f}`).join("")}${s.extras.length && !s.expectedEmpty ? `\n       extras: ${s.extras.join(", ")}` : ""}`);
+  for (const s of scores) console.log(`${s.failures.length ? "FAIL" : "ok  "} ${s.id}${s.failures.map((f) => `\n       - ${f}`).join("")}${s.extras.length && !s.expectedEmpty ? `\n       extras: ${s.extras.join(", ")}` : ""}${s.failures.length ? `\n       model returned: ${JSON.stringify(trace.get(s.id)?.raw_items)}\n       dropped by grounding: ${JSON.stringify(trace.get(s.id)?.dropped_by_grounding)}` : ""}`);
   console.log(JSON.stringify(sum));
 }
 const sums = all.map(summarize);

@@ -27,7 +27,7 @@ jobs:
         run: node --experimental-strip-types supabase/functions/process-link/benchmark-run.ts --runs 3 --out /tmp/benchmark.json | tee /tmp/benchmark.txt
       - if: always()
         run: |
-          { echo '### Extraction benchmark'; echo '```'; tail -n 40 /tmp/benchmark.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '### Extraction benchmark'; echo '```'; tail -n 90 /tmp/benchmark.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
