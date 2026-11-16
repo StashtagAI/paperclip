@@ -23,6 +23,19 @@ npx expo install --fix      # fix incompatible package versions
 
 Run lint and typecheck before declaring any task done.
 
+## Task worktrees: never `npm install` per task
+
+A full install is ~1.1 GB, so worktrees share one install per lockfile through a `node_modules` symlink. Details: `docs/worktrees.md`.
+
+```bash
+scripts/worktree.sh new HAN-NN <branch>   # start a task: new worktree off origin/main, deps linked (adds ~3 MB)
+scripts/worktree.sh deps                  # existing worktree, or the lockfile changed: link the shared install
+scripts/worktree.sh done HAN-NN           # before moving the task to done: deletes node_modules and the clean worktree
+```
+
+- Do not run `npm install`, `npm ci` or `npx expo install` while `node_modules` is a symlink; it changes every other worktree's deps. To change deps: `rm node_modules`, `npx expo install <pkg>`, then `scripts/worktree.sh deps`.
+- Never commit `node_modules` (the symlink is git-ignored).
+
 ## Navigation & Routing
 
 - Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
