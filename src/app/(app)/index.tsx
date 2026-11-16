@@ -1,12 +1,13 @@
 import { router, useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Keyboard, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { HomePicks } from '@/components/home-picks';
 import { KindTile } from '@/components/kind-tile';
 import { PinMark } from '@/components/pin-mark';
+import { RowLink } from '@/components/row-link';
 import { Screen } from '@/components/screen';
 import { PendingLinkRow, StashRow } from '@/components/stash-row';
 import { TextField } from '@/components/text-field';
@@ -16,10 +17,11 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useHere } from '@/hooks/use-here';
 import { useTheme } from '@/hooks/use-theme';
-import { fetchHomeItems, fetchInFlightLinks, searchItems, type StashItem } from '@/lib/data';
+import { announce } from '@/lib/announce';
+import { fetchHomeItems, fetchInFlightLinks, searchItems, searchLists, type ListMatch, type StashItem } from '@/lib/data';
 import { toError } from '@/lib/errors';
 import { hasPlaces } from '@/lib/picks';
-import type { Kind } from '@/lib/types';
+import { KIND_LABELS, type Kind } from '@/lib/types';
 
 const GRID: Kind[][] = [
   ['eats', 'trips'],
@@ -35,8 +37,8 @@ const RECENT_COUNT = 20;
 export default function HomeScreen() {
   const recent = useAsync(() => Promise.all([fetchHomeItems(), fetchInFlightLinks()]), []);
   const [query, setQuery] = useState('');
-  const search = useDebouncedSearch(query);
   const [now, setNow] = useState(() => new Date());
+  const search = useDebouncedSearch(query, now);
 
   const [items, pending] = recent.data ?? [];
   const location = useHere(!!items && hasPlaces(items));
@@ -61,6 +63,22 @@ export default function HomeScreen() {
   }
 
   const searching = query.trim().length > 0;
+
+  // Android's back button leaves search before it leaves the app.
+  useEffect(() => {
+    if (!searching) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setQuery('');
+      return true;
+    });
+    return () => sub.remove();
+  }, [searching]);
+
+  function leaveSearch() {
+    Keyboard.dismiss();
+    setQuery('');
+    announce('Back to your stash');
+  }
 
   return (
     <Screen
@@ -89,7 +107,10 @@ export default function HomeScreen() {
       />
 
       {searching ? (
-        <Results label="Results" state={search} empty={`Nothing matches “${query.trim()}”.`} />
+        <>
+          <BackLink onPress={leaveSearch} />
+          <Results query={query.trim()} state={search} />
+        </>
       ) : (
         <>
           <View style={styles.grid}>
@@ -143,27 +164,86 @@ function Header() {
   );
 }
 
-type SearchState = { data: StashItem[] | undefined; error: Error | undefined; loading: boolean };
+type SearchResult = { items: StashItem[]; lists: ListMatch[] };
+type SearchState = { data: SearchResult | undefined; error: Error | undefined; loading: boolean };
 
-function Results({ label, state, empty }: { label: string; state: SearchState; empty: string }) {
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** Leaves search for the Home screen (HAN-62); clearing the field was the only way back before. */
+function BackLink({ onPress }: { onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Back"
+      accessibilityHint="Clears the search and returns to your stash"
+      style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
+      <SymbolView
+        name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+        tintColor={theme.link}
+        size={18}
+        weight="semibold"
+      />
+      <ThemedText type="defaultBold" style={{ color: theme.link }}>
+        Back
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+function Results({ query, state }: { query: string; state: SearchState }) {
+  const lists = state.data?.lists ?? [];
+  const items = state.data?.items ?? [];
+  const summary = state.error
+    ? `Couldn’t search: ${state.error.message}`
+    : state.data
+      ? lists.length || items.length
+        ? [lists.length ? plural(lists.length, 'list') : null, items.length ? plural(items.length, 'item') : null]
+            .filter(Boolean)
+            .join(' and ') + ` ${lists.length + items.length === 1 ? 'matches' : 'match'} “${query}”.`
+        : `Nothing matches “${query}”.`
+      : null;
+  useEffect(() => {
+    if (summary) announce(summary);
+  }, [summary]);
+
+  if (state.error) return <ErrorNote message={state.error.message} />;
+  if (state.loading || !state.data) return <ActivityIndicator style={styles.loading} accessibilityLabel="Searching" />;
   return (
     <>
-      <ThemedText type="sectionTitle" style={styles.sectionTitle}>
-        {label}
+      <ThemedText themeColor="textSecondary" accessibilityLiveRegion="polite">
+        {summary}
       </ThemedText>
-      {state.error ? (
-        <ErrorNote message={state.error.message} />
-      ) : state.loading || !state.data ? (
-        <ActivityIndicator style={styles.loading} />
-      ) : state.data.length ? (
-        <View style={styles.list}>
-          {state.data.map((item) => (
-            <StashRow key={item.id} item={item} />
-          ))}
-        </View>
-      ) : (
-        <ThemedText themeColor="textSecondary">{empty}</ThemedText>
-      )}
+      {lists.length ? (
+        <>
+          <ThemedText type="sectionTitle" style={styles.sectionTitle} accessibilityRole="header">
+            Lists
+          </ThemedText>
+          <View style={styles.list}>
+            {lists.map((list) => (
+              <RowLink
+                key={list.id}
+                href={{ pathname: '/list/[listId]', params: { listId: list.id } }}
+                title={`${list.category.name} › ${list.name}`}
+                subtitle={`${KIND_LABELS[list.category.kind]} · ${plural(list.itemCount, 'item')}`}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
+      {items.length ? (
+        <>
+          <ThemedText type="sectionTitle" style={styles.sectionTitle} accessibilityRole="header">
+            {lists.length ? 'Items' : 'Results'}
+          </ThemedText>
+          <View style={styles.list}>
+            {items.map((item) => (
+              <StashRow key={item.id} item={item} />
+            ))}
+          </View>
+        </>
+      ) : null}
     </>
   );
 }
@@ -223,22 +303,22 @@ function ErrorNote({ message, onRetry }: { message: string; onRetry?: () => void
   );
 }
 
-/** Runs `searchItems` 250 ms after typing stops; results for stale queries are ignored. */
-function useDebouncedSearch(query: string): SearchState {
-  const [result, setResult] = useState<{ query: string; data?: StashItem[]; error?: Error }>({ query: '' });
+/** Runs `searchItems` and `searchLists` 250 ms after typing stops; results for stale queries are ignored. */
+function useDebouncedSearch(query: string, now: Date): SearchState {
+  const [result, setResult] = useState<{ query: string; data?: SearchResult; error?: Error }>({ query: '' });
   useEffect(() => {
     if (!query.trim()) return;
     let cancelled = false;
     const timer = setTimeout(() => {
-      searchItems(query)
-        .then((data) => !cancelled && setResult({ query, data }))
+      Promise.all([searchItems(query), searchLists(query)])
+        .then(([items, lists]) => !cancelled && setResult({ query, data: { items, lists } }))
         .catch((e: unknown) => !cancelled && setResult({ query, error: toError(e) }));
     }, 250);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, now]); // `now` changes on refocus, so a list deleted meanwhile drops out of the results
   const current = result.query === query;
   return { data: current ? result.data : undefined, error: current ? result.error : undefined, loading: !current };
 }
@@ -264,4 +344,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   stretch: { alignSelf: 'stretch' },
   error: { gap: Spacing.two },
+  back: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, minHeight: 44, alignSelf: 'flex-start', paddingRight: Spacing.three },
+  pressed: { opacity: 0.7 },
 });
