@@ -2,6 +2,7 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
+import { DeleteButton } from '@/components/delete-button';
 import { RenameForm } from '@/components/rename-form';
 import { RowLink } from '@/components/row-link';
 import { Screen } from '@/components/screen';
@@ -9,7 +10,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
-import { fetchKind, NAME_LIMITS, renameCategory, type KindCategory } from '@/lib/data';
+import { deleteCategory, fetchKind, NAME_LIMITS, renameCategory, type KindCategory } from '@/lib/data';
 import { KIND_SUBTITLES, KINDS, type Kind } from '@/lib/types';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -62,15 +63,30 @@ export default function KindScreen() {
       {categories.data?.map((category) => (
         <View key={category.id} style={styles.section}>
           {editingId === category.id ? (
-            <RenameForm
-              fields={[{ key: 'name', label: 'Category', value: category.name, maxLength: NAME_LIMITS.category }]}
-              onCancel={() => setEditingId(null)}
-              onSave={async ({ name }) => {
-                await renameCategory(category, name);
-                await refresh();
-                setEditingId(null);
-              }}
-            />
+            <>
+              <RenameForm
+                fields={[{ key: 'name', label: 'Category', value: category.name, maxLength: NAME_LIMITS.category }]}
+                onCancel={() => setEditingId(null)}
+                onSave={async ({ name }) => {
+                  await renameCategory(category, name);
+                  await refresh();
+                  setEditingId(null);
+                }}
+              />
+              <DeleteButton
+                title={`Delete ${category.name}`}
+                confirmTitle={`Delete ${category.name}?`}
+                confirmMessage={`This removes ${plural(category.lists.length, 'list')} and ${plural(
+                  category.lists.reduce((n, l) => n + l.itemCount, 0),
+                  'item',
+                )}. It can’t be undone.`}
+                onDelete={async () => {
+                  await deleteCategory(category.id);
+                  setEditingId(null);
+                  await refresh();
+                }}
+              />
+            </>
           ) : (
             <CategoryHeader category={category} onEdit={() => setEditingId(category.id)} />
           )}
@@ -98,7 +114,8 @@ function CategoryHeader({ category, onEdit }: { category: KindCategory; onEdit: 
       <Pressable
         onPress={onEdit}
         accessibilityRole="button"
-        accessibilityLabel={`Rename ${category.name}`}
+        accessibilityLabel={`Edit ${category.name}`}
+        accessibilityHint="Rename or delete this category"
         hitSlop={12}>
         <ThemedText type="smallBold" style={{ color: theme.tint }}>
           Edit

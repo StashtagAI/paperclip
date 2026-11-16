@@ -1,19 +1,20 @@
 import type { LinkCheck } from '@/lib/link-filter';
 import { photoBytes } from '@/lib/photo-bytes';
 import type { PickItem } from '@/lib/picks';
-import { itemSearchFilter } from '@/lib/search';
+import { itemSearchFilter, likePattern } from '@/lib/search';
 import { supabase } from '@/lib/supabase';
-import type {
-  Captured,
-  CategoryRow,
-  FeedbackReason,
-  ItemPhotoRow,
-  ItemRow,
-  Kind,
-  LinkDetail,
-  LinkItem,
-  LinkRow,
-  ListRow,
+import {
+  KINDS,
+  type Captured,
+  type CategoryRow,
+  type FeedbackReason,
+  type ItemPhotoRow,
+  type ItemRow,
+  type Kind,
+  type LinkDetail,
+  type LinkItem,
+  type LinkRow,
+  type ListRow,
 } from '@/lib/types';
 
 export type KindList = ListRow & { itemCount: number };
@@ -65,6 +66,35 @@ export async function searchItems(query: string, limit = 30): Promise<StashItem[
     .returns<StashItem[]>();
   if (error) throw error;
   return data;
+}
+
+/** A list as shown in search results: Eats › Restaurants › Scottsdale, with its item count. */
+export type ListMatch = KindList & { category: CategoryRow };
+
+type ListMatchRow = ListRow & { category: CategoryRow; items: { count: number }[] };
+const LIST_MATCH_COLUMNS = 'id, category_id, name, tags, category:categories!inner(id, kind, name), items(count)';
+
+/** Lists whose name or #tag matches (e.g. "Scottsdale"), plus every list in a category whose name matches (HAN-62). */
+export async function searchLists(query: string, limit = 30): Promise<ListMatch[]> {
+  const filter = itemSearchFilter(query);
+  const like = likePattern(query);
+  if (!filter || !like) return [];
+  const [byList, byCategory] = await Promise.all([
+    supabase.from('lists').select(LIST_MATCH_COLUMNS).or(filter).limit(limit).returns<ListMatchRow[]>(),
+    supabase.from('lists').select(LIST_MATCH_COLUMNS).ilike('category.name', like).limit(limit).returns<ListMatchRow[]>(),
+  ]);
+  if (byList.error) throw byList.error;
+  if (byCategory.error) throw byCategory.error;
+  const unique = new Map([...byList.data, ...byCategory.data].map((l) => [l.id, l]));
+  return [...unique.values()]
+    .map(({ items, ...list }) => ({ ...list, itemCount: items[0]?.count ?? 0 }))
+    .sort(
+      (a, b) =>
+        KINDS.indexOf(a.category.kind) - KINDS.indexOf(b.category.kind) ||
+        a.category.name.localeCompare(b.category.name) ||
+        a.name.localeCompare(b.name),
+    )
+    .slice(0, limit);
 }
 
 /** A link on Home that isn't filed yet, with what process-link managed to read so the row can say which post it is. */
@@ -294,8 +324,11 @@ export async function deleteItemPhoto(photo: Pick<ItemPhotoRow, 'id' | 'path'>):
  * Photo rows go with their item (on delete cascade) but the files don't, so these remove them afterwards. Best effort:
  * anything left behind is cleared with the account (HAN-34).
  */
-async function photoPaths(column: 'item_id' | 'items.link_id', id: string): Promise<string[]> {
-  const { data, error } = await supabase.from('item_photos').select('path, items!inner(link_id)').eq(column, id);
+async function photoPaths(column: 'item_id' | 'items.link_id' | 'items.list_id' | 'items.list.category_id', id: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('item_photos')
+    .select('path, items!inner(link_id, list_id, list:lists!inner(category_id))')
+    .eq(column, id);
   if (error) throw error;
   return data.map((p) => p.path as string);
 }
@@ -314,6 +347,24 @@ export async function deleteItem(itemId: string): Promise<void> {
 export async function deleteLink(linkId: string): Promise<void> {
   const paths = await photoPaths('items.link_id', linkId);
   const { error } = await supabase.rpc('delete_link', { p_link_id: linkId });
+  if (error) throw error;
+  await removePhotoFiles(paths);
+}
+
+/** Deletes a list and its items (they cascade), and its category too if that leaves it empty (HAN-62). */
+export async function deleteList(list: Pick<ListRow, 'id' | 'category_id'>): Promise<void> {
+  const paths = await photoPaths('items.list_id', list.id);
+  const { error } = await supabase.from('lists').delete().eq('id', list.id);
+  if (error) throw error;
+  await removePhotoFiles(paths);
+  const rest = await supabase.from('lists').select('id', { count: 'exact', head: true }).eq('category_id', list.category_id);
+  if (!rest.error && rest.count === 0) await supabase.from('categories').delete().eq('id', list.category_id);
+}
+
+/** Deletes a category with every list and item in it (they cascade). */
+export async function deleteCategory(categoryId: string): Promise<void> {
+  const paths = await photoPaths('items.list.category_id', categoryId);
+  const { error } = await supabase.from('categories').delete().eq('id', categoryId);
   if (error) throw error;
   await removePhotoFiles(paths);
 }
