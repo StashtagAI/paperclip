@@ -18,6 +18,7 @@ import {
   type LinkItem,
   type LinkRow,
   type ListRow,
+  type RawContent,
   type SharedList,
 } from '@/lib/types';
 
@@ -223,6 +224,39 @@ export async function fetchLinkItems(linkId: string): Promise<LinkItem[]> {
     .returns<LinkItem[]>();
   if (error) throw error;
   return data;
+}
+
+/** A saved recipe with the ingredients and steps process-link read from its post (HAN-74). */
+export type Recipe = Pick<ItemRow, 'id' | 'name' | 'description' | 'link_id'> & {
+  list: Pick<ListRow, 'id' | 'name'>;
+  ingredients: string[];
+  steps: string[];
+};
+
+type RecipeQueryRow = Pick<ItemRow, 'id' | 'name' | 'description' | 'link_id'> & {
+  list: Pick<ListRow, 'id' | 'name'>;
+  link: { recipe_details: RawContent['recipe_details'] | null } | null;
+};
+
+/**
+ * These items as recipes, in the order asked for. Ids that no longer exist are left out. The details live in
+ * links.raw_content keyed by item name (docs/extraction.md), so only that part of the link is read.
+ */
+export async function fetchRecipes(itemIds: string[]): Promise<Recipe[]> {
+  if (!itemIds.length) return [];
+  const { data, error } = await supabase
+    .from('items')
+    .select('id, name, description, link_id, list:lists!inner(id, name), link:links(recipe_details:raw_content->recipe_details)')
+    .in('id', itemIds)
+    .returns<RecipeQueryRow[]>();
+  if (error) throw error;
+  const byId = new Map(
+    data.map(({ link, ...item }) => {
+      const details = link?.recipe_details?.[item.name];
+      return [item.id, { ...item, ingredients: details?.ingredients ?? [], steps: details?.steps ?? [] }] as const;
+    }),
+  );
+  return itemIds.flatMap((id) => byId.get(id) ?? []);
 }
 
 /** Limits from the HAN-45 migration's check constraints. */

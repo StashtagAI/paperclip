@@ -1,7 +1,8 @@
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
+import { Button } from '@/components/button';
 import { DeleteButton } from '@/components/delete-button';
 import { RenameForm } from '@/components/rename-form';
 import { RowLink } from '@/components/row-link';
@@ -11,6 +12,8 @@ import { Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { deleteCategory, fetchKind, NAME_LIMITS, renameCategory, type KindCategory } from '@/lib/data';
+import { recipesLabel } from '@/lib/shopping-list';
+import { useShoppingSelection } from '@/lib/shopping-selection';
 import { KIND_SUBTITLES, KINDS, type Kind } from '@/lib/types';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -21,6 +24,7 @@ export default function KindScreen() {
   const kind = (KINDS as readonly string[]).includes(params.kind) ? (params.kind as Kind) : null;
   const categories = useAsync(() => (kind ? fetchKind(kind) : Promise.resolve([])), [kind]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const picked = useShoppingSelection().ids;
 
   // Pick up renames and deletions made on a list or card screen.
   const firstFocus = useRef(true);
@@ -52,7 +56,17 @@ export default function KindScreen() {
   return (
     <Screen
       edges="none"
-      refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} />}>
+      refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} />}
+      footer={
+        kind === 'recipes' && picked.length ? (
+          <Button
+            title={`Shopping list · ${recipesLabel(picked.length)}`}
+            size="large"
+            onPress={() => router.push('/shopping-list')}
+            accessibilityHint="Opens the ingredients for the recipes you picked"
+          />
+        ) : null
+      }>
       {categories.error ? <ThemedText themeColor="danger">{categories.error.message}</ThemedText> : null}
       {!categories.data && !categories.error ? <ActivityIndicator /> : null}
       {categories.data?.length === 0 ? (

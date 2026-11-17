@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, View, type ScrollViewInstance } from 'react-native';
 
 import { Button } from '@/components/button';
+import { CheckRow } from '@/components/check-row';
 import { DeleteButton } from '@/components/delete-button';
 import { DirectionsSheet } from '@/components/directions-sheet';
 import { DisplayNameForm } from '@/components/display-name-form';
@@ -18,6 +19,7 @@ import { TagChip } from '@/components/tag-chip';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
+import { announce } from '@/lib/announce';
 import { confirmDestructive } from '@/lib/confirm';
 import {
   addShareRecipient,
@@ -35,6 +37,8 @@ import {
 } from '@/lib/data';
 import { hasCoords } from '@/lib/geo';
 import { openShareSheet, shareMessage, shareUrl } from '@/lib/share';
+import { recipesLabel } from '@/lib/shopping-list';
+import { toggleRecipe, useShoppingSelection } from '@/lib/shopping-selection';
 import type { ItemRow, Kind } from '@/lib/types';
 
 /** Kinds whose items are places: their lists get a map and directions (HAN-24). */
@@ -46,6 +50,8 @@ export default function ListScreen() {
   const list = useAsync(() => fetchList(listId), [listId]);
   const data = list.data;
   const places = !!data && PLACE_KINDS.includes(data.category.kind);
+  const recipes = data?.category.kind === 'recipes';
+  const picked = useShoppingSelection().ids;
   const pins = places ? data.items.flatMap((i) => (hasCoords(i) ? [{ id: i.id, name: i.name, lat: i.lat, lng: i.lng }] : [])) : [];
 
   const scrollRef = useRef<ScrollViewInstance>(null);
@@ -102,6 +108,10 @@ export default function ListScreen() {
     }
   }
 
+  const showShare = !!data && !editing && !!share.data && (recipients.length > 0 || !(token || shareOpen));
+  // Picked recipes can come from several lists (HAN-74), so the button shows on every recipe list.
+  const showShopping = !!data && !editing && recipes && picked.length > 0;
+
   // Pick up a stash deleted from its card.
   const firstFocus = useRef(true);
   const { refresh } = list;
@@ -117,26 +127,37 @@ export default function ListScreen() {
       edges="none"
       scrollRef={scrollRef}
       footer={
-        data && !editing && share.data && (recipients.length || !(token || shareOpen)) ? (
-          <Button
-            title={recipients.length ? 'Send link' : 'Share list'}
-            size="large"
-            loading={sharing}
-            onPress={recipients.length ? sendLink : () => setShareOpen(true)}
-            accessibilityHint={
-              recipients.length
-                ? 'Opens the share sheet with a link to the list'
-                : 'Choose who can open this list'
-            }
-            icon={(color) => (
-              <SymbolView
-                name={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }}
-                tintColor={color}
-                size={20}
-                weight="semibold"
+        showShopping || showShare ? (
+          <View style={styles.footer}>
+            {showShopping ? (
+              <Button
+                title={`Shopping list · ${recipesLabel(picked.length)}`}
+                size="large"
+                onPress={() => router.push('/shopping-list')}
+                accessibilityHint="Opens the ingredients for the recipes you picked"
               />
-            )}
-          />
+            ) : null}
+            {showShare ? (
+              <Button
+                title={recipients.length ? 'Send link' : 'Share list'}
+                size="large"
+                variant={showShopping ? 'secondary' : 'primary'}
+                loading={sharing}
+                onPress={recipients.length ? sendLink : () => setShareOpen(true)}
+                accessibilityHint={
+                  recipients.length ? 'Opens the share sheet with a link to the list' : 'Choose who can open this list'
+                }
+                icon={(color) => (
+                  <SymbolView
+                    name={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }}
+                    tintColor={color}
+                    size={20}
+                    weight="semibold"
+                  />
+                )}
+              />
+            ) : null}
+          </View>
         ) : null
       }>
       <Stack.Screen
@@ -213,8 +234,9 @@ export default function ListScreen() {
         <ItemCard
           key={item.id}
           item={item}
-          selected={item.id === selectedId}
+          selected={item.id === selectedId || (recipes && picked.includes(item.id))}
           onPress={places ? () => select(item) : undefined}
+          recipe={recipes ? { picked: picked.includes(item.id), count: picked.length } : undefined}
           onLayoutY={(y) => rowY.current.set(item.id, y)}
         />
       ))}
@@ -225,10 +247,23 @@ export default function ListScreen() {
 
 const itemsLabel = (n: number) => (n === 1 ? ' and its 1 item' : n ? ` and all ${n} items in it` : '');
 
-type ItemCardProps = { item: ItemRow; selected: boolean; onPress?: () => void; onLayoutY: (y: number) => void };
+type ItemCardProps = {
+  item: ItemRow;
+  selected: boolean;
+  onPress?: () => void;
+  onLayoutY: (y: number) => void;
+  /** Recipe cards (HAN-74): whether it's on the shopping list, and how many recipes are. */
+  recipe?: { picked: boolean; count: number };
+};
 
-function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
+function ItemCard({ item, selected, onPress, onLayoutY, recipe }: ItemCardProps) {
   const theme = useTheme();
+  const toggle = () => {
+    if (!recipe) return;
+    toggleRecipe(item.id);
+    const count = recipe.picked ? recipe.count - 1 : recipe.count + 1;
+    announce(`${recipe.picked ? 'Removed from' : 'Added to'} shopping list. ${recipesLabel(count)}.`);
+  };
   // The card is a plain View so VoiceOver can reach the links below; on iOS an accessible Pressable would swallow them.
   return (
     <View
@@ -268,6 +303,18 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
         </ThemedText>
       ) : null}
       <View style={styles.links}>
+        {recipe ? (
+          <Pressable
+            onPress={() => router.push({ pathname: '/recipe/[itemId]', params: { itemId: item.id } })}
+            accessibilityRole="button"
+            accessibilityLabel={`Recipe for ${item.name}`}
+            accessibilityHint="Ingredients and steps"
+            style={styles.link}>
+            <ThemedText type="small" style={{ color: theme.link }}>
+              Recipe ›
+            </ThemedText>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={() => router.push({ pathname: '/item/[itemId]', params: { itemId: item.id } })}
           accessibilityRole="button"
@@ -289,6 +336,11 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
           </Pressable>
         ) : null}
       </View>
+      {recipe ? (
+        <CheckRow checked={recipe.picked} onPress={toggle} accessibilityLabel={`Add ${item.name} to shopping list`}>
+          <ThemedText type="smallBold">{recipe.picked ? 'On shopping list' : 'Shopping list'}</ThemedText>
+        </CheckRow>
+      ) : null}
     </View>
   );
 }
@@ -480,6 +532,7 @@ const styles = StyleSheet.create({
   card: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.one },
   main: { gap: Spacing.one },
   links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.four },
+  footer: { gap: Spacing.two },
   link: { minHeight: 44, justifyContent: 'center' },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   shared: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.two },
