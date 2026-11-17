@@ -5,9 +5,31 @@
 -- the row, so adding them again makes it new again.
 alter table public.list_share_recipients add column seen_at timestamptz;
 
--- 2. The caller's shared-with-me lists, newest first: list name, the owner's account email (the app has no display
--- names) and the item count. Nothing else of the owner's: no ids, notes, ratings or photos. security definer to read
--- the owner's list, category, items and email; rows are pinned to auth.uid().
+-- 2. The name friends see when you share a list with them. Board decision on HAN-71: a name the owner sets, not their
+-- account email. One row per account, read and written only by its owner; recipients see it only through
+-- get_shared_with_me. Deleting the account deletes it.
+create table public.profiles (
+  user_id uuid primary key default auth.uid() references auth.users (id) on delete cascade,
+  display_name text not null check (
+    display_name = btrim(display_name) and length(display_name) between 1 and 50 and display_name !~ '[[:cntrl:]]'
+  ),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+revoke all on public.profiles from anon, authenticated;
+grant select, insert, update on public.profiles to authenticated;
+
+create policy "owner reads profile" on public.profiles
+  for select to authenticated using (user_id = (select auth.uid()));
+create policy "owner adds profile" on public.profiles
+  for insert to authenticated with check (user_id = (select auth.uid()));
+create policy "owner updates profile" on public.profiles
+  for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- 3. The caller's shared-with-me lists, newest first: list name, the owner's display name (null if they haven't set
+-- one) and the item count. Nothing else of the owner's: no ids, email, notes, ratings or photos. security definer to
+-- read the owner's list, category, items and name; rows are pinned to auth.uid().
 create or replace function public.get_shared_with_me()
 returns table (
   token text,
@@ -25,7 +47,7 @@ language sql stable security definer set search_path = '' as $$
     c.kind,
     c.name,
     l.name,
-    u.email::text,
+    p.display_name,
     (select count(*)::int from public.items i where i.list_id = l.id),
     r.created_at,
     r.seen_at
@@ -33,7 +55,7 @@ language sql stable security definer set search_path = '' as $$
   join public.list_shares s on s.token = r.token
   join public.lists l on l.id = s.list_id
   join public.categories c on c.id = l.category_id
-  join auth.users u on u.id = s.user_id
+  left join public.profiles p on p.user_id = s.user_id
   where r.user_id = (select auth.uid())
   order by r.created_at desc, r.token;
 $$;
@@ -41,7 +63,7 @@ $$;
 revoke execute on function public.get_shared_with_me() from public, anon;
 grant execute on function public.get_shared_with_me() to authenticated;
 
--- 3. Marks the caller's own shares as seen; other users' rows and unknown tokens are ignored. Returns how many changed.
+-- 4. Marks the caller's own shares as seen; other users' rows and unknown tokens are ignored. Returns how many changed.
 -- security definer because the table still has no UPDATE grant: only seen_at changes, and only through here.
 create or replace function public.mark_shares_seen(p_tokens text[]) returns int
 language plpgsql security definer set search_path = '' as $$

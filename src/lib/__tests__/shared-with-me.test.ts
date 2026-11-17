@@ -15,12 +15,12 @@ jest.mock('../data', () => ({
   markSharesSeen: (tokens: string[]) => mockMark(tokens),
 }));
 
-const row = (token: string, seen_at: string | null = null): SharedWithMe => ({
+const row = (token: string, seen_at: string | null = null, shared_by: string | null = 'Matt'): SharedWithMe => ({
   token,
   kind: 'eats',
   category: 'Restaurants',
   list: 'Denver',
-  shared_by: 'matt@example.com',
+  shared_by,
   item_count: 3,
   shared_at: '2026-11-17T20:00:00Z',
   seen_at,
@@ -38,7 +38,11 @@ describe('newSharePrompt', () => {
   });
 
   it('names the sharer and the list for one share, and opens it', () => {
-    expect(newSharePrompt([row('a')])).toEqual({ message: 'matt@example.com shared Restaurants › Denver with you', token: 'a' });
+    expect(newSharePrompt([row('a')])).toEqual({ message: 'Matt shared Restaurants › Denver with you', token: 'a' });
+  });
+
+  it('says "A friend" when the owner has no name', () => {
+    expect(newSharePrompt([row('a', null, null)])?.message).toBe('A friend shared Restaurants › Denver with you');
   });
 
   it('counts several shares and opens the Shared with me screen', () => {

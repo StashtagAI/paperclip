@@ -1,5 +1,5 @@
 -- HAN-50 / HAN-68 / HAN-71: checks for list_shares, list_share_recipients, get_shared_list, add_shared_list,
--- add_share_recipient, get_shared_with_me and mark_shares_seen. Run against a scratch database that has every
+-- add_share_recipient, get_shared_with_me, mark_shares_seen and profiles. Run against a scratch database that has every
 -- migration applied (e.g. the supabase/postgres Docker image), as the postgres superuser:
 --   psql -v ON_ERROR_STOP=1 -f supabase/tests/list_shares_test.sql
 -- Both claim settings are set because older auth.uid() versions read request.jwt.claim.sub.
@@ -142,7 +142,7 @@ begin
   assert (select count(*) from public.get_shared_with_me()) = 1, 'recipient sees one shared list';
   select * into r from public.get_shared_with_me();
   assert r.token = (select token from t) and r.kind = 'eats' and r.category = 'Restaurants' and r.list = 'Denver', 'list';
-  assert r.shared_by = 'owner@example.com', 'sharer email';
+  assert r.shared_by is null, 'no name until the owner sets one, and never the email';
   assert r.item_count = 2, 'item count';
   assert r.shared_at is not null and r.seen_at is null, 'new';
   begin
@@ -150,6 +150,59 @@ begin
     assert false, 'no direct updates to seen_at';
   exception when insufficient_privilege then null;
   end;
+end $$;
+
+-- HAN-71: A sets a display name; B sees it on the share but can't read or change A's profile.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+insert into public.profiles (display_name) values ('Matt');
+do $$ begin
+  assert (select user_id from public.profiles) = '00000000-0000-0000-0000-00000000000a', 'user_id defaults to the caller';
+  begin
+    insert into public.profiles (user_id, display_name) values ('00000000-0000-0000-0000-00000000000b', 'Not B');
+    assert false, 'cannot create a profile for someone else';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.profiles set display_name = ' Matt ';
+    assert false, 'untrimmed names are rejected';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.profiles set display_name = repeat('x', 51);
+    assert false, 'names over 50 characters are rejected';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.profiles set display_name = '';
+    assert false, 'empty names are rejected';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.profiles set display_name = E'Ma\ntt';
+    assert false, 'control characters are rejected';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.profiles set user_id = '00000000-0000-0000-0000-00000000000b';
+    assert false, 'cannot move a profile to someone else';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000b","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', true);
+do $$ begin
+  assert (select shared_by from public.get_shared_with_me()) = 'Matt', 'recipient sees the owner''s name';
+  assert (select count(*) from public.profiles) = 0, 'cannot read another user''s profile';
+  update public.profiles set display_name = 'Hacked';
+  begin
+    delete from public.profiles;
+    assert false, 'no deletes on profiles';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+do $$ begin
+  assert (select shared_by from public.get_shared_with_me()) = 'Matt', 'other users cannot change or delete a profile';
 end $$;
 
 -- D isn't a recipient: sees nothing and can't mark B's share as seen.
@@ -216,6 +269,11 @@ do $$ begin
   begin
     perform public.mark_shares_seen(array[(select token from t)]);
     assert false, 'anon must not mark shares seen';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform 1 from public.profiles;
+    assert false, 'anon must not read profiles';
   exception when insufficient_privilege then null;
   end;
 end $$;

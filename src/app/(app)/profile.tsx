@@ -2,14 +2,17 @@ import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { Alert, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 
+import { DisplayNameForm } from '@/components/display-name-form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing, type ThemeColor } from '@/constants/theme';
 import { useSchemePreference, type SchemePreference } from '@/hooks/use-color-scheme';
+import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { SUPPORT_EMAIL, appVersion, supportMailto } from '@/lib/account';
 import { useAuth } from '@/lib/auth';
 import { confirmDestructive } from '@/lib/confirm';
+import { fetchDisplayName } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 
 const SCHEMES: { value: SchemePreference; label: string }[] = [
@@ -18,9 +21,10 @@ const SCHEMES: { value: SchemePreference; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
-/** Profile (HAN-34): appearance, feedback, support, billing (later) and account deletion. */
+/** Profile (HAN-34): your name (HAN-71), appearance, feedback, support, billing (later) and account deletion. */
 export default function ProfileScreen() {
   const { session } = useAuth();
+  const displayName = useAsync(fetchDisplayName, []);
 
   async function contactSupport() {
     const url = supportMailto();
@@ -53,6 +57,19 @@ export default function ProfileScreen() {
           {session?.user.email ?? 'Unknown email'}
         </ThemedText>
       </View>
+
+      <Section title="Your name">
+        <ThemedText type="small" themeColor="textSecondary">
+          Friends see this name on lists you share with them, not your email.
+        </ThemedText>
+        {displayName.error ? (
+          <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+            Couldn’t load your name: {displayName.error.message}
+          </ThemedText>
+        ) : displayName.loading && displayName.data === undefined ? null : (
+          <DisplayNameForm name={displayName.data ?? null} onSaved={() => displayName.refresh()} />
+        )}
+      </Section>
 
       <Section title="Appearance">
         <SchemePicker />

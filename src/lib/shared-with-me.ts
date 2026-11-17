@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 import { fetchSharedWithMe, markSharesSeen, type SharedWithMe } from '@/lib/data';
+import { sharerName } from '@/lib/display-name';
 import { toError } from '@/lib/errors';
 
 /**
@@ -68,7 +69,7 @@ export function newSharePrompt(fresh: SharedWithMe[]): { message: string; token:
   if (!fresh.length) return null;
   if (fresh.length === 1) {
     const [s] = fresh;
-    return { message: `${s.shared_by} shared ${listTitle(s)} with you`, token: s.token };
+    return { message: `${sharerName(s.shared_by)} shared ${listTitle(s)} with you`, token: s.token };
   }
   return { message: `${fresh.length} lists were shared with you`, token: null };
 }

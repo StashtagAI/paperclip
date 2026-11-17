@@ -80,12 +80,13 @@ export default function SharedWithMeScreen() {
 function SharedRow({ share, isNew }: { share: SharedWithMe; isNew: boolean }) {
   const theme = useTheme();
   const title = listTitle(share);
+  const from = share.shared_by ?? 'a friend';
   const details = `${KIND_LABELS[share.kind]} · ${plural(share.item_count, 'item')} · ${date(share.shared_at)}`;
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/s/[token]', params: { token: share.token } })}
       accessibilityRole="button"
-      accessibilityLabel={`${isNew ? 'New. ' : ''}${title}, shared by ${share.shared_by}. ${details}`}
+      accessibilityLabel={`${isNew ? 'New. ' : ''}${title}, shared by ${from}. ${details}`}
       accessibilityHint="Opens the list"
       style={({ pressed }) => pressed && styles.pressed}>
       <View style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
@@ -98,7 +99,7 @@ function SharedRow({ share, isNew }: { share: SharedWithMe; isNew: boolean }) {
             </View>
           ) : null}
           <ThemedText type="defaultBold">{title}</ThemedText>
-          <ThemedText type="small">From {share.shared_by}</ThemedText>
+          <ThemedText type="small">From {from}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             {details}
           </ThemedText>
