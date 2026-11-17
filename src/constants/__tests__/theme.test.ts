@@ -1,4 +1,4 @@
-import { Colors, KindColors, Palette } from '@/constants/theme';
+import { Colors, HighContrastColors, KindColors, Palette, themeColors } from '@/constants/theme';
 import { KINDS } from '@/lib/types';
 
 // WCAG 2.x relative luminance and contrast ratio.
@@ -44,8 +44,12 @@ describe('brief values', () => {
   });
 });
 
-describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
-  const c = Colors[scheme];
+const modes = schemes.flatMap((scheme) => [
+  { name: scheme, scheme, c: themeColors(scheme, false) },
+  { name: `${scheme} + Increase Contrast`, scheme, c: themeColors(scheme, true) },
+]);
+
+describe.each(modes)('$name contrast (AA, 4.5:1)', ({ scheme, c }) => {
 
   it.each(KINDS)('%s: onColor on tile and onChip on chip', (kind) => {
     const k = KindColors[scheme][kind];
@@ -96,5 +100,38 @@ describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
       expect(contrast(c.success, bg)).toBeGreaterThanOrEqual(AA);
       for (const icon of [c.tint, c.success, c.textSecondary]) expect(contrast(icon, bg)).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  // Text fields have no fill against the page, so their outline is what identifies them (WCAG 1.4.11, HAN-78).
+  it('text field outline on background and cards (3:1)', () => {
+    for (const bg of [c.background, c.backgroundElement]) {
+      expect(contrast(c.inputBorder, bg)).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
+// Increase Contrast / High contrast text / prefers-contrast: more (HAN-78).
+describe.each(schemes)('%s + Increase Contrast (AAA, 7:1)', (scheme) => {
+  const c = themeColors(scheme, true);
+
+  it('only overrides existing tokens', () => {
+    for (const key of Object.keys(HighContrastColors[scheme])) expect(Colors[scheme]).toHaveProperty(key);
+  });
+
+  it('text, muted text, links and status colours on background and cards', () => {
+    for (const bg of [c.background, c.backgroundElement]) {
+      for (const fg of [c.text, c.textSecondary, c.link, c.danger, c.success]) {
+        expect(contrast(fg, bg)).toBeGreaterThanOrEqual(7);
+      }
+    }
+  });
+
+  it('card and option outlines on background and cards (3:1)', () => {
+    for (const bg of [c.background, c.backgroundElement]) expect(contrast(c.border, bg)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('button labels on their fills', () => {
+    expect(contrast(c.onTint, c.tint)).toBeGreaterThanOrEqual(7);
+    expect(contrast(c.onDanger, c.danger)).toBeGreaterThanOrEqual(7);
   });
 });

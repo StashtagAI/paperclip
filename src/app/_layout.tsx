@@ -13,6 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { ToastProvider } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import { ColorSchemeProvider, useColorScheme, useSchemePreference } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
 import { AuthProvider, useAuth, useRecovering } from '@/lib/auth';
 import { supabaseConfigured } from '@/lib/supabase';
 
@@ -31,8 +32,23 @@ export default function RootLayout() {
 
 function ThemedRoot() {
   const colorScheme = useColorScheme();
+  const theme = useTheme();
+  const base = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
+  // Our tokens, not the navigator's stock near-black / white, so screen transitions don't flash another colour (HAN-78).
+  const navTheme = {
+    ...base,
+    colors: {
+      ...base.colors,
+      primary: theme.tint,
+      background: theme.background,
+      card: theme.backgroundElement,
+      text: theme.text,
+      border: theme.border,
+      notification: theme.danger,
+    },
+  };
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={navTheme}>
       <AuthProvider>
         <ToastProvider>
           <RootStack />

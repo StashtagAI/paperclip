@@ -31,6 +31,8 @@ export const Colors = {
     /** Text on a `danger` fill, e.g. the Delete account button. */
     onDanger: L.white,
     success: '#0A7A55',
+    /** Text field outlines: the field's only edge against the page, so ≥ 3:1 (WCAG 1.4.11), unlike `border`. */
+    inputBorder: '#69788F',
   },
   dark: {
     text: D.cloud,
@@ -48,11 +50,41 @@ export const Colors = {
     // White on the light red is 2.8:1, so dark mode uses Night, like onTint.
     onDanger: D.night,
     success: D.mint,
+    inputBorder: '#6A84A3',
   },
 } as const;
 
 export type ColorScheme = keyof typeof Colors;
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+export type ThemeColors = Record<ThemeColor, string>;
+
+/**
+ * Overrides for Increase Contrast (iOS), High contrast text (Android) and `prefers-contrast: more` (web)
+ * (HAN-78): muted text, links and status colours reach 7:1 (AAA), and card and input outlines reach 3:1.
+ */
+export const HighContrastColors: Record<ColorScheme, Partial<ThemeColors>> = {
+  light: {
+    textSecondary: '#3A4A60',
+    border: '#69788F',
+    tint: '#0F4FB0',
+    link: '#0F4FB0',
+    danger: '#9E1C22',
+    success: '#065C40',
+    inputBorder: '#69788F',
+  },
+  dark: {
+    textSecondary: '#C2D0E2',
+    border: '#6A84A3',
+    tint: '#A6CDFF',
+    link: '#A6CDFF',
+    danger: '#FFA3A3',
+    inputBorder: '#6A84A3',
+  },
+};
+
+export function themeColors(scheme: ColorScheme, highContrast: boolean): ThemeColors {
+  return highContrast ? { ...Colors[scheme], ...HighContrastColors[scheme] } : Colors[scheme];
+}
 
 export type KindColor = {
   /** Tile and thumbnail fill. */
