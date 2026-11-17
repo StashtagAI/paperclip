@@ -255,6 +255,84 @@ begin
   assert (select tags from public.lists) = '{denver}', 'list tags copied';
 end $$;
 
+-- A recipient of one share can't read another. A shares Boulder with nobody; C (a Denver recipient) gets nothing.
+create temp table t2 (token text);
+grant all on t2 to authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+with s as (insert into public.list_shares (list_id) values ('30000000-0000-0000-0000-000000000002') returning token)
+insert into t2 select token from s;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000c","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000c', true);
+do $$ begin
+  assert public.get_shared_list((select token from t2)) is null, 'recipient of one share cannot read another';
+  begin
+    perform public.add_shared_list((select token from t2));
+    assert false, 'recipient of one share cannot add another';
+  exception when no_data_found then null;
+  end;
+end $$;
+
+-- A moves the Denver share to Boulder (another of A's lists): its recipients follow it.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+delete from public.list_shares where token = (select token from t2);
+update public.list_shares set list_id = '30000000-0000-0000-0000-000000000002' where token = (select token from t);
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000c","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000c', true);
+do $$ begin
+  assert public.get_shared_list((select token from t))->>'list' = 'Boulder', 'recipients follow a moved share';
+end $$;
+
+-- Deleted accounts don't count, and anonymous sessions can't look up emails.
+reset role;
+insert into auth.users (id, email, email_confirmed_at, deleted_at)
+  values ('00000000-0000-0000-0000-00000000000f', 'deleted@example.com', now(), now());
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+do $$ begin
+  assert public.add_share_recipient((select token from t), 'deleted@example.com') = '{"error":"no_account"}',
+    'deleted account does not count';
+end $$;
+select set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated","is_anonymous":true}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+do $$ begin
+  begin
+    perform public.add_share_recipient((select token from t), 'friend@example.com');
+    assert false, 'anonymous session must not look up emails';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
+-- At most 50 people per share. C is on it; fill it to 50 directly, then the owner's next add is refused.
+reset role;
+insert into auth.users (id, email, email_confirmed_at)
+  select ('00000000-0000-0000-0001-' || lpad(n::text, 12, '0'))::uuid, 'cap' || n || '@example.com', now()
+  from generate_series(1, 50) n;
+insert into public.list_share_recipients (token, user_id, email)
+  select (select token from t), ('00000000-0000-0000-0001-' || lpad(n::text, 12, '0'))::uuid, 'cap' || n || '@example.com'
+  from generate_series(1, 49) n;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+do $$ begin
+  begin
+    perform public.add_share_recipient((select token from t), 'cap50@example.com');
+    assert false, 'a share holds at most 50 people';
+  exception when program_limit_exceeded then
+    assert sqlerrm like '%up to 50 people%', 'refused for the cap, not the hourly limit';
+  end;
+end $$;
+reset role;
+delete from public.list_share_recipients where email like 'cap%';
+
+-- Lookups older than an hour are cleared on the owner's next lookup and don't count.
+insert into public.share_recipient_lookups (user_id, at)
+  select '00000000-0000-0000-0000-00000000000a', now() - interval '2 hours' from generate_series(1, 5);
+set local role authenticated;
+
 -- Rate limit: 20 lookups an hour per owner, misses included. Keep looking up until it refuses.
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true),
   set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
@@ -272,7 +350,7 @@ end $$;
 reset role;
 do $$ begin
   assert (select count(*) from public.share_recipient_lookups where user_id = '00000000-0000-0000-0000-00000000000a') = 20,
-    'refused after 20 lookups';
+    'refused after 20 lookups, old ones cleared';
 end $$;
 
 reset role;

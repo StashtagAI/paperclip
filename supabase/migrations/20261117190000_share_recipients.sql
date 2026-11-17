@@ -55,6 +55,10 @@ begin
   if uid is null then
     raise exception 'sign in to share a list' using errcode = '42501';
   end if;
+  -- Anonymous sessions are free to make, so each would be a fresh lookup budget. Reads the claims auth.jwt() reads.
+  if coalesce((nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'is_anonymous')::boolean, false) then
+    raise exception 'sign in to share a list' using errcode = '42501';
+  end if;
   if not exists (select 1 from public.list_shares where token = p_token and user_id = uid) then
     raise exception 'shared list not found' using errcode = 'P0002';
   end if;
@@ -63,6 +67,7 @@ begin
   end if;
   -- One owner's lookups run one at a time, so parallel calls can't all pass the count.
   perform pg_advisory_xact_lock(hashtextextended('share_recipient_lookups:' || uid::text, 0));
+  delete from public.share_recipient_lookups where user_id = uid and at <= now() - interval '1 hour';
   if (select count(*) from public.share_recipient_lookups where user_id = uid and at > now() - interval '1 hour') >= 20 then
     raise exception 'You’ve added a lot of people in the last hour. Try again later.' using errcode = '54000';
   end if;

@@ -23,7 +23,6 @@ import {
   deleteList,
   fetchList,
   fetchListShare,
-  fetchSharedList,
   fetchShareRecipients,
   NAME_LIMITS,
   removeShareRecipient,
@@ -84,15 +83,13 @@ export default function ListScreen() {
   };
 
   async function sendLink() {
-    if (!token) return;
+    if (!token || !data) return;
     setSharing(true);
     setShareNote(null);
     try {
-      // Share exactly what a friend will see.
-      const shared = await fetchSharedList(token);
-      if (!shared) throw new Error('The list couldn’t be read back.');
-      const outcome = await openShareSheet(shareMessage(shared, shareUrl(token)), `${shared.category} › ${shared.list}`);
-      if (outcome === 'copied') note('List and link copied. Paste them into a message to the people you added.');
+      const title = `${data.category.name} › ${data.name}`;
+      const outcome = await openShareSheet(shareMessage(data.category.name, data.name, shareUrl(token)), title);
+      if (outcome === 'copied') note('Link copied. Paste it into a message to the people you added.');
       else if (outcome === 'shared') note('Link sent.');
     } catch (e) {
       note(`Couldn’t share: ${(e as Error).message}`, true);
@@ -125,7 +122,7 @@ export default function ListScreen() {
             onPress={recipients.length ? sendLink : () => setShareOpen(true)}
             accessibilityHint={
               recipients.length
-                ? 'Opens the share sheet with the list and a link to it'
+                ? 'Opens the share sheet with a link to the list'
                 : 'Choose who can open this list'
             }
             icon={(color) => (
