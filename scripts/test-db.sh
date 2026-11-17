@@ -6,6 +6,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${DATABASE_URL:?set DATABASE_URL to an empty Supabase Postgres (e.g. the public.ecr.aws/supabase/postgres image)}"
 
+# HAN-63: the bare image has no storage tables (the Storage API service creates them), so stub them for the
+# migrations. The image's storage schema belongs to supabase_admin (same password as postgres in the image).
+ADMIN_DATABASE_URL="${ADMIN_DATABASE_URL:-${DATABASE_URL/:\/\/postgres:/:\/\/supabase_admin:}}"
+if [ "$(psql "$DATABASE_URL" -X -At -c "select to_regclass('storage.buckets') is null")" = t ]; then
+  psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/storage-stub.sql >/dev/null
+fi
+
 for f in supabase/migrations/*.sql; do
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f" >/dev/null
 done
