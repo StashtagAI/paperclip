@@ -56,11 +56,11 @@ insert into public.place_lookups (query_key, name, address) values ('cafe|city',
 insert into public.search_lookups (query_key, fill) values ('cafe|city', '{}');
 
 -- Every table is covered here. A new table fails this until it has RLS and a block below
--- (list_shares is covered in supabase/tests/list_shares_test.sql).
+-- (list_shares, list_share_recipients and share_recipient_lookups are covered in supabase/tests/list_shares_test.sql).
 select is(
   array(select c.relname::text from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' order by 1),
-  array['categories', 'feedback', 'item_photos', 'items', 'link_feedback', 'links', 'list_shares', 'lists', 'place_lookups',
-    'process_events', 'search_lookups'],
+  array['categories', 'feedback', 'item_photos', 'items', 'link_feedback', 'links', 'list_share_recipients', 'list_shares',
+    'lists', 'place_lookups', 'process_events', 'search_lookups', 'share_recipient_lookups'],
   'public tables are the ones these tests cover'
 );
 select is(

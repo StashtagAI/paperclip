@@ -431,7 +431,44 @@ export async function stopSharingList(listId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** A shared list by its token; null when the link was never valid or sharing was stopped. Works signed out. */
+/** The emails a share is for (HAN-68), oldest first. Only the owner can read them all. */
+export async function fetchShareRecipients(token: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('list_share_recipients')
+    .select('email')
+    .eq('token', token)
+    .order('created_at')
+    .returns<{ email: string }[]>();
+  if (error) throw error;
+  return data.map((r) => r.email);
+}
+
+/**
+ * Lets the Stashtag account with this email open the shared list. Throws a readable error when no account uses it;
+ * the database limits how many addresses an owner can try per hour.
+ */
+export async function addShareRecipient(token: string, email: string): Promise<string> {
+  const { data, error } = await supabase.rpc('add_share_recipient', { p_token: token, p_email: email });
+  if (error) throw error.code === 'P0002' ? new Error('This list is no longer shared.') : error;
+  const result = data as { email: string } | { error: 'no_account' | 'self' };
+  if ('email' in result) return result.email;
+  throw new Error(
+    result.error === 'self'
+      ? 'That’s your own email. Add the email your friend uses for Stashtag.'
+      : `No Stashtag account uses ${email.trim()}. Ask your friend which email they sign in with.`,
+  );
+}
+
+/** Stops the list opening for this person. */
+export async function removeShareRecipient(token: string, email: string): Promise<void> {
+  const { error } = await supabase.from('list_share_recipients').delete().eq('token', token).eq('email', email);
+  if (error) throw error;
+}
+
+/**
+ * A shared list by its token; null when the link was never valid, sharing was stopped, or it wasn't shared with the
+ * signed-in account (the database answers the same for all three). Signed in only.
+ */
 export async function fetchSharedList(token: string): Promise<SharedList | null> {
   const { data, error } = await supabase.rpc('get_shared_list', { p_token: token });
   if (error) throw error;

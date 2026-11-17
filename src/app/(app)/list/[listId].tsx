@@ -10,6 +10,7 @@ import { DirectionsSheet } from '@/components/directions-sheet';
 import { PlaceMap } from '@/components/place-map';
 import { RenameForm } from '@/components/rename-form';
 import { Screen } from '@/components/screen';
+import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ratingLabel } from '@/components/star-rating';
 import { TagChip } from '@/components/tag-chip';
@@ -18,11 +19,14 @@ import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import {
+  addShareRecipient,
   deleteList,
   fetchList,
   fetchListShare,
   fetchSharedList,
+  fetchShareRecipients,
   NAME_LIMITS,
+  removeShareRecipient,
   renameCategory,
   renameList,
   shareList,
@@ -62,7 +66,14 @@ export default function ListScreen() {
 
   const [editing, setEditing] = useState(false);
   const theme = useTheme();
-  const share = useAsync(() => fetchListShare(listId), [listId]);
+  // The share and who it's for (HAN-68). A share with nobody on it opens only for the owner.
+  const share = useAsync(async () => {
+    const token = await fetchListShare(listId);
+    return { token, recipients: token ? await fetchShareRecipients(token) : [] };
+  }, [listId]);
+  const token = share.data?.token ?? null;
+  const recipients = share.data?.recipients ?? [];
+  const [shareOpen, setShareOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareNote, setShareNote] = useState<{ text: string; error?: boolean } | null>(null);
 
@@ -72,17 +83,17 @@ export default function ListScreen() {
     if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text);
   };
 
-  async function startSharing() {
+  async function sendLink() {
+    if (!token) return;
     setSharing(true);
     setShareNote(null);
     try {
-      const token = await shareList(listId);
       // Share exactly what a friend will see.
       const shared = await fetchSharedList(token);
       if (!shared) throw new Error('The list couldn’t be read back.');
       const outcome = await openShareSheet(shareMessage(shared, shareUrl(token)), `${shared.category} › ${shared.list}`);
-      if (outcome === 'copied') note('List and link copied. Paste them into a message to a friend.');
-      else if (outcome === 'shared') note('List shared.');
+      if (outcome === 'copied') note('List and link copied. Paste them into a message to the people you added.');
+      else if (outcome === 'shared') note('Link sent.');
     } catch (e) {
       note(`Couldn’t share: ${(e as Error).message}`, true);
     } finally {
@@ -106,13 +117,17 @@ export default function ListScreen() {
       edges="none"
       scrollRef={scrollRef}
       footer={
-        data && !editing ? (
+        data && !editing && share.data && (recipients.length || !(token || shareOpen)) ? (
           <Button
-            title={share.data ? 'Share list again' : 'Share list'}
+            title={recipients.length ? 'Send link' : 'Share list'}
             size="large"
             loading={sharing}
-            onPress={startSharing}
-            accessibilityHint="Opens the share sheet with the list and a link to it"
+            onPress={recipients.length ? sendLink : () => setShareOpen(true)}
+            accessibilityHint={
+              recipients.length
+                ? 'Opens the share sheet with the list and a link to it'
+                : 'Choose who can open this list'
+            }
             icon={(color) => (
               <SymbolView
                 name={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }}
@@ -180,16 +195,14 @@ export default function ListScreen() {
           {shareNote.text}
         </ThemedText>
       ) : null}
-      {data && share.data && !editing ? (
+      {data && !editing && (token || shareOpen) ? (
         <SharedPanel
           listId={listId}
-          token={share.data}
-          onCopied={() => note('Link copied.')}
-          onStopped={() => {
-            share.refresh();
-            note('Stopped sharing. The old link no longer works.');
-          }}
-          onError={(message) => note(message, true)}
+          token={token}
+          recipients={recipients}
+          onChanged={share.refresh}
+          onClose={() => setShareOpen(false)}
+          onNote={note}
         />
       ) : null}
       {pins.length ? <PlaceMap pins={pins} selectedId={selectedId} onPinPress={selectPin} /> : null}
@@ -281,30 +294,73 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
 
 type SharedPanelProps = {
   listId: string;
-  token: string;
-  onCopied: () => void;
-  onStopped: () => void;
-  onError: (message: string) => void;
+  /** Null until the first person is added. */
+  token: string | null;
+  recipients: string[];
+  onChanged: () => Promise<void>;
+  onClose: () => void;
+  onNote: (text: string, error?: boolean) => void;
 };
 
-/** Shown while the list is shared: who can see it, and a way to copy the link or stop sharing. */
-function SharedPanel({ listId, token, onCopied, onStopped, onError }: SharedPanelProps) {
+/**
+ * Who the list is shared with (HAN-68): add a friend by the email of their Stashtag account, remove them, copy the
+ * link, or stop sharing. The link opens only for the people listed here.
+ */
+function SharedPanel({ listId, token, recipients, onChanged, onClose, onNote }: SharedPanelProps) {
   const theme = useTheme();
+  const [email, setEmail] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
+
+  async function add() {
+    if (!email.trim()) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      const added = await addShareRecipient(token ?? (await shareList(listId)), email);
+      setEmail('');
+      await onChanged();
+      onNote(`Added ${added}. Send them the link; it opens when they sign in with that email.`);
+    } catch (e) {
+      const message = (e as Error).message;
+      setAddError(message);
+      if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(message);
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function remove(who: string) {
+    if (!token) return;
+    setRemoving(who);
+    try {
+      await removeShareRecipient(token, who);
+      await onChanged();
+      onNote(`Removed ${who}. The link no longer opens for them.`);
+    } catch (e) {
+      onNote(`Couldn’t remove ${who}: ${(e as Error).message}`, true);
+    } finally {
+      setRemoving(null);
+    }
+  }
 
   async function stop() {
     const ok = await confirmDestructive(
       'Stop sharing this list?',
-      'The link stops working for anyone who has it. Lists friends already added stay in their stash.',
+      'The link stops working for everyone you shared it with. Lists friends already added stay in their stash.',
       'Stop sharing',
     );
     if (!ok) return;
     setStopping(true);
     try {
       await stopSharingList(listId);
-      onStopped();
+      await onChanged();
+      onClose();
+      onNote('Stopped sharing. The link no longer works.');
     } catch (e) {
-      onError(`Couldn’t stop sharing: ${(e as Error).message}`);
+      onNote(`Couldn’t stop sharing: ${(e as Error).message}`, true);
     } finally {
       setStopping(false);
     }
@@ -312,21 +368,77 @@ function SharedPanel({ listId, token, onCopied, onStopped, onError }: SharedPane
 
   return (
     <View style={[styles.shared, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      <ThemedText type="defaultBold">Shared by link</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        Anyone with the link can see this list and add it to their own stash. Your other lists stay private.
+      <ThemedText type="defaultBold" accessibilityRole="header">
+        Share with
       </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Add the email your friend uses for Stashtag. The link opens only for the people listed here, once they sign in.
+        Your other lists stay private.
+      </ThemedText>
+      <TextField
+        value={email}
+        onChangeText={(text) => {
+          setEmail(text);
+          setAddError(null);
+        }}
+        onSubmitEditing={add}
+        placeholder="friend@example.com"
+        accessibilityLabel="Friend’s email"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="email"
+        textContentType="emailAddress"
+        returnKeyType="done"
+        maxLength={254}
+        invalid={!!addError}
+        editable={!adding}
+      />
+      {addError ? (
+        <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
+          {addError}
+        </ThemedText>
+      ) : null}
+      <Button title="Add" loading={adding} disabled={!email.trim()} onPress={add} />
+      {recipients.length ? (
+        <View accessibilityRole="list" accessibilityLabel="Shared with" style={styles.recipients}>
+          {recipients.map((who) => (
+            <View key={who} style={styles.recipient}>
+              <ThemedText type="small" style={styles.recipientEmail}>
+                {who}
+              </ThemedText>
+              <Button
+                title="Remove"
+                variant="secondary"
+                accessibilityLabel={`Remove ${who}`}
+                loading={removing === who}
+                onPress={() => remove(who)}
+              />
+            </View>
+          ))}
+        </View>
+      ) : (
+        <ThemedText type="small" themeColor="textSecondary">
+          Not shared with anyone yet.
+        </ThemedText>
+      )}
       <View style={styles.sharedActions}>
-        <Button
-          title="Copy link"
-          variant="secondary"
-          style={styles.sharedAction}
-          onPress={async () => {
-            await Clipboard.setStringAsync(shareUrl(token));
-            onCopied();
-          }}
-        />
-        <Button title="Stop sharing" variant="secondary" style={styles.sharedAction} loading={stopping} onPress={stop} />
+        {token && recipients.length ? (
+          <Button
+            title="Copy link"
+            variant="secondary"
+            style={styles.sharedAction}
+            onPress={async () => {
+              await Clipboard.setStringAsync(shareUrl(token));
+              onNote('Link copied.');
+            }}
+          />
+        ) : null}
+        {token ? (
+          <Button title="Stop sharing" variant="secondary" style={styles.sharedAction} loading={stopping} onPress={stop} />
+        ) : (
+          <Button title="Cancel" variant="secondary" style={styles.sharedAction} onPress={onClose} />
+        )}
       </View>
     </View>
   );
@@ -352,4 +464,8 @@ const styles = StyleSheet.create({
   // Side by side when they fit; stacked at large text sizes.
   sharedActions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   sharedAction: { flexGrow: 1 },
+  recipients: { gap: Spacing.two },
+  // Email and its Remove button side by side; the button wraps below at large text sizes.
+  recipient: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two },
+  recipientEmail: { flexGrow: 1, flexShrink: 1, minWidth: 160 },
 });

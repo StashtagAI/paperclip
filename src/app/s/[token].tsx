@@ -13,6 +13,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
 import { addSharedList, fetchSharedList } from '@/lib/data';
 import { pendingShare } from '@/lib/share';
+import { supabase } from '@/lib/supabase';
 import { KIND_LABELS, PLATFORM_LABELS, type SharedItem } from '@/lib/types';
 
 /**
@@ -55,6 +56,12 @@ export default function SharedListScreen() {
     router.replace('/sign-in');
   }
 
+  async function switchAccount() {
+    await pendingShare.set(token);
+    await supabase.auth.signOut();
+    router.replace('/sign-in');
+  }
+
   const footer =
     session && list ? (
       <View style={styles.footer}>
@@ -76,7 +83,7 @@ export default function SharedListScreen() {
           <Button title="Try again" variant="secondary" onPress={shared.refresh} />
         </View>
       ) : null}
-      {session && !shared.loading && !shared.error && !list ? <NotShared email={session.user.email} /> : null}
+      {session && !shared.loading && !shared.error && !list ? <NotShared email={session.user.email} onSwitch={switchAccount} /> : null}
       {list ? (
         <>
           <View style={styles.header}>
@@ -128,7 +135,7 @@ function SignInFirst({ onSignIn }: { onSignIn: () => void }) {
 }
 
 /** Same screen for a mistyped link, a stopped share and a list shared with someone else: the database can't tell. */
-function NotShared({ email }: { email?: string }) {
+function NotShared({ email, onSwitch }: { email?: string; onSwitch: () => void }) {
   return (
     <View style={styles.gap}>
       <ThemedText type="sectionTitle" accessibilityRole="header">
@@ -136,8 +143,9 @@ function NotShared({ email }: { email?: string }) {
       </ThemedText>
       <ThemedText themeColor="textSecondary">
         The link may be mistyped, the owner may have stopped sharing it, or it wasn’t shared with
-        {email ? ` ${email}` : ' this account'}.
+        {email ? ` ${email}` : ' this account'}. If your friend added a different email, sign in with that one.
       </ThemedText>
+      <Button title="Sign in with another account" onPress={onSwitch} />
       <Button title="Go to your stash" variant="secondary" onPress={() => router.replace('/')} />
     </View>
   );
