@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
 
   for (const table of TABLES) {
     const { error } = await db.from(table).delete().eq("user_id", userId);
-    if (error && !MISSING_TABLE.has(error.code)) return fail("data",`${table}: ${error.message}`);
+    if (error && !MISSING_TABLE.has(error.code)) return fail("data", `${table}: ${error.message}`);
   }
 
   const { data: objects, error: se } = await db.rpc("user_storage_objects", { p_user_id: userId });
