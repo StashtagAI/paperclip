@@ -16,7 +16,14 @@ const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...cors, "content-type": "application/json" } });
 
 // Children before parents, so nothing is left behind if a foreign key's cascade ever changes.
-const TABLES = ["feedback", "link_feedback", "process_events", "items", "lists", "categories", "links"] as const;
+// Keep in step with every table that has a user_id (legal/data-deletion.md section 3).
+const TABLES = [
+  "feedback", "link_feedback", "item_reports", "process_events",
+  "item_photos", "item_posts", "list_shares",
+  "items", "lists", "categories", "links",
+] as const;
+// A table whose migration hasn't reached this database yet has nothing to delete.
+const MISSING_TABLE = new Set(["PGRST205", "42P01"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
@@ -41,7 +48,7 @@ Deno.serve(async (req) => {
 
   for (const table of TABLES) {
     const { error } = await db.from(table).delete().eq("user_id", userId);
-    if (error) return fail("data", `${table}: ${error.message}`);
+    if (error && !MISSING_TABLE.has(error.code)) return fail("data",`${table}: ${error.message}`);
   }
 
   const { data: objects, error: se } = await db.rpc("user_storage_objects", { p_user_id: userId });

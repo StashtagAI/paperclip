@@ -51,6 +51,20 @@ export type ItemRow = {
   lat: number | null;
   lng: number | null;
   tags: string[];
+  /** The user's own note and 1–5 star rating (HAN-45); process-link never writes these. */
+  note: string;
+  rating: number | null;
+};
+
+/** A photo the user added to an item (HAN-45). `alt` is required and is what screen readers read out. */
+export type ItemPhotoRow = {
+  id: string;
+  item_id: string;
+  path: string;
+  alt: string;
+  width: number | null;
+  height: number | null;
+  created_at: string;
 };
 
 /** Text captured on the phone, the process-link request body's `captured` field (docs/extraction.md). */
@@ -63,6 +77,8 @@ export type FieldSource = 'capture' | 'linked_site' | 'places_lookup' | 'search'
 export type RawContent = {
   /** process-link is reading the post's caption (link-first capture, HAN-18). */
   reading?: boolean;
+  /** Which step process-link is on while the link is "processing" (HAN-42, src/lib/progress.ts). */
+  stage?: 'reading' | 'finding' | 'filing';
   caption?: string | null;
   /** "fetched" when the caption was read from the link server-side rather than captured on the phone. */
   caption_source?: 'fetched' | null;
