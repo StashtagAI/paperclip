@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
@@ -16,6 +16,7 @@ import { recognizeText } from '@/lib/capture/ocr';
 import { recordingText, recordingTranscript } from '@/lib/capture/recording';
 import { downloadModel, isModelDownloaded, MODEL_LABEL } from '@/lib/capture/transcribe';
 import { buildCard, fetchLink } from '@/lib/data';
+import { shortUrl } from '@/lib/link-summary';
 import { PLATFORM_LABELS } from '@/lib/types';
 
 const native = Platform.OS !== 'web';
@@ -162,9 +163,16 @@ export default function CaptureScreen() {
       }>
       <Stack.Screen options={{ title: 'Add what the post says' }} />
       {link.data ? (
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-          {PLATFORM_LABELS[link.data.platform]} · {link.data.url.replace(/^https:\/\/(www\.)?/, '')}
-        </ThemedText>
+        <View style={styles.source}>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={2} selectable>
+            {PLATFORM_LABELS[link.data.platform]} · {shortUrl(link.data.url)}
+          </ThemedText>
+          <Button
+            title={`Open in ${PLATFORM_LABELS[link.data.platform]}`}
+            variant="secondary"
+            onPress={() => Linking.openURL(link.data!.url)}
+          />
+        </View>
       ) : null}
       {fetchReason && FETCH_COPY[fetchReason] ? <ThemedText>{FETCH_COPY[fetchReason]}</ThemedText> : null}
       <ThemedText themeColor="textSecondary">
@@ -235,6 +243,7 @@ function SegmentCard({ segment, onChange, onRemove }: { segment: Segment; onChan
 
 const styles = StyleSheet.create({
   actions: { gap: Spacing.two },
+  source: { gap: Spacing.two },
   card: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.two },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   flex: { flex: 1 },

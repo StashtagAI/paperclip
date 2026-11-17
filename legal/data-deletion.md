@@ -33,9 +33,9 @@ When your account is deleted, we permanently delete:
 - your account and login information (email address and authentication records);
 - every link you submitted;
 - the post content we retrieved for those links (captions, author names, transcripts, and other text);
-- your categories, lists, items, tags, and notes;
-- any feedback you sent us, in the app or on a saved post;
-- any files stored for your account; and
+- your categories, lists, items, tags, notes, ratings, and photos, and any share links you made for your lists;
+- any feedback you sent us, in the app, on a saved post, or as a report about an item;
+- any files stored for your account, including photos you added; and
 - processing records tied to your account.
 
 ## 4. Timeline

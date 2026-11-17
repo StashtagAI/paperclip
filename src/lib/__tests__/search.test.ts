@@ -1,4 +1,4 @@
-import { itemSearchFilter } from '@/lib/search';
+import { itemSearchFilter, likePattern } from '@/lib/search';
 
 describe('itemSearchFilter', () => {
   it('returns null for blank input', () => {
@@ -17,5 +17,16 @@ describe('itemSearchFilter', () => {
   it('escapes LIKE wildcards and PostgREST reserved characters', () => {
     expect(itemSearchFilter('50%_off')).toBe('name.ilike."%50\\\\%\\\\_off%"');
     expect(itemSearchFilter('a"),id.eq.(x')).toBe('name.ilike."%a\\"),id.eq.(x%"');
+  });
+});
+
+describe('likePattern', () => {
+  it('returns null for blank input', () => {
+    expect(likePattern('  #  ')).toBeNull();
+  });
+
+  it('wraps the trimmed query and escapes LIKE wildcards', () => {
+    expect(likePattern(' Scottsdale ')).toBe('%Scottsdale%');
+    expect(likePattern('#50%_off')).toBe('%50\\%\\_off%');
   });
 });

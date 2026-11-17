@@ -76,6 +76,25 @@
         }
       ],
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Stashtag uses your location to show saved places near you and, if you turn on nudges, to tell you when you're near one. It never leaves your phone.",
+          "locationAlwaysAndWhenInUsePermission": "Allow “Always” so Stashtag can nudge you about saved places nearby while the app is closed. Your location never leaves your phone.",
+          "locationAlwaysPermission": "Allow “Always” so Stashtag can nudge you about saved places nearby while the app is closed. Your location never leaves your phone.",
+          "locationFullAccuracyPermission": false,
+          "motionUsagePermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "enableRemoteNotifications": false
+        }
+      ],
+      [
         "expo-local-authentication",
         {
           "faceIDPermission": "Stashtag uses Face ID to unlock the app when you turn on Face ID lock in Profile."
