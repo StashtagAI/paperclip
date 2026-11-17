@@ -21,7 +21,7 @@ begin
 end $$;
 grant usage on schema tests to authenticated, anon;
 
--- A = ...0a, B = ...0b. Links 1x, categories 2x, lists 3x, items 4x, feedback 5x.
+-- A = ...0a, B = ...0b. Links 1x, categories 2x, lists 3x, items 4x, link_feedback 5x, feedback 6x, item_photos 7x.
 insert into auth.users (id, email) values
   ('00000000-0000-4000-8000-00000000000a', 'a@example.com'),
   ('00000000-0000-4000-8000-00000000000b', 'b@example.com');
@@ -43,13 +43,21 @@ insert into public.process_events (link_id, user_id, source, stage) values
 insert into public.link_feedback (id, link_id, user_id, rating) values
   ('00000000-0000-4000-8000-0000000005a0', '00000000-0000-4000-8000-0000000001a0', '00000000-0000-4000-8000-00000000000a', 'up'),
   ('00000000-0000-4000-8000-0000000005b0', '00000000-0000-4000-8000-0000000001b0', '00000000-0000-4000-8000-00000000000b', 'up');
+insert into public.feedback (id, user_id, message) values
+  ('00000000-0000-4000-8000-0000000006a0', '00000000-0000-4000-8000-00000000000a', 'A feedback'),
+  ('00000000-0000-4000-8000-0000000006b0', '00000000-0000-4000-8000-00000000000b', 'B secret feedback');
+insert into public.item_photos (id, user_id, item_id, path, alt) values
+  ('00000000-0000-4000-8000-0000000007a0', '00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-0000000004a0',
+   '00000000-0000-4000-8000-00000000000a/00000000-0000-4000-8000-0000000004a0/1.jpg', 'A photo'),
+  ('00000000-0000-4000-8000-0000000007b0', '00000000-0000-4000-8000-00000000000b', '00000000-0000-4000-8000-0000000004b0',
+   '00000000-0000-4000-8000-00000000000b/00000000-0000-4000-8000-0000000004b0/1.jpg', 'B secret photo');
 insert into public.place_lookups (query_key, name, address) values ('cafe|city', 'Cafe', '1 Main St');
 insert into public.search_lookups (query_key, fill) values ('cafe|city', '{}');
 
 -- Every table is covered here. A new table fails this until it has RLS and a block below.
 select is(
   array(select c.relname::text from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' order by 1),
-  array['categories', 'items', 'link_feedback', 'links', 'lists', 'place_lookups', 'process_events', 'search_lookups'],
+  array['categories', 'feedback', 'item_photos', 'items', 'link_feedback', 'links', 'lists', 'place_lookups', 'process_events', 'search_lookups'],
   'public tables are the ones these tests cover'
 );
 select is(
@@ -66,6 +74,8 @@ select is((select array_agg(name) from public.lists), array['A city'], 'lists: A
 select is((select array_agg(name) from public.items), array['A place'], 'items: A sees only own');
 select is((select count(*)::int from public.process_events), 1, 'process_events: A sees only own');
 select is((select array_agg(id) from public.link_feedback), array['00000000-0000-4000-8000-0000000005a0'::uuid], 'link_feedback: A sees only own');
+select throws_ok($$select * from public.feedback$$, '42501', null, 'feedback: no client reads, not even own');
+select is((select array_agg(alt) from public.item_photos), array['A photo'], 'item_photos: A sees only own');
 select is((select count(*)::int from public.place_lookups), 0, 'place_lookups: no client reads');
 select is((select count(*)::int from public.search_lookups), 0, 'search_lookups: no client reads');
 select is((select count(*)::int from public.items where link_id = '00000000-0000-4000-8000-0000000001b0'), 0, 'items: filtering by B''s link_id finds nothing');
@@ -103,6 +113,23 @@ select lives_ok($$insert into public.process_events (link_id, source, stage) val
   'process_events: can log own client event');
 select throws_ok($$insert into public.link_feedback (link_id, rating) values ('00000000-0000-4000-8000-0000000001b0', 'down')$$,
   '42501', null, 'link_feedback: cannot rate B''s link_id');
+select lives_ok($$insert into public.feedback (message, category, platform) values ('Love it', 'idea', 'ios')$$,
+  'feedback: can send own');
+select throws_ok($$insert into public.feedback (user_id, message) values ('00000000-0000-4000-8000-00000000000b', 'Planted')$$,
+  '42501', null, 'feedback: cannot insert for another user');
+select throws_ok($$insert into public.feedback (message, status) values ('Triaged', 'reviewed')$$,
+  '42501', null, 'feedback: cannot insert already reviewed');
+select throws_ok($$insert into public.item_photos (item_id, path, alt) values ('00000000-0000-4000-8000-0000000004b0',
+  '00000000-0000-4000-8000-00000000000a/00000000-0000-4000-8000-0000000004b0/2.jpg', 'x')$$,
+  '42501', null, 'item_photos: cannot add to B''s item');
+select throws_ok($$insert into public.item_photos (item_id, path, alt) values ('00000000-0000-4000-8000-0000000004a0',
+  '00000000-0000-4000-8000-00000000000b/00000000-0000-4000-8000-0000000004a0/2.jpg', 'x')$$,
+  '42501', null, 'item_photos: path must be under own folder');
+select throws_ok($$insert into public.item_photos (user_id, item_id, path, alt) values ('00000000-0000-4000-8000-00000000000b',
+  '00000000-0000-4000-8000-0000000004b0', '00000000-0000-4000-8000-00000000000b/00000000-0000-4000-8000-0000000004b0/2.jpg', 'x')$$,
+  '42501', null, 'item_photos: cannot insert for another user');
+select throws_ok($$select public.user_storage_objects('00000000-0000-4000-8000-00000000000b')$$,
+  '42501', null, 'user_storage_objects: not callable by clients');
 select throws_ok($$insert into public.place_lookups (query_key, name, address) values ('x', 'x', 'x')$$,
   '42501', null, 'place_lookups: no client writes');
 select throws_ok($$insert into public.search_lookups (query_key, fill) values ('x', '{}')$$,
@@ -125,6 +152,8 @@ select throws_ok($$update public.link_feedback set link_id = '00000000-0000-4000
 update public.link_feedback set snapshot = '{"items":[{"name":"forged"}]}' where id = '00000000-0000-4000-8000-0000000005a0';
 select is((select snapshot -> 'items' -> 0 ->> 'name' from public.link_feedback where id = '00000000-0000-4000-8000-0000000005a0'),
   'A place', 'link_feedback: client snapshot is ignored');
+select throws_ok($$update public.item_photos set item_id = '00000000-0000-4000-8000-0000000004b0' where id = '00000000-0000-4000-8000-0000000007a0'$$,
+  '42501', null, 'item_photos: cannot move own photo onto B''s item');
 
 -- Updates and deletes aimed at B's rows match nothing (checked as the table owner below).
 update public.categories set name = 'pwned' where id = '00000000-0000-4000-8000-0000000002b0';
@@ -138,6 +167,10 @@ delete from public.lists where id = '00000000-0000-4000-8000-0000000003b0';
 delete from public.items where id = '00000000-0000-4000-8000-0000000004b0';
 delete from public.link_feedback where id = '00000000-0000-4000-8000-0000000005b0';
 delete from public.process_events where user_id = '00000000-0000-4000-8000-00000000000b';
+update public.item_photos set alt = 'pwned' where id = '00000000-0000-4000-8000-0000000007b0';
+delete from public.item_photos where id = '00000000-0000-4000-8000-0000000007b0';
+select throws_ok($$update public.feedback set message = 'pwned'$$, '42501', null, 'feedback: clients cannot update');
+select throws_ok($$delete from public.feedback$$, '42501', null, 'feedback: clients cannot delete');
 
 -- ---------- functions ----------
 select throws_ok($$select public.delete_link('00000000-0000-4000-8000-0000000001b0')$$,
@@ -154,6 +187,8 @@ select throws_ok($$insert into public.links (user_id, url, platform) values ('00
   '42501', null, 'anon: cannot insert links');
 select throws_ok($$insert into public.process_events (link_id, user_id, source, stage) values ('00000000-0000-4000-8000-0000000001b0', '00000000-0000-4000-8000-00000000000b', 'client', 'x')$$,
   '42501', null, 'anon: cannot insert events');
+select throws_ok($$insert into public.feedback (message) values ('x')$$, '42501', null, 'anon: cannot send feedback');
+select is((select count(*)::int from public.item_photos), 0, 'anon: sees no photos');
 select throws_ok($$select public.delete_link('00000000-0000-4000-8000-0000000001b0')$$, '42501', null, 'anon: cannot call delete_link');
 
 -- ---------- B's data survived all of the above ----------
@@ -166,6 +201,9 @@ select is((select name || '|' || link_id from public.items where id = '00000000-
 select is((select rating::text from public.link_feedback where id = '00000000-0000-4000-8000-0000000005b0'), 'up', 'B''s feedback intact');
 select is((select stage from public.process_events where user_id = '00000000-0000-4000-8000-00000000000b'), 'final', 'B''s events intact');
 select is((select count(*)::int from public.items where user_id = '00000000-0000-4000-8000-00000000000b'), 1, 'nothing was planted in B''s lists');
+select is((select message from public.feedback where user_id = '00000000-0000-4000-8000-00000000000b'), 'B secret feedback', 'B''s app feedback intact');
+select is((select user_id from public.feedback where message = 'Love it'), '00000000-0000-4000-8000-00000000000a'::uuid, 'feedback: A''s row has A''s user_id');
+select is((select alt from public.item_photos where id = '00000000-0000-4000-8000-0000000007b0'), 'B secret photo', 'B''s photo intact');
 
 -- ---------- delete_link on own link only removes A's rows ----------
 select tests.login('00000000-0000-4000-8000-00000000000a');

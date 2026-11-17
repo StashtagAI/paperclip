@@ -6,6 +6,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${DATABASE_URL:?set DATABASE_URL to an empty Supabase Postgres (e.g. the public.ecr.aws/supabase/postgres image)}"
 
+if [ "$(psql "$DATABASE_URL" -X -At -c "select to_regclass('storage.objects') is null")" = t ]; then
+  # The image's supabase_admin shares the postgres password.
+  psql "${DATABASE_URL/\/\/postgres:/\/\/supabase_admin:}" -v ON_ERROR_STOP=1 -q -f supabase/tests/storage-stub.sql >/dev/null
+fi
+
 for f in supabase/migrations/*.sql; do
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f" >/dev/null
 done
