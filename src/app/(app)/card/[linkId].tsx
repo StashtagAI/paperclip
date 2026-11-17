@@ -101,15 +101,24 @@ export default function CardScreen() {
       edges="none"
       footer={
         link?.status === 'done' ? (
-          <Button
-            title={first ? `Open ${first.list.category.name} › ${first.list.name}` : 'Done'}
-            size="large"
-            onPress={() =>
-              first
-                ? router.replace({ pathname: '/list/[listId]', params: { listId: first.list.id } })
-                : router.dismissTo('/')
-            }
-          />
+          <View style={styles.footer}>
+            <Button
+              title={first ? `Open ${first.list.category.name} › ${first.list.name}` : 'Done'}
+              size="large"
+              onPress={() =>
+                first
+                  ? router.replace({ pathname: '/list/[listId]', params: { listId: first.list.id } })
+                  : router.dismissTo('/')
+              }
+            />
+            {/* Several posts in a row (HAN-64). Back to Stash if we came from its Recent links, else open it here. */}
+            <Button
+              title="Stash another link"
+              variant="secondary"
+              size="large"
+              onPress={() => router.dismissTo('/stash')}
+            />
+          </View>
         ) : link?.status === 'failed' || (link?.status === 'pending' && !sending) ? (
           <Button
             title={link.status === 'failed' ? 'Try again' : 'Add what the post says'}
@@ -366,5 +375,6 @@ const styles = StyleSheet.create({
   field: { gap: 2 },
   feedback: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   flex: { flex: 1 },
+  footer: { gap: Spacing.two },
   delete: { marginTop: Spacing.four, gap: Spacing.two },
 });
