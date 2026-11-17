@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, View, type ScrollViewInstance } from 'react-native';
 
 import { Button } from '@/components/button';
+import { DeleteButton } from '@/components/delete-button';
 import { DirectionsSheet } from '@/components/directions-sheet';
 import { PlaceMap } from '@/components/place-map';
 import { RenameForm } from '@/components/rename-form';
@@ -17,6 +18,7 @@ import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import {
+  deleteList,
   fetchList,
   fetchListShare,
   fetchSharedList,
@@ -127,7 +129,12 @@ export default function ListScreen() {
           title: data ? `${data.category.name} › ${data.name}` : '',
           headerRight: () =>
             data && !editing ? (
-              <Pressable onPress={() => setEditing(true)} accessibilityRole="button" accessibilityLabel="Rename" hitSlop={12}>
+              <Pressable
+                onPress={() => setEditing(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Edit list"
+                accessibilityHint="Rename or delete this list"
+                hitSlop={12}>
                 <ThemedText type="defaultBold" style={{ color: theme.link }}>
                   Edit
                 </ThemedText>
@@ -138,19 +145,31 @@ export default function ListScreen() {
       {list.error ? <ThemedText themeColor="danger">{list.error.message}</ThemedText> : null}
       {list.loading && !data ? <ActivityIndicator /> : null}
       {data && editing ? (
-        <RenameForm
-          fields={[
-            { key: 'category', label: 'Category', value: data.category.name, maxLength: NAME_LIMITS.category },
-            { key: 'list', label: 'List', value: data.name, maxLength: NAME_LIMITS.list },
-          ]}
-          onCancel={() => setEditing(false)}
-          onSave={async (changed) => {
-            if (changed.category !== undefined) await renameCategory(data.category, changed.category);
-            if (changed.list !== undefined) await renameList(data, changed.list);
-            await refresh();
-            setEditing(false);
-          }}
-        />
+        <>
+          <RenameForm
+            fields={[
+              { key: 'category', label: 'Category', value: data.category.name, maxLength: NAME_LIMITS.category },
+              { key: 'list', label: 'List', value: data.name, maxLength: NAME_LIMITS.list },
+            ]}
+            onCancel={() => setEditing(false)}
+            onSave={async (changed) => {
+              if (changed.category !== undefined) await renameCategory(data.category, changed.category);
+              if (changed.list !== undefined) await renameList(data, changed.list);
+              await refresh();
+              setEditing(false);
+            }}
+          />
+          <DeleteButton
+            title="Delete this list"
+            confirmTitle={`Delete ${data.name}?`}
+            confirmMessage={`${data.category.name} › ${data.name}${itemsLabel(data.items.length)} will be removed. It can’t be undone.`}
+            onDelete={async () => {
+              await deleteList(data);
+              if (router.canGoBack()) router.back();
+              else router.replace('/');
+            }}
+          />
+        </>
       ) : null}
       {shareNote ? (
         <ThemedText
@@ -189,6 +208,8 @@ export default function ListScreen() {
     </Screen>
   );
 }
+
+const itemsLabel = (n: number) => (n === 1 ? ' and its 1 item' : n ? ` and all ${n} items in it` : '');
 
 type ItemCardProps = { item: ItemRow; selected: boolean; onPress?: () => void; onLayoutY: (y: number) => void };
 

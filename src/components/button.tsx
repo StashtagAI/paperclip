@@ -23,6 +23,7 @@ export function Button({ title, variant = 'primary', size = 'default', loading, 
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={title}
+      accessibilityState={{ disabled: !!inactive, busy: !!loading }}
       disabled={inactive}
       style={(state) => [
         styles.button,

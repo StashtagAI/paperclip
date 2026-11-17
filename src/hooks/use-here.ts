@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
 
+import { toError } from '@/lib/errors';
 import type { LatLng } from '@/lib/geo';
 
 export type Here =
@@ -22,8 +23,7 @@ async function locate(): Promise<LatLng> {
   return { lat: pos.coords.latitude, lng: pos.coords.longitude };
 }
 
-const asError = (e: unknown) => (e instanceof Error ? e : new Error(String(e)));
-const failed = (e: unknown): Here => ({ status: 'error', message: asError(e).message });
+const failed = (e: unknown): Here => ({ status: 'error', message: toError(e).message });
 
 /**
  * The phone's position for Home's "Near you" picks (HAN-48), only while Home is open and only once the user has
@@ -51,14 +51,14 @@ export function useHere(enabled: boolean) {
   const check = useCallback(
     (ask: boolean) =>
       (ask ? Location.requestForegroundPermissionsAsync() : Location.getForegroundPermissionsAsync()).then(settle, (e) =>
-        settle(asError(e)),
+        settle(toError(e)),
       ),
     [settle],
   );
 
   useEffect(() => {
     // Not `check(false)`: setting state from a promise callback keeps the effect lint rule happy.
-    if (enabled) Location.getForegroundPermissionsAsync().then(settle, (e) => settle(asError(e)));
+    if (enabled) Location.getForegroundPermissionsAsync().then(settle, (e) => settle(toError(e)));
   }, [enabled, settle]);
 
   return {
