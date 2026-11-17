@@ -20,7 +20,9 @@ export const ACTORS = {
   tiktok: { id: "clockworks~tiktok-scraper", usdPerResult: 3.7 / 1000, maxChargeUsd: 0.5 },
 } as const;
 type Actor = (typeof ACTORS)[keyof typeof ACTORS];
-export const TIMEOUT_MS = 30_000;
+// Instagram runs usually take 9-22 s but some run past 27 s (HAN-43: two reels in a row on 2026-11-17), so allow 60 s.
+// process-link still has ~90 s of the edge function's 150 s for extraction.
+export const TIMEOUT_MS = 60_000;
 const MAX_CAPTION = 20_000;
 
 const off = (v: string | undefined) => v != null && /^(0|false|off|no)$/i.test(v.trim());
@@ -88,7 +90,12 @@ async function apifyRun(actor: Actor, input: unknown, token: string, fetchFn: ty
     body: JSON.stringify(input),
     signal,
   });
-  if (!r.ok) throw new Error(`apify_${r.status}`);
+  if (!r.ok) {
+    // A run that hits our `timeout` comes back as 400 run-failed "... status: TIMED-OUT"; report it as a timeout.
+    const body = await r.text().catch(() => "");
+    if (/TIMED-OUT/.test(body)) throw new DOMException("Apify run timed out", "TimeoutError");
+    throw new Error(`apify_${r.status}`);
+  }
   const items = await r.json();
   return Array.isArray(items) ? (items as Record<string, unknown>[]) : [];
 }
