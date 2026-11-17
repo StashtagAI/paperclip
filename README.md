@@ -54,6 +54,14 @@ Schema: `links` (url, platform, status `pending|processing|done|failed`, raw_con
 (name, description, address, lat/lng, source `link_id`). RLS limits every table to the signed-in user's rows; clients may
 only insert links as `pending` and cannot update them; `process-link` uses the service role.
 
+Migrations (HAN-54): `main` is the source of truth and matches production's `supabase_migrations.schema_migrations`.
+Supabase keys each migration by its 14-digit version, so every file needs its own version: two branches that both use
+`20261113180000` clash, and one of them is skipped. Name new files with the current UTC time
+(`supabase migration new <name>`), and rebase onto `main` before merging. If you apply a migration to production with the
+MCP `apply_migration` tool or the dashboard, it gets a new version, so rename the file to match
+(`select version, name from supabase_migrations.schema_migrations order by version`). Check before `db push` with
+`supabase migration list`: local and remote columns must match row for row.
+
 Security tests (HAN-46, both run in CI):
 
 ```bash
