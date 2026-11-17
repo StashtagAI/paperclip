@@ -61,6 +61,19 @@ describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
     }
   });
 
+  // Text links ("Notes & photos ›", "Edit") and the rating stars (HAN-45) on cards, the page and the selected card.
+  it('link text on background, cards and the selected card', () => {
+    for (const bg of [c.background, c.backgroundElement, c.backgroundSelected]) {
+      expect(contrast(c.link, bg)).toBeGreaterThanOrEqual(AA);
+    }
+  });
+
+  it('tint icons and borders on background and cards (3:1)', () => {
+    for (const bg of [c.background, c.backgroundElement, c.backgroundSelected]) {
+      expect(contrast(c.tint, bg)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it('primary button label on tint', () => {
     expect(contrast(c.onTint, c.tint)).toBeGreaterThanOrEqual(AA);
   });
@@ -73,5 +86,25 @@ describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
       expect(contrast(c.textSecondary, bg)).toBeGreaterThanOrEqual(3);
     }
     expect(contrast(c.success, c.border)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('destructive button label on danger', () => {
+    expect(contrast(c.onDanger, c.danger)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it('toast: background-coloured text on a text-coloured fill', () => {
+    expect(contrast(c.background, c.text)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it('selected option on its fill', () => {
+    expect(contrast(c.text, c.backgroundSelected)).toBeGreaterThanOrEqual(AA);
+    expect(contrast(c.tint, c.backgroundSelected)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('success text, and step icons (3:1) on background and cards (HAN-42)', () => {
+    for (const bg of [c.background, c.backgroundElement]) {
+      expect(contrast(c.success, bg)).toBeGreaterThanOrEqual(AA);
+      for (const icon of [c.tint, c.success, c.textSecondary]) expect(contrast(icon, bg)).toBeGreaterThanOrEqual(3);
+    }
   });
 });

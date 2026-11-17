@@ -2,6 +2,7 @@ import { router, Stack, usePathname } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { useEffect } from 'react';
 
+import { useNudges } from '@/hooks/use-nudges';
 import { useTheme } from '@/hooks/use-theme';
 import { KIND_LABELS, KINDS, type Kind } from '@/lib/types';
 
@@ -15,6 +16,7 @@ export default function AppLayout() {
   useEffect(() => {
     if (hasShareIntent && pathname !== '/share') router.push('/share');
   }, [hasShareIntent, pathname]);
+  useNudges();
   return (
     <Stack
       screenOptions={{
@@ -41,6 +43,18 @@ export default function AppLayout() {
       <Stack.Screen name="share" options={{ headerShown: false }} />
       <Stack.Screen name="capture/[linkId]" options={{ title: '' }} />
       <Stack.Screen name="card/[linkId]" options={{ title: '' }} />
+      <Stack.Screen name="item/[itemId]" options={{ title: '' }} />
+      <Stack.Screen name="sample" options={{ title: 'Example card' }} />
+      <Stack.Screen name="nudges" options={{ title: 'Nudges' }} />
+      <Stack.Screen name="profile" options={{ title: 'Profile' }} />
+      <Stack.Screen
+        name="feedback"
+        options={{ title: 'Send feedback', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.75, 1] }}
+      />
+      <Stack.Screen
+        name="delete-account"
+        options={{ title: 'Delete account', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.6, 1] }}
+      />
       <Stack.Screen
         name="stash"
         options={{ title: 'Stash a link', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.7, 1] }}

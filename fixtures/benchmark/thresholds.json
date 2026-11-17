@@ -1,0 +1,10 @@
+{
+ "_comment": "CI fails if a live run scores below these. Raise as the pipeline improves; never lower without a note on the PR.",
+ "item_recall": 0.7,
+ "empty_correct": 1.0,
+ "forbidden_items": 0,
+ "invented_addresses": 0,
+ "category_pass": 0.8,
+ "scope_pass": 0.8,
+ "reason_pass": 0.7
+}

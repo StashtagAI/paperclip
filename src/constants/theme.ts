@@ -24,8 +24,12 @@ export const Colors = {
     backgroundSelected: '#E4EEFB',
     border: '#D5E3F5',
     tint: L.cobalt,
+    /** Tint-coloured text (links, rating stars): Cobalt is only 4.4:1 on Mist and 3.9:1 on the selected card. */
+    link: '#1A64D6',
     onTint: L.white,
     danger: '#C9252B',
+    /** Text on a `danger` fill, e.g. the Delete account button. */
+    onDanger: L.white,
     success: '#0A7A55',
     /** Check mark drawn on a `success` fill (HAN-41). */
     onSuccess: L.white,
@@ -39,9 +43,12 @@ export const Colors = {
     backgroundSelected: '#1B3048',
     border: '#1F3550',
     tint: D.cobalt,
+    link: D.cobalt,
     // White on dark Cobalt is only 2.8:1, so primary buttons use Night text in dark mode.
     onTint: D.night,
     danger: '#FF6B6B',
+    // White on the light red is 2.8:1, so dark mode uses Night, like onTint.
+    onDanger: D.night,
     success: D.mint,
     onSuccess: D.night,
   },

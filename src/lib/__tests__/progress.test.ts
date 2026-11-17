@@ -1,23 +1,40 @@
-import { doneAnnouncement, progressText } from '@/lib/progress';
+import { currentStep, STEPS, stepAnnouncement } from '@/lib/progress';
+import type { LinkDetail } from '@/lib/types';
 
-describe('progressText', () => {
-  it('counts with the kind verb', () => {
-    expect(progressText('eats', 3, 8)).toBe('3 of 8 tried');
-    expect(progressText('trips', 1, 2)).toBe('1 of 2 visited');
-    expect(progressText('recipes', 2, 5)).toBe('2 of 5 cooked');
-    expect(progressText('do', 4, 9)).toBe('4 of 9 done');
+const link = (status: LinkDetail['status'], raw_content: LinkDetail['raw_content'] = null) => ({ status, raw_content });
+
+describe('currentStep', () => {
+  it('starts at reading after Stash it and at finding after the capture screen', () => {
+    expect(currentStep(link('pending'), true, 'read')).toBe('reading');
+    expect(currentStep(link('pending'), true, '1')).toBe('finding');
   });
 
-  it('says none and all in words', () => {
-    expect(progressText('eats', 0, 8)).toBe('None tried yet');
-    expect(progressText('recipes', 8, 8)).toBe('All 8 cooked');
-    expect(progressText('trips', 1, 1)).toBe('All visited');
+  it('is null for a pending link nobody is sending (waiting for text)', () => {
+    expect(currentStep(link('pending'), false, 'read')).toBeNull();
+    expect(currentStep(link('pending'), false)).toBeNull();
+  });
+
+  it('follows the stage process-link writes', () => {
+    expect(currentStep(link('processing', { reading: true, stage: 'reading' }), false)).toBe('reading');
+    expect(currentStep(link('processing', { reading: false, stage: 'finding' }), false)).toBe('finding');
+    expect(currentStep(link('processing', { stage: 'filing' }), false)).toBe('filing');
+  });
+
+  it('falls back for rows without a stage', () => {
+    expect(currentStep(link('processing', { reading: true }), false)).toBe('reading');
+    expect(currentStep(link('processing'), false)).toBe('finding');
+    expect(currentStep(link('processing', { stage: 'bogus' as never }), false)).toBe('finding');
+  });
+
+  it('is null once the card is done or failed', () => {
+    expect(currentStep(link('done', { stage: 'filing' }), true, 'read')).toBeNull();
+    expect(currentStep(link('failed'), true, 'read')).toBeNull();
   });
 });
 
-describe('doneAnnouncement', () => {
-  it('names the item and the new progress', () => {
-    expect(doneAnnouncement('eats', 'Odd Fellows', true, 3, 8)).toBe('Marked Odd Fellows tried. 3 of 8 tried.');
-    expect(doneAnnouncement('recipes', 'Dal', false, 0, 4)).toBe('Dal no longer marked cooked. None cooked yet.');
+describe('stepAnnouncement', () => {
+  it('says which step of how many', () => {
+    expect(stepAnnouncement('reading')).toBe(`Step 2 of ${STEPS.length}: Reading the post`);
+    expect(stepAnnouncement('filing')).toBe(`Step 4 of ${STEPS.length}: Sorting them into your lists`);
   });
 });
