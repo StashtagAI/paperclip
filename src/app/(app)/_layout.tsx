@@ -2,7 +2,11 @@ import { router, Stack, usePathname } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { useEffect } from 'react';
 
+import { useNudges } from '@/hooks/use-nudges';
 import { useTheme } from '@/hooks/use-theme';
+import { KIND_LABELS, KINDS, type Kind } from '@/lib/types';
+
+const kindLabel = (kind?: string) => ((KINDS as readonly string[]).includes(kind ?? '') ? KIND_LABELS[kind as Kind] : '');
 
 export default function AppLayout() {
   const theme = useTheme();
@@ -12,6 +16,7 @@ export default function AppLayout() {
   useEffect(() => {
     if (hasShareIntent && pathname !== '/share') router.push('/share');
   }, [hasShareIntent, pathname]);
+  useNudges();
   return (
     <Stack
       screenOptions={{
@@ -24,11 +29,23 @@ export default function AppLayout() {
         contentStyle: { backgroundColor: theme.background },
       }}>
       <Stack.Screen name="index" options={{ headerShown: false, title: 'Your stash' }} />
-      <Stack.Screen name="kind/[kind]" options={{ title: '', headerLargeTitle: true }} />
+      {/* Title set here, not via <Stack.Screen> in the screen, so the large title exists from the first frame.
+          No header background: on iOS 26 a background color with a large title hides the title after going back (HAN-31). */}
+      <Stack.Screen
+        name="kind/[kind]"
+        options={({ route }) => ({
+          title: kindLabel((route.params as { kind?: string } | undefined)?.kind),
+          headerLargeTitle: true,
+          headerStyle: {},
+        })}
+      />
       <Stack.Screen name="list/[listId]" options={{ title: '' }} />
       <Stack.Screen name="share" options={{ headerShown: false }} />
       <Stack.Screen name="capture/[linkId]" options={{ title: '' }} />
       <Stack.Screen name="card/[linkId]" options={{ title: '' }} />
+      <Stack.Screen name="item/[itemId]" options={{ title: '' }} />
+      <Stack.Screen name="sample" options={{ title: 'Example card' }} />
+      <Stack.Screen name="nudges" options={{ title: 'Nudges' }} />
       <Stack.Screen name="profile" options={{ title: 'Profile' }} />
       <Stack.Screen
         name="feedback"

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { toError } from '@/lib/errors';
+
 type AsyncState<T> = { data: T | undefined; error: Error | undefined; loading: boolean };
 
 /** Minimal fetch-on-mount hook with manual refresh; enough for a single-user beta. */
@@ -14,7 +16,7 @@ export function useAsync<T>(load: () => Promise<T>, deps: readonly unknown[]) {
     try {
       setState({ data: await run(), error: undefined, loading: false });
     } catch (e) {
-      setState((s) => ({ ...s, error: e instanceof Error ? e : new Error(String(e)), loading: false }));
+      setState((s) => ({ ...s, error: toError(e), loading: false }));
     }
   }, [run]);
 
