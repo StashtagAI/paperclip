@@ -45,3 +45,8 @@ example
 
 # agent tooling
 .claude/
+
+# Supabase CLI scratch files (can be root-owned when the CLI runs Docker;
+# EAS uploads anything not ignored, so keep these out of build tarballs)
+/supabase/.temp
+/supabase/.branches
