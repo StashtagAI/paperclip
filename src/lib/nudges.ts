@@ -160,15 +160,36 @@ export type DigestPick = { id: string; name: string; listId: string; listName: s
 
 export type DigestStats = { total: number; picks: DigestPick[] };
 
-/** Sunday 10:00 local, the digest's slot. */
-export const DIGEST_WEEKDAY = 0;
-export const DIGEST_HOUR = 10;
+/** When the digest arrives, local time: weekday 0 = Sunday, minutes after midnight. The user picks it. */
+export type DigestSlot = { weekday: number; minutes: number };
+
+export const DEFAULT_DIGEST_SLOT: DigestSlot = { weekday: 0, minutes: 10 * 60 };
+export const DIGEST_STEP_MINUTES = 30;
+const LAST_MINUTES = 24 * 60 - DIGEST_STEP_MINUTES;
+
+export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+
+/** Moves the time by `steps` half hours, staying within the same day. */
+export function shiftDigestMinutes(minutes: number, steps: number): number {
+  return Math.min(LAST_MINUTES, Math.max(0, minutes + steps * DIGEST_STEP_MINUTES));
+}
+
+/** "10 am", "6:30 pm", "12 pm" (noon), "12 am" (midnight). */
+export function formatDigestTime(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'am' : 'pm'}`;
+}
+
+/** "Sunday at 10 am". */
+export const formatDigestSlot = (slot: DigestSlot) => `${WEEKDAYS[slot.weekday]} at ${formatDigestTime(slot.minutes)}`;
 
 /** The next `count` digest times strictly after `now`. */
-export function nextDigestDates(now: Date, count: number): Date[] {
+export function nextDigestDates(now: Date, count: number, slot: DigestSlot = DEFAULT_DIGEST_SLOT): Date[] {
   const first = new Date(now);
-  first.setHours(DIGEST_HOUR, 0, 0, 0);
-  first.setDate(first.getDate() + ((DIGEST_WEEKDAY - first.getDay() + 7) % 7));
+  first.setHours(Math.floor(slot.minutes / 60), slot.minutes % 60, 0, 0);
+  first.setDate(first.getDate() + ((slot.weekday - first.getDay() + 7) % 7));
   if (first <= now) first.setDate(first.getDate() + 7);
   return Array.from({ length: count }, (_, i) => {
     const d = new Date(first);

@@ -10,6 +10,7 @@ import {
   ANCHOR_REGION_ID,
   canNudge,
   clusterPlaces,
+  DEFAULT_DIGEST_SLOT,
   digestMessage,
   distanceM,
   emptyHistory,
@@ -17,6 +18,7 @@ import {
   nextDigestDates,
   planRegions,
   recordNudge,
+  type DigestSlot,
   type NudgeHistory,
   type NudgeMessage,
   type PlaceCluster,
@@ -26,14 +28,14 @@ import { supabase } from '@/lib/supabase';
 /**
  * Smart nudges on iOS and Android (HAN-43). Both are opt-in and per device:
  * - nearby: geofences around clusters of saved places; entering one sends a local notification.
- * - digest: a local notification every Sunday morning, rescheduled with fresh numbers whenever the app opens.
+ * - digest: a local notification once a week at a day and time you pick (Sunday 10 am by default), rescheduled with fresh numbers whenever the app opens.
  * Nothing leaves the phone: saved places are cached in AsyncStorage so the background task works offline.
  * Import this file from the root layout so the geofencing task is defined before the app can be woken for it.
  */
 
 export const nudgesSupported = true;
 
-export type NudgeSettings = { nearby: boolean; digest: boolean };
+export type NudgeSettings = { nearby: boolean; digest: boolean; digestSlot: DigestSlot };
 
 /** What turning a nudge on ended up as; anything but 'on' leaves it off. */
 export type EnableResult = 'on' | 'notifications-denied' | 'location-denied' | 'background-denied';
@@ -62,7 +64,13 @@ async function readJson<T>(key: string, fallback: T): Promise<T> {
 
 const writeJson = (key: string, value: unknown) => AsyncStorage.setItem(key, JSON.stringify(value));
 
-export const getNudgeSettings = () => readJson<NudgeSettings>(KEYS.settings, { nearby: false, digest: false });
+const DEFAULT_SETTINGS: NudgeSettings = { nearby: false, digest: false, digestSlot: DEFAULT_DIGEST_SLOT };
+
+// Settings saved before the digest time was adjustable have no digestSlot.
+export const getNudgeSettings = async (): Promise<NudgeSettings> => ({
+  ...DEFAULT_SETTINGS,
+  ...(await readJson<Partial<NudgeSettings>>(KEYS.settings, {})),
+});
 
 async function setSetting(patch: Partial<NudgeSettings>) {
   await writeJson(KEYS.settings, { ...(await getNudgeSettings()), ...patch });
@@ -151,9 +159,9 @@ async function syncNearby() {
 }
 
 async function syncDigest() {
-  const stats = await fetchDigestStats();
+  const [stats, { digestSlot }] = await Promise.all([fetchDigestStats(), getNudgeSettings()]);
   await cancelDigest();
-  const dates = nextDigestDates(new Date(), DIGEST_WEEKS);
+  const dates = nextDigestDates(new Date(), DIGEST_WEEKS, digestSlot);
   for (const [week, date] of dates.entries()) {
     const message = digestMessage(stats, date, week);
     if (!message) continue;
@@ -201,6 +209,13 @@ export async function enableDigest(): Promise<EnableResult> {
 export async function disableDigest() {
   await setSetting({ digest: false });
   await cancelDigest();
+}
+
+/** Saves when the digest arrives and, if it's on and allowed, reschedules it. */
+export async function setDigestSlot(digestSlot: DigestSlot) {
+  await setSetting({ digestSlot });
+  const settings = await getNudgeSettings();
+  if (settings.digest && (await Notifications.getPermissionsAsync()).granted) await syncDigest();
 }
 
 let lastSync = 0;

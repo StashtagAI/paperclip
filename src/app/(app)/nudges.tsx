@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Linking, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -15,8 +15,10 @@ import {
   enableNearby,
   getNudgeStatus,
   nudgesSupported,
+  setDigestSlot,
   type EnableResult,
 } from '@/lib/nudge-service';
+import { formatDigestSlot, formatDigestTime, shiftDigestMinutes, WEEKDAYS, type DigestSlot } from '@/lib/nudges';
 
 const DENIED: Record<Exclude<EnableResult, 'on'>, string> = {
   'notifications-denied': 'Stashtag isn’t allowed to send notifications. Turn them on in Settings, then try again.',
@@ -105,11 +107,12 @@ export default function NudgesScreen() {
 
           <ToggleRow
             title="Weekly digest"
-            detail="Sunday at 10 am: how much you saved that week and one thing from your stash to try."
+            detail={`${formatDigestSlot(s.digestSlot)}: how much you saved that week and one thing from your stash to try.`}
             value={s.digest}
             busy={busy === 'digest'}
             onChange={(on) => toggle('digest', on)}
           />
+          {s.digest ? <DigestWhen saved={s.digestSlot} onSaved={refresh} onError={setProblem} /> : null}
           {digestBlocked ? <Blocked message="The weekly digest is paused: notifications are off for Stashtag." /> : null}
         </>
       )}
@@ -165,6 +168,122 @@ function ToggleRow({ title, detail, value, busy, onChange }: ToggleRowProps) {
   );
 }
 
+type DigestWhenProps = { saved: DigestSlot; onSaved: () => void; onError: (message: string) => void };
+
+/**
+ * Day and time of the weekly digest. Changes show at once and are saved (and the digest rescheduled) after a short
+ * pause, so stepping the time several times reschedules once.
+ */
+function DigestWhen({ saved, onSaved, onError }: DigestWhenProps) {
+  const theme = useTheme();
+  const [slot, setSlot] = useState(saved);
+  const pending = useRef<{ slot: DigestSlot; timer: ReturnType<typeof setTimeout> } | null>(null);
+
+  const save = useCallback(
+    async (next: DigestSlot) => {
+      pending.current = null;
+      try {
+        await setDigestSlot(next);
+        AccessibilityInfo.announceForAccessibility(`Weekly digest set for ${formatDigestSlot(next)}`);
+        onSaved();
+      } catch (e) {
+        const message = `Couldn’t change the digest time: ${e instanceof Error ? e.message : String(e)}`;
+        onError(message);
+        AccessibilityInfo.announceForAccessibility(message);
+      }
+    },
+    [onSaved, onError],
+  );
+
+  // Leaving the screen mid-pause still saves.
+  useEffect(
+    () => () => {
+      if (!pending.current) return;
+      clearTimeout(pending.current.timer);
+      setDigestSlot(pending.current.slot).catch(() => {});
+    },
+    [],
+  );
+
+  const change = (next: DigestSlot) => {
+    setSlot(next);
+    if (pending.current) clearTimeout(pending.current.timer);
+    pending.current = { slot: next, timer: setTimeout(() => save(next), 800) };
+  };
+
+  const time = formatDigestTime(slot.minutes);
+  const earlier = shiftDigestMinutes(slot.minutes, -1);
+  const later = shiftDigestMinutes(slot.minutes, 1);
+
+  return (
+    <View style={styles.when}>
+      <ThemedText type="smallBold" themeColor="textSecondary" accessibilityRole="header">
+        Digest day
+      </ThemedText>
+      <View accessibilityRole="radiogroup" accessibilityLabel="Digest day" style={styles.chips}>
+        {WEEKDAYS.map((day, weekday) => {
+          const selected = slot.weekday === weekday;
+          return (
+            <Pressable
+              key={day}
+              accessibilityRole="radio"
+              aria-checked={selected}
+              accessibilityLabel={day}
+              onPress={() => change({ ...slot, weekday })}
+              style={({ pressed }) => [
+                styles.chip,
+                {
+                  backgroundColor: selected ? theme.backgroundSelected : theme.backgroundElement,
+                  borderColor: selected ? theme.tint : theme.border,
+                  borderWidth: selected ? 2 : StyleSheet.hairlineWidth * 2,
+                },
+                pressed && styles.pressed,
+              ]}>
+              <ThemedText type={selected ? 'smallBold' : 'small'}>
+                {selected ? '✓ ' : ''}
+                {day.slice(0, 3)}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <ThemedText type="smallBold" themeColor="textSecondary" accessibilityRole="header">
+        Digest time
+      </ThemedText>
+      <View style={styles.stepper}>
+        <Button
+          title="Earlier"
+          variant="secondary"
+          accessibilityHint="Moves the digest 30 minutes earlier"
+          disabled={earlier === slot.minutes}
+          onPress={() => change({ ...slot, minutes: earlier })}
+        />
+        {/* Swipe up or down with VoiceOver/TalkBack to change the time without the buttons. */}
+        <View
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel="Digest time"
+          accessibilityValue={{ text: time }}
+          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+          onAccessibilityAction={({ nativeEvent }) =>
+            change({ ...slot, minutes: nativeEvent.actionName === 'increment' ? later : earlier })
+          }
+          style={styles.time}>
+          <ThemedText type="defaultBold">{time}</ThemedText>
+        </View>
+        <Button
+          title="Later"
+          variant="secondary"
+          accessibilityHint="Moves the digest 30 minutes later"
+          disabled={later === slot.minutes}
+          onPress={() => change({ ...slot, minutes: later })}
+        />
+      </View>
+    </View>
+  );
+}
+
 function Blocked({ message }: { message: string }) {
   return (
     <View style={styles.problem}>
@@ -189,4 +308,16 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, gap: Spacing.one },
   pressed: { opacity: 0.7 },
   problem: { gap: Spacing.two },
+  when: { gap: Spacing.two },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  chip: {
+    minHeight: 48,
+    minWidth: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.chip,
+  },
+  stepper: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.three },
+  time: { minHeight: 48, minWidth: 96, alignItems: 'center', justifyContent: 'center' },
 });

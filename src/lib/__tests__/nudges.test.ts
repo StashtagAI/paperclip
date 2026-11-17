@@ -8,7 +8,10 @@ import {
   MAX_REGIONS,
   nameList,
   nearbyMessage,
+  formatDigestSlot,
+  formatDigestTime,
   nextDigestDates,
+  shiftDigestMinutes,
   planRegions,
   recordNudge,
   type NudgePlace,
@@ -146,6 +149,25 @@ describe('weekly digest', () => {
     expect(second).toEqual(new Date(2026, 10, 22, 10, 0));
     expect(nextDigestDates(new Date(2026, 10, 15, 10, 0), 1)[0]).toEqual(new Date(2026, 10, 22, 10, 0));
     expect(nextDigestDates(new Date(2026, 10, 15, 9, 59), 1)[0]).toEqual(new Date(2026, 10, 15, 10, 0));
+  });
+
+  it('uses the chosen day and time', () => {
+    const thu = new Date(2026, 10, 12, 9, 0);
+    const monday = { weekday: 1, minutes: 18 * 60 + 30 };
+    expect(nextDigestDates(thu, 2, monday)).toEqual([new Date(2026, 10, 16, 18, 30), new Date(2026, 10, 23, 18, 30)]);
+    // Same day, later today vs. already passed.
+    expect(nextDigestDates(thu, 1, { weekday: 4, minutes: 9 * 60 + 30 })[0]).toEqual(new Date(2026, 10, 12, 9, 30));
+    expect(nextDigestDates(thu, 1, { weekday: 4, minutes: 8 * 60 })[0]).toEqual(new Date(2026, 10, 19, 8, 0));
+  });
+
+  it('steps the time by half hours within the day and formats it', () => {
+    expect(shiftDigestMinutes(600, 1)).toBe(630);
+    expect(shiftDigestMinutes(0, -1)).toBe(0);
+    expect(shiftDigestMinutes(23 * 60 + 30, 1)).toBe(23 * 60 + 30);
+    expect(formatDigestTime(0)).toBe('12 am');
+    expect(formatDigestTime(12 * 60)).toBe('12 pm');
+    expect(formatDigestTime(18 * 60 + 30)).toBe('6:30 pm');
+    expect(formatDigestSlot({ weekday: 0, minutes: 600 })).toBe('Sunday at 10 am');
   });
 
   const at = new Date(2026, 10, 15, 10, 0);
