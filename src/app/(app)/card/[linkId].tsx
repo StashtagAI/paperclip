@@ -12,7 +12,8 @@ import { useAsync } from '@/hooks/use-async';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import { useTheme } from '@/hooks/use-theme';
 import { announce } from '@/lib/announce';
-import { deleteItem, deleteLink, fetchLink, fetchLinkItems, rateLink, subscribeToLink } from '@/lib/data';
+import { buildCard, deleteItem, deleteLink, fetchLink, fetchLinkItems, rateLink, subscribeToLink } from '@/lib/data';
+import { FAILED_TITLE, failureReason, NOT_STARTED, retryAction, START_TIMEOUT_MS } from '@/lib/link-outcome';
 import type { FieldSource, LinkDetail, LinkItem, LinkStatus, RawContent } from '@/lib/types';
 import { KIND_LABELS } from '@/lib/types';
 import { confirmDestructive } from '@/lib/confirm';
@@ -22,7 +23,7 @@ const STATUS_COPY: Record<LinkStatus, string> = {
   pending: 'Waiting for what the post says',
   processing: 'Building your card…',
   done: 'Filed',
-  failed: 'Couldn’t build this card',
+  failed: FAILED_TITLE,
 };
 
 /** Fields the model took from the text: a fetched caption (HAN-18) or text captured on the phone. */
@@ -36,26 +37,14 @@ const SOURCE_COPY: Record<FieldSource, string> = {
   search: 'from web search',
 };
 
-const ERROR_COPY: Record<string, string> = {
-  no_captured_text: 'No text reached the server. Add a screenshot or paste the caption.',
-  no_items_found: 'No places, recipes or things to do were named in the text.',
-  timeout: 'This took too long and was stopped.',
-  url_not_allowed: 'Only Instagram and TikTok links are supported.',
-  // Usage limits (HAN-37)
-  rate_limited: 'You’ve added a lot of links in the last hour. Try this one again in a little while.',
-  daily_limit: 'Today’s limit for building cards is reached. Try this one again tomorrow.',
-  run_budget: 'This post needed more lookups than one card is allowed. Try adding less text.',
-  quota_unavailable: 'Something went wrong on our side. Try again in a minute.',
-};
-
 /**
  * Review (HAN-11 step 4): live status while process-link runs, then the card with each field's source so wrong items
  * can be removed. Status updates arrive over Supabase Realtime.
  */
 export default function CardScreen() {
   // `sent` = we just came from Build card ("1") or Stash it ("read"), so a still-"pending" row means the request is on
-  // its way.
-  const { linkId, sent } = useLocalSearchParams<{ linkId: string; sent?: string }>();
+  // its way. `retry` = Try again on Home: send it again as soon as the card opens.
+  const { linkId, sent, retry: retryParam } = useLocalSearchParams<{ linkId: string; sent?: string; retry?: string }>();
   const load = useAsync(() => Promise.all([fetchLink(linkId), fetchLinkItems(linkId)]), [linkId]);
   const { refresh } = load;
   useEffect(() => subscribeToLink(linkId, refresh), [linkId, refresh]);
@@ -65,9 +54,71 @@ export default function CardScreen() {
   const first = items?.[0];
   // After Stash it, "needs_capture" is the reply; after Build card it's the row's old state until the claim lands.
   const needsCapture = sent === 'read' && link?.status === 'pending' && link.error === 'needs_capture';
-  const sending = !!sent && link?.status === 'pending' && !needsCapture;
-  const step = link ? currentStep(link, sending, sent) : null;
-  const outcome = link ? outcomeCopy(link, items ?? []) : null;
+  // A run this screen started with Try again (HAN-77); the row reads "failed" until process-link claims it.
+  const [retrying, setRetrying] = useState(false);
+  // NOT_STARTED once the request is given up on (the row never left "pending", or Try again couldn't reach the server).
+  const [localError, setLocalError] = useState<string | null>(null);
+  const sending = retrying || (!!sent && link?.status === 'pending' && !needsCapture && !localError);
+  const step =
+    link && retrying && (link.status === 'pending' || link.status === 'failed')
+      ? 'reading'
+      : link
+        ? currentStep(link, sending, sent)
+        : null;
+  const failure = localError ?? (link?.status === 'failed' && !retrying ? (link.error ?? '') : null);
+  const outcome = link ? outcomeCopy(link, items ?? [], failure) : null;
+  const tryAgain = link && failure != null ? retryAction(link.status, failure, sent) : null;
+
+  // Pending rows are never swept on the server, so a request that never arrived would show "Reading the post" forever.
+  // Same for Try again: until process-link claims the row it still reads "failed" (or "pending").
+  const awaitingClaim =
+    !localError &&
+    (retrying
+      ? link?.status === 'pending' || link?.status === 'failed'
+      : !!sent && link?.status === 'pending' && !needsCapture);
+  useEffect(() => {
+    if (!awaitingClaim) return;
+    const timer = setTimeout(() => {
+      setRetrying(false);
+      setLocalError(NOT_STARTED);
+    }, START_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [awaitingClaim]);
+  // The request got through after all.
+  const status = link?.status;
+  const [seenStatus, setSeenStatus] = useState(status);
+  if (status !== seenStatus) {
+    setSeenStatus(status);
+    if (status === 'processing' || status === 'done') setLocalError(null);
+  }
+
+  async function retry() {
+    if (tryAgain === 'capture') return router.replace({ pathname: '/capture/[linkId]', params: { linkId } });
+    setLocalError(null);
+    setRetrying(true);
+    // "read": if the caption can't be read this time either, the needs_capture reply moves on to the capture screen.
+    router.setParams({ sent: 'read', retry: undefined });
+    try {
+      await buildCard(linkId);
+      // The server answered (maybe after the timeout above), so the row now says how it went.
+      setLocalError(null);
+    } catch (e) {
+      console.warn('[process-link]', (e as Error).message);
+      setLocalError(NOT_STARTED);
+    } finally {
+      setRetrying(false);
+      refresh();
+    }
+  }
+
+  const autoRetried = useRef(false);
+  useEffect(() => {
+    if (retryParam && tryAgain && !autoRetried.current) {
+      autoRetried.current = true;
+      retry();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryParam, tryAgain]);
 
   // Read out each step, then how it ended, but only for a card built while the screen was open (HAN-42).
   const [justFinished, setJustFinished] = useState(false);
@@ -119,9 +170,16 @@ export default function CardScreen() {
               onPress={() => router.dismissTo('/stash')}
             />
           </View>
-        ) : link?.status === 'failed' || (link?.status === 'pending' && !sending) ? (
+        ) : tryAgain ? (
           <Button
-            title={link.status === 'failed' ? 'Try again' : 'Add what the post says'}
+            title={tryAgain === 'rerun' ? 'Try again' : 'Add what the post says'}
+            accessibilityHint={tryAgain === 'rerun' ? 'Reads the post again and builds the card' : undefined}
+            size="large"
+            onPress={retry}
+          />
+        ) : link?.status === 'pending' && !sending && failure == null ? (
+          <Button
+            title="Add what the post says"
             size="large"
             onPress={() => router.replace({ pathname: '/capture/[linkId]', params: { linkId } })}
           />
@@ -132,7 +190,13 @@ export default function CardScreen() {
       {!link ? (
         <ActivityIndicator />
       ) : (
-        <StatusBanner link={link} step={step} outcome={outcome} celebrate={justFinished && link.status === 'done'} />
+        <StatusBanner
+          link={link}
+          step={step}
+          outcome={outcome}
+          failure={failure}
+          celebrate={justFinished && link.status === 'done'}
+        />
       )}
 
       {first ? (
@@ -161,12 +225,12 @@ export default function CardScreen() {
   );
 }
 
-/** "Filed 3 items in Brunch › Lisbon": the banner headline once a card is done or failed, also read out. */
-function outcomeCopy(link: LinkDetail, items: LinkItem[]): string | null {
-  if (link.status === 'failed') {
-    const why = link.error ? (ERROR_COPY[link.error] ?? link.error) : '';
-    return why ? `${STATUS_COPY.failed}. ${why}` : STATUS_COPY.failed;
-  }
+/**
+ * "Filed 3 items in Brunch › Lisbon": the banner headline once a card is done or failed, also read out. `failure` is the
+ * error code when the card is shown as failed (by the server, or because the request never got there), else null.
+ */
+function outcomeCopy(link: LinkDetail, items: LinkItem[], failure: string | null): string | null {
+  if (failure != null) return `${STATUS_COPY.failed}. ${failureReason(failure)}`;
   if (link.status !== 'done') return null;
   const first = items[0];
   if (!first) return link.raw_content?.unsorted ? 'Filed, but nothing could be sorted into a list' : STATUS_COPY.done;
@@ -175,46 +239,65 @@ function outcomeCopy(link: LinkDetail, items: LinkItem[]): string | null {
 }
 
 /**
- * While the card is being built: "Step 2 of 4: …" and the steps. Afterwards: how it ended. The headline is a polite
- * live region so TalkBack and web screen readers hear changes; VoiceOver gets the same words from `announce`.
+ * While the card is being built: "Step 2 of 4: …" and the steps. Afterwards: how it ended. The headline and reason sit
+ * in one polite live region that stays mounted from the first step to the outcome, so TalkBack and web screen readers
+ * hear each change; VoiceOver gets the same words from `announce`.
  */
 function StatusBanner({
   link,
   step,
   outcome,
+  failure,
   celebrate,
 }: {
   link: LinkDetail;
   step: StepKey | null;
   outcome: string | null;
+  failure: string | null;
   celebrate: boolean;
 }) {
   const theme = useTheme();
-  const color = link.status === 'failed' ? theme.danger : link.status === 'done' ? theme.success : theme.textSecondary;
-  const detail = link.status === 'failed' && link.error ? (ERROR_COPY[link.error] ?? link.error) : null;
-  if (step) {
-    return (
-      <View style={[styles.banner, styles.steps, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-        <ThemedText type="smallBold" themeColor="textSecondary" accessibilityLiveRegion="polite">
-          {stepAnnouncement(step)}
-        </ThemedText>
-        <ProgressSteps current={step} />
-      </View>
-    );
-  }
+  const failed = failure != null;
+  const color = failed ? theme.danger : link.status === 'done' ? theme.success : theme.textSecondary;
+  const headline = step
+    ? stepAnnouncement(step)
+    : failed
+      ? STATUS_COPY.failed
+      : (outcome ?? STATUS_COPY[link.status]);
   return (
-    <View style={[styles.banner, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      {link.status === 'done' ? <DoneMark color={theme.success} pop={celebrate} /> : null}
-      <View style={styles.flex}>
-        <ThemedText type="defaultBold" style={{ color }} accessibilityLiveRegion="polite">
-          {link.status === 'failed' ? STATUS_COPY.failed : (outcome ?? STATUS_COPY[link.status])}
+    <View
+      style={[
+        styles.banner,
+        step && styles.steps,
+        { backgroundColor: theme.backgroundElement, borderColor: failed ? theme.danger : theme.border },
+      ]}>
+      {!step && link.status === 'done' ? <DoneMark color={theme.success} pop={celebrate} /> : null}
+      {!step && failed ? <FailedMark color={theme.danger} /> : null}
+      <View style={step ? undefined : styles.flex} accessibilityLiveRegion="polite">
+        <ThemedText type={step ? 'smallBold' : 'defaultBold'} style={{ color }}>
+          {headline}
         </ThemedText>
-        {detail ? (
-          <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
-            {detail}
+        {!step && failed ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {failureReason(failure)}
           </ThemedText>
         ) : null}
       </View>
+      {step ? <ProgressSteps current={step} /> : null}
+    </View>
+  );
+}
+
+/** The failed mark next to the headline. Decorative: the headline already says it failed, so colour isn't the signal. */
+function FailedMark({ color }: { color: string }) {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <SymbolView
+        name={{ ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' }}
+        tintColor={color}
+        size={28}
+        weight="semibold"
+      />
     </View>
   );
 }

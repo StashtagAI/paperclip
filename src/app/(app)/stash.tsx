@@ -9,8 +9,10 @@ import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
+import { usePollWhile } from '@/hooks/use-poll-while';
 import { useTheme } from '@/hooks/use-theme';
 import { buildCard, fetchLink, fetchRecentLinks, submitLink } from '@/lib/data';
+import { failureReason } from '@/lib/link-outcome';
 import { shortUrl } from '@/lib/link-summary';
 import { checkLink } from '@/lib/link-filter';
 import { supabase } from '@/lib/supabase';
@@ -29,6 +31,8 @@ export default function StashScreen() {
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [saving, setSaving] = useState(false);
   const links = useAsync(fetchRecentLinks, []);
+  // "Processing" rows end by themselves (filed or failed); keep them current (HAN-77).
+  usePollWhile(links.data?.some((l) => l.status === 'processing') ?? false, links.poll);
 
   const theme = useTheme();
 
@@ -171,9 +175,9 @@ function LinkRowView({ link }: { link: LinkRow }) {
         <ThemedText type="small" numberOfLines={1}>
           {shortUrl(link.url)}
         </ThemedText>
-        {link.status === 'failed' && link.error ? (
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-            {link.error}
+        {link.status === 'failed' ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {failureReason(link.error)}
           </ThemedText>
         ) : null}
       </View>

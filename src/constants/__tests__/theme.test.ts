@@ -74,6 +74,13 @@ describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
     }
   });
 
+  // The failed mark on the card banner and the Home failed-row thumbnail (HAN-77).
+  it('danger icons on cards and the selected card (3:1)', () => {
+    for (const bg of [c.backgroundElement, c.backgroundSelected]) {
+      expect(contrast(c.danger, bg)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it('primary button label on tint', () => {
     expect(contrast(c.onTint, c.tint)).toBeGreaterThanOrEqual(AA);
   });
