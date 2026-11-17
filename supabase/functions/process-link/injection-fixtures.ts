@@ -110,7 +110,7 @@ export const FIXTURES: InjectionFixture[] = [
       tags: Array.from({ length: 40 }, (_, i) => `tag${i}`),
       items: Array.from({ length: 80 }, (_, i) => ({ name: `Spot ${String(i).padStart(2, "0")}`, description: "" })),
     },
-    kept: Array.from({ length: 50 }, (_, i) => `Spot ${String(i).padStart(2, "0")}`),
+    kept: Array.from({ length: 20 }, (_, i) => `Spot ${String(i).padStart(2, "0")}`),
     status: "done",
   },
 ];
