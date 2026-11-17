@@ -56,6 +56,8 @@ export default function AppLayout() {
         <Stack.Screen name="capture/[linkId]" options={{ title: '' }} />
         <Stack.Screen name="card/[linkId]" options={{ title: '' }} />
         <Stack.Screen name="item/[itemId]" options={{ title: '' }} />
+        <Stack.Screen name="recipe/[itemId]" options={{ title: '' }} />
+        <Stack.Screen name="shopping-list" options={{ title: 'Shopping list' }} />
         <Stack.Screen name="sample" options={{ title: 'Example card' }} />
         <Stack.Screen name="nudges" options={{ title: 'Nudges' }} />
         <Stack.Screen name="profile" options={{ title: 'Profile' }} />
