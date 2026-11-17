@@ -2,6 +2,7 @@ import { router, Stack, usePathname } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { useEffect } from 'react';
 
+import { useNudges } from '@/hooks/use-nudges';
 import { useTheme } from '@/hooks/use-theme';
 import { KIND_LABELS, KINDS, type Kind } from '@/lib/types';
 
@@ -15,6 +16,7 @@ export default function AppLayout() {
   useEffect(() => {
     if (hasShareIntent && pathname !== '/share') router.push('/share');
   }, [hasShareIntent, pathname]);
+  useNudges();
   return (
     <Stack
       screenOptions={{
@@ -43,6 +45,7 @@ export default function AppLayout() {
       <Stack.Screen name="card/[linkId]" options={{ title: '' }} />
       <Stack.Screen name="item/[itemId]" options={{ title: '' }} />
       <Stack.Screen name="sample" options={{ title: 'Example card' }} />
+      <Stack.Screen name="nudges" options={{ title: 'Nudges' }} />
       <Stack.Screen name="profile" options={{ title: 'Profile' }} />
       <Stack.Screen
         name="feedback"

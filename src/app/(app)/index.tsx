@@ -20,6 +20,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { announce } from '@/lib/announce';
 import { fetchHomeItems, fetchInFlightLinks, searchItems, searchLists, type ListMatch, type StashItem } from '@/lib/data';
 import { toError } from '@/lib/errors';
+import { nudgesSupported } from '@/lib/nudge-service';
 import { hasPlaces } from '@/lib/picks';
 import { KIND_LABELS, type Kind } from '@/lib/types';
 
@@ -150,10 +151,21 @@ function Header() {
   const theme = useTheme();
   return (
     <View style={styles.header}>
-      <ThemedText type="heading" accessibilityRole="header">
+      <ThemedText type="heading" accessibilityRole="header" style={styles.headerTitle}>
         Your stash
       </ThemedText>
       <View style={styles.headerActions}>
+        {nudgesSupported ? (
+          <Pressable
+            onPress={() => router.push('/nudges')}
+            accessibilityRole="button"
+            accessibilityLabel="Nudges"
+            accessibilityHint="Reminders for saved places near you and a weekly digest"
+            hitSlop={Spacing.two}
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+            <SymbolView name={{ ios: 'bell', android: 'notifications', web: 'notifications' }} tintColor={theme.tint} size={26} />
+          </Pressable>
+        ) : null}
         {Features.shared ? (
           <Pressable style={[styles.pill, { backgroundColor: theme.backgroundSelected }]} accessibilityRole="button">
             <ThemedText type="smallBold" themeColor="textSecondary">
@@ -338,8 +350,10 @@ function useDebouncedSearch(query: string, now: Date): SearchState {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.two },
+  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginTop: Spacing.two },
+  headerTitle: { flex: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  iconButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   profile: { width: 44, height: 44, borderRadius: Radius.chip, alignItems: 'center', justifyContent: 'center' },
   pill: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.chip },
   grid: { gap: Spacing.three - 2 },
