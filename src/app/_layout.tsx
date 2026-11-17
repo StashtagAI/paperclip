@@ -13,7 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { ToastProvider } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import { ColorSchemeProvider, useColorScheme, useSchemePreference } from '@/hooks/use-color-scheme';
-import { AuthProvider, useAuth } from '@/lib/auth';
+import { AuthProvider, useAuth, useRecovering } from '@/lib/auth';
 import { supabaseConfigured } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
@@ -44,6 +44,7 @@ function ThemedRoot() {
 
 function RootStack() {
   const { session, loading: authLoading } = useAuth();
+  const recovering = useRecovering();
   // Wait for the saved appearance too, so the first frame is already in the user's chosen theme.
   const { ready } = useSchemePreference();
   const loading = authLoading || !ready;
@@ -57,11 +58,15 @@ function RootStack() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={!!session}>
+      <Stack.Protected guard={!!session && !recovering}>
         <Stack.Screen name="(app)" />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="sign-in" />
+      </Stack.Protected>
+      {/* Signed in by a password-reset link or code: set the new password before anything else (HAN-70). */}
+      <Stack.Protected guard={!!session && recovering}>
+        <Stack.Screen name="reset-password" />
       </Stack.Protected>
       <Stack.Screen name="auth/callback" />
       {/* A friend's shared list opens signed in or out (HAN-50). */}
