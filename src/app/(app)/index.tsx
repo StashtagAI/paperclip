@@ -153,13 +153,27 @@ function Header() {
       <ThemedText type="heading" accessibilityRole="header">
         Your stash
       </ThemedText>
-      {Features.shared ? (
-        <Pressable style={[styles.pill, { backgroundColor: theme.backgroundSelected }]} accessibilityRole="button">
-          <ThemedText type="smallBold" themeColor="textSecondary">
-            Shared
-          </ThemedText>
+      <View style={styles.headerActions}>
+        {Features.shared ? (
+          <Pressable style={[styles.pill, { backgroundColor: theme.backgroundSelected }]} accessibilityRole="button">
+            <ThemedText type="smallBold" themeColor="textSecondary">
+              Shared
+            </ThemedText>
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={() => router.push('/profile')}
+          accessibilityRole="button"
+          accessibilityLabel="Profile and settings"
+          hitSlop={Spacing.two}
+          style={({ pressed }) => [styles.profile, { backgroundColor: theme.backgroundSelected }, pressed && styles.pressed]}>
+          <SymbolView
+            name={{ ios: 'person.crop.circle', android: 'account_circle', web: 'account_circle' }}
+            tintColor={theme.tint}
+            size={26}
+          />
         </Pressable>
-      ) : null}
+      </View>
     </View>
   );
 }
@@ -325,6 +339,8 @@ function useDebouncedSearch(query: string, now: Date): SearchState {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.two },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  profile: { width: 44, height: 44, borderRadius: Radius.chip, alignItems: 'center', justifyContent: 'center' },
   pill: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.chip },
   grid: { gap: Spacing.three - 2 },
   gridRow: { flexDirection: 'row', gap: Spacing.three - 2 },
