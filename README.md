@@ -124,6 +124,8 @@ npx eas-cli@latest update --channel preview --environment preview --message "...
 `runtimeVersion` uses the `fingerprint` policy, so an update only reaches builds with the same
 native code. After adding or upgrading a native module, or changing plugins in `app.json`, make a
 new build. `npx expo-updates fingerprint:generate` prints the current fingerprint to compare.
+The fingerprint also hashes `.gitignore`: editing it changes the runtime version just like a native
+change, so an update published afterwards silently skips the current TestFlight build.
 
 ### Releasing to the App Store
 
