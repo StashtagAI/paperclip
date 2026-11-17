@@ -17,6 +17,7 @@ import {
   type LinkItem,
   type LinkRow,
   type ListRow,
+  type SharedList,
 } from '@/lib/types';
 
 export type KindList = ListRow & { itemCount: number };
@@ -401,6 +402,84 @@ export async function renameList(list: Pick<ListRow, 'id' | 'category_id'>, name
   const trimmed = checkName(name, NAME_LIMITS.list, siblings.data, 'list');
   const { error } = await supabase.from('lists').update({ name: trimmed }).eq('id', list.id);
   if (error) throw error.code === '23505' ? new Error(`You already have a list called “${trimmed}” here.`) : error;
+}
+
+/** The share token for one of the user's lists, or null if it isn't shared (HAN-50). */
+export async function fetchListShare(listId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('list_shares')
+    .select('token')
+    .eq('list_id', listId)
+    .maybeSingle<{ token: string }>();
+  if (error) throw error;
+  return data?.token ?? null;
+}
+
+/** Shares a list, or returns its existing token. */
+export async function shareList(listId: string): Promise<string> {
+  const { data, error } = await supabase.from('list_shares').insert({ list_id: listId }).select('token').single<{ token: string }>();
+  if (!error) return data.token;
+  if (error.code !== '23505') throw error;
+  const existing = await fetchListShare(listId);
+  if (!existing) throw error;
+  return existing;
+}
+
+/** Stops sharing: the old link stops working. */
+export async function stopSharingList(listId: string): Promise<void> {
+  const { error } = await supabase.from('list_shares').delete().eq('list_id', listId);
+  if (error) throw error;
+}
+
+/** The emails a share is for (HAN-68), oldest first. Only the owner can read them all. */
+export async function fetchShareRecipients(token: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('list_share_recipients')
+    .select('email')
+    .eq('token', token)
+    .order('created_at')
+    .returns<{ email: string }[]>();
+  if (error) throw error;
+  return data.map((r) => r.email);
+}
+
+/**
+ * Lets the Stashtag account with this email open the shared list. Throws a readable error when no account uses it;
+ * the database limits how many addresses an owner can try per hour.
+ */
+export async function addShareRecipient(token: string, email: string): Promise<string> {
+  const { data, error } = await supabase.rpc('add_share_recipient', { p_token: token, p_email: email });
+  if (error) throw error.code === 'P0002' ? new Error('This list is no longer shared.') : error;
+  const result = data as { email: string } | { error: 'no_account' | 'self' };
+  if ('email' in result) return result.email;
+  throw new Error(
+    result.error === 'self'
+      ? 'That’s your own email. Add the email your friend uses for Stashtag.'
+      : `No Stashtag account uses ${email.trim()}. Ask your friend which email they sign in with.`,
+  );
+}
+
+/** Stops the list opening for this person. */
+export async function removeShareRecipient(token: string, email: string): Promise<void> {
+  const { error } = await supabase.from('list_share_recipients').delete().eq('token', token).eq('email', email);
+  if (error) throw error;
+}
+
+/**
+ * A shared list by its token; null when the link was never valid, sharing was stopped, or it wasn't shared with the
+ * signed-in account (the database answers the same for all three). Signed in only.
+ */
+export async function fetchSharedList(token: string): Promise<SharedList | null> {
+  const { data, error } = await supabase.rpc('get_shared_list', { p_token: token });
+  if (error) throw error;
+  return (data as SharedList | null) ?? null;
+}
+
+/** Copies a shared list into the user's stash; `own` when it's their own list. */
+export async function addSharedList(token: string): Promise<{ list_id: string; added: number; own: boolean }> {
+  const { data, error } = await supabase.rpc('add_shared_list', { p_token: token });
+  if (error) throw error.code === 'P0002' ? new Error('This list is no longer shared.') : error;
+  return data as { list_id: string; added: number; own: boolean };
 }
 
 export async function rateLink(linkId: string, rating: 'up' | 'down', reason?: FeedbackReason): Promise<void> {
