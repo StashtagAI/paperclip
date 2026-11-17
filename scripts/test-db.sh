@@ -24,4 +24,11 @@ for t in supabase/tests/database/*.test.sql; do
   echo "$out"
   if grep -qE '^not ok|^# Looks like|ERROR:' <<<"$out"; then status=1; fi
 done
+# Plain-SQL checks (assert in DO blocks; any failure is an ERROR).
+for t in supabase/tests/*_test.sql; do
+  echo "# $t"
+  out=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -X -At -q -f "$t" 2>&1) || status=1
+  echo "$out"
+  if grep -qE 'ERROR:' <<<"$out"; then status=1; fi
+done
 exit $status

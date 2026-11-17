@@ -16,13 +16,16 @@ import { pendingShare } from '@/lib/share';
 import { KIND_LABELS, PLATFORM_LABELS, type SharedItem } from '@/lib/types';
 
 /**
- * A list a friend shared (HAN-50): stashtag://s/<token> or <web app>/s/<token>. Outside the signed-in group so it
- * opens signed out too; adding needs an account, and the token is kept across sign-in (see (app)/_layout).
+ * A list a friend shared (HAN-50): stashtag://s/<token> or <web app>/s/<token>. Outside the signed-in group so a
+ * signed-out visitor lands here; since HAN-68 only signed-in people the owner shared with can read it, so they're asked
+ * to sign in first and the token is kept across sign-in (see (app)/_layout).
  */
 export default function SharedListScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
-  const { session } = useAuth();
-  const shared = useAsync(() => fetchSharedList(token), [token]);
+  const { session, loading: authLoading } = useAuth();
+  const userId = session?.user.id;
+  // Signed out there's nothing to fetch: the database only answers signed-in callers.
+  const shared = useAsync(() => (userId ? fetchSharedList(token) : Promise.resolve(null)), [token, userId]);
   const list = shared.data;
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,25 +50,24 @@ export default function SharedListScreen() {
     }
   }
 
-  async function signInToAdd() {
+  async function signIn() {
     await pendingShare.set(token);
     router.replace('/sign-in');
   }
 
-  const footer = list ? (
-    <View style={styles.footer}>
-      {session ? (
+  const footer =
+    session && list ? (
+      <View style={styles.footer}>
         <Button title="Add to my stash" size="large" loading={adding} onPress={add} />
-      ) : (
-        <Button title="Sign in to add it to your stash" size="large" onPress={signInToAdd} />
-      )}
-    </View>
-  ) : null;
+      </View>
+    ) : null;
+  const checking = authLoading || (session && shared.loading && !shared.data);
 
   return (
     <Screen footer={footer}>
       <Stack.Screen options={{ title: list ? `${list.category} › ${list.list}` : 'Shared list' }} />
-      {shared.loading && !shared.data ? <ActivityIndicator accessibilityLabel="Loading the shared list" /> : null}
+      {checking ? <ActivityIndicator accessibilityLabel="Loading the shared list" /> : null}
+      {!authLoading && !session ? <SignInFirst onSignIn={signIn} /> : null}
       {shared.error ? (
         <View style={styles.gap}>
           <ThemedText themeColor="danger" accessibilityRole="alert">
@@ -74,7 +76,7 @@ export default function SharedListScreen() {
           <Button title="Try again" variant="secondary" onPress={shared.refresh} />
         </View>
       ) : null}
-      {!shared.loading && !shared.error && !list ? <NotShared signedIn={!!session} /> : null}
+      {session && !shared.loading && !shared.error && !list ? <NotShared email={session.user.email} /> : null}
       {list ? (
         <>
           <View style={styles.header}>
@@ -104,25 +106,39 @@ export default function SharedListScreen() {
               {error}
             </ThemedText>
           ) : null}
-          {session ? <Button title="Not now" variant="secondary" onPress={() => router.replace('/')} /> : null}
+          <Button title="Not now" variant="secondary" onPress={() => router.replace('/')} />
         </>
       ) : null}
     </Screen>
   );
 }
 
-function NotShared({ signedIn }: { signedIn: boolean }) {
+function SignInFirst({ onSignIn }: { onSignIn: () => void }) {
   return (
     <View style={styles.gap}>
       <ThemedText type="sectionTitle" accessibilityRole="header">
-        This list isn’t shared any more
+        Sign in to see this list
       </ThemedText>
-      <ThemedText themeColor="textSecondary">The link may be mistyped, or the owner stopped sharing it.</ThemedText>
-      <Button
-        title={signedIn ? 'Go to your stash' : 'Open Stashtag'}
-        variant="secondary"
-        onPress={() => router.replace(signedIn ? '/' : '/sign-in')}
-      />
+      <ThemedText themeColor="textSecondary">
+        Shared lists open only for the people they were shared with. After you sign in, this list opens again.
+      </ThemedText>
+      <Button title="Sign in" size="large" onPress={onSignIn} />
+    </View>
+  );
+}
+
+/** Same screen for a mistyped link, a stopped share and a list shared with someone else: the database can't tell. */
+function NotShared({ email }: { email?: string }) {
+  return (
+    <View style={styles.gap}>
+      <ThemedText type="sectionTitle" accessibilityRole="header">
+        You can’t open this list
+      </ThemedText>
+      <ThemedText themeColor="textSecondary">
+        The link may be mistyped, the owner may have stopped sharing it, or it wasn’t shared with
+        {email ? ` ${email}` : ' this account'}.
+      </ThemedText>
+      <Button title="Go to your stash" variant="secondary" onPress={() => router.replace('/')} />
     </View>
   );
 }

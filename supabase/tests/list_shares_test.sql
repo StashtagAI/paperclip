@@ -54,10 +54,7 @@ do $$ begin
   end;
 end $$;
 
--- Signed out: can read the list through the token only.
-reset role;
-set local role anon;
-select set_config('request.jwt.claims', '{"role":"anon"}', true), set_config('request.jwt.claim.sub', '', true);
+-- B reads the list through the token only.
 do $$
 declare j jsonb := public.get_shared_list((select token from t));
 begin
@@ -67,6 +64,18 @@ begin
   assert not (j ? 'user_id') and not (j->'items'->0 ? 'user_id'), 'no owner id';
   assert public.get_shared_list('nope') is null, 'unknown token';
   assert public.get_shared_list(null) is null, 'null token';
+end $$;
+
+-- Signed out (HAN-68): no access at all, not even through the token.
+reset role;
+set local role anon;
+select set_config('request.jwt.claims', '{"role":"anon"}', true), set_config('request.jwt.claim.sub', '', true);
+do $$ begin
+  begin
+    perform public.get_shared_list((select token from t));
+    assert false, 'anon must not read a shared list';
+  exception when insufficient_privilege then null;
+  end;
   begin
     perform 1 from public.list_shares;
     assert false, 'anon must not read share rows';
@@ -77,6 +86,11 @@ begin
     assert false, 'anon must not add';
   exception when insufficient_privilege then null;
   end;
+end $$;
+reset role;
+do $$ begin
+  assert not has_function_privilege('anon', 'public.get_shared_list(text)', 'execute'), 'anon has no execute grant';
+  assert not has_function_privilege('anon', 'public.add_shared_list(text)', 'execute'), 'anon has no add grant';
 end $$;
 
 -- B adds it: merges into their own "restaurants" > "denver", skips "sunday vinyl", gets their own link for the post.
