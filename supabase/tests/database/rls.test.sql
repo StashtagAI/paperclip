@@ -66,6 +66,18 @@ select is(
   array[]::text[],
   'every public table has row level security on'
 );
+-- HAN-66: the server-only caches have no client grants at all, not just no policies.
+select is(
+  array(
+    select t || ' ' || r || ' ' || p
+    from unnest(array['public.place_lookups', 'public.search_lookups']) t,
+      unnest(array['anon', 'authenticated']) r,
+      unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) p
+    where has_table_privilege(r, t, p)
+  ),
+  array[]::text[],
+  'place_lookups and search_lookups: no table privileges for anon or authenticated'
+);
 
 -- ---------- reads: A sees only A's rows ----------
 select tests.login('00000000-0000-4000-8000-00000000000a');
@@ -78,8 +90,8 @@ select is((select array_agg(id) from public.link_feedback), array['00000000-0000
 select throws_ok($$select * from public.feedback$$, '42501', null, 'feedback: no client reads, not even own');
 select is((select array_agg(alt) from public.item_photos), array['A photo'], 'item_photos: A sees only own');
 select is((select array_agg(name) from storage.objects where bucket_id = 'item-photos'), array['00000000-0000-4000-8000-00000000000a/00000000-0000-4000-8000-0000000004a0/a.jpg'], 'item-photos bucket: A sees only own files');
-select is((select count(*)::int from public.place_lookups), 0, 'place_lookups: no client reads');
-select is((select count(*)::int from public.search_lookups), 0, 'search_lookups: no client reads');
+select throws_ok($$select * from public.place_lookups$$, '42501', null, 'place_lookups: no client reads');
+select throws_ok($$select * from public.search_lookups$$, '42501', null, 'search_lookups: no client reads');
 select is((select count(*)::int from public.items where link_id = '00000000-0000-4000-8000-0000000001b0'), 0, 'items: filtering by B''s link_id finds nothing');
 
 -- ---------- inserts: A cannot write as B or attach to B's rows ----------
