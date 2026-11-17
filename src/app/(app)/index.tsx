@@ -18,10 +18,20 @@ import { useAsync } from '@/hooks/use-async';
 import { useHere } from '@/hooks/use-here';
 import { useTheme } from '@/hooks/use-theme';
 import { announce } from '@/lib/announce';
-import { fetchHomeItems, fetchInFlightLinks, searchItems, searchLists, type ListMatch, type StashItem } from '@/lib/data';
+import {
+  fetchHomeItems,
+  fetchInFlightLinks,
+  fetchSharedByMe,
+  searchItems,
+  searchLists,
+  type ListMatch,
+  type SharedByMe,
+  type StashItem,
+} from '@/lib/data';
 import { toError } from '@/lib/errors';
 import { nudgesSupported } from '@/lib/nudge-service';
 import { hasPlaces } from '@/lib/picks';
+import { sharedByMeSummary } from '@/lib/shared-by-me';
 import { unseen, useSharedWithMe } from '@/lib/shared-with-me';
 import { KIND_LABELS, type Kind } from '@/lib/types';
 
@@ -49,21 +59,25 @@ export default function HomeScreen() {
   const firstFocus = useRef(true);
   const { refresh } = recent;
   const shared = useSharedWithMe();
+  const sharedByMe = useAsync(fetchSharedByMe, []);
   const refreshShared = shared.refresh;
+  const refreshSharedByMe = sharedByMe.refresh;
   useFocusEffect(
     useCallback(() => {
       if (firstFocus.current) firstFocus.current = false;
       else {
         refresh();
         refreshShared();
+        refreshSharedByMe();
         setNow(new Date());
       }
-    }, [refresh, refreshShared]),
+    }, [refresh, refreshShared, refreshSharedByMe]),
   );
 
   function pullToRefresh() {
     refresh();
     refreshShared();
+    refreshSharedByMe();
     setNow(new Date());
     location.refresh();
   }
@@ -130,6 +144,7 @@ export default function HomeScreen() {
           </View>
 
           {shared.data?.length ? <SharedWithMeRow count={shared.data.length} fresh={unseen(shared.data).length} /> : null}
+          {sharedByMe.data?.length ? <SharedByYouRow rows={sharedByMe.data} /> : null}
 
           {items?.length ? <HomePicks items={items} now={now} here={location.here} onUseLocation={location.request} /> : null}
 
@@ -207,6 +222,14 @@ function SharedWithMeRow({ count, fresh }: { count: number; fresh: number }) {
       subtitle={subtitle}
       accessibilityLabel={`Shared with me, ${fresh ? `${fresh} new, ` : ''}${plural(count, 'list')}`}
     />
+  );
+}
+
+/** Shown once you've shared a list (HAN-75): how many lists, and with how many people. */
+function SharedByYouRow({ rows }: { rows: SharedByMe[] }) {
+  const subtitle = sharedByMeSummary(rows);
+  return (
+    <RowLink href="/shared-by-you" title="Shared by you" subtitle={subtitle} accessibilityLabel={`Shared by you, ${subtitle}`} />
   );
 }
 

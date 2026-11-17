@@ -60,6 +60,7 @@ export default function AppLayout() {
         <Stack.Screen name="nudges" options={{ title: 'Nudges' }} />
         <Stack.Screen name="profile" options={{ title: 'Profile' }} />
         <Stack.Screen name="shared" options={{ title: 'Shared with me' }} />
+        <Stack.Screen name="shared-by-you" options={{ title: 'Shared by you' }} />
         <Stack.Screen
           name="feedback"
           options={{ title: 'Send feedback', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.75, 1] }}

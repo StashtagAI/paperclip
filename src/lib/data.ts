@@ -503,6 +503,49 @@ export async function fetchSharedWithMe(): Promise<SharedWithMe[]> {
   return (data as SharedWithMe[] | null) ?? [];
 }
 
+/** One of the signed-in user's own shared lists (HAN-75), with who it's shared with. */
+export type SharedByMe = {
+  token: string;
+  list_id: string;
+  kind: Kind;
+  category: string;
+  list: string;
+  item_count: number;
+  shared_at: string;
+  /** Recipient emails, oldest first. Empty when the list is shared but nobody has been added yet. */
+  recipients: string[];
+};
+
+type SharedByMeRow = {
+  token: string;
+  created_at: string;
+  list: { id: string; name: string; category: { kind: Kind; name: string }; items: { count: number }[] };
+  recipients: { email: string; created_at: string }[];
+};
+
+/** The lists the signed-in user has shared, newest share first. Row-level security limits list_shares to their own. */
+export async function fetchSharedByMe(): Promise<SharedByMe[]> {
+  const { data, error } = await supabase
+    .from('list_shares')
+    .select(
+      'token, created_at, list:lists!inner(id, name, category:categories!inner(kind, name), items(count)), recipients:list_share_recipients(email, created_at)',
+    )
+    .order('created_at', { ascending: false })
+    .order('token')
+    .returns<SharedByMeRow[]>();
+  if (error) throw error;
+  return data.map((s) => ({
+    token: s.token,
+    list_id: s.list.id,
+    kind: s.list.category.kind,
+    category: s.list.category.name,
+    list: s.list.name,
+    item_count: s.list.items[0]?.count ?? 0,
+    shared_at: s.created_at,
+    recipients: [...s.recipients].sort((a, b) => a.created_at.localeCompare(b.created_at)).map((r) => r.email),
+  }));
+}
+
 /** The signed-in user's display name, or null if they haven't set one. */
 export async function fetchDisplayName(): Promise<string | null> {
   const { data, error } = await supabase.from('profiles').select('display_name').maybeSingle<{ display_name: string }>();
