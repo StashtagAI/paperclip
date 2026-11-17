@@ -10,7 +10,8 @@ export function useNudges() {
   useEffect(() => {
     const sync = () => syncNudges().catch(() => {});
     sync();
-    const sub = AppState.addEventListener('change', (state) => state === 'active' && sync());
+    // On leaving too, so the digest counts links saved just before.
+    const sub = AppState.addEventListener('change', (state) => (state === 'active' || state === 'background') && sync());
     return () => sub.remove();
   }, []);
 

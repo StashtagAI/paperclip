@@ -415,13 +415,14 @@ type NudgeItemRow = Pick<ItemRow, 'id' | 'name' | 'lat' | 'lng'> & {
   list: Pick<ListRow, 'id' | 'name'> & { category: Pick<CategoryRow, 'kind'> };
 };
 
-/** Every saved place with coordinates, for nearby nudges (HAN-43). */
+/** Saved places with coordinates, for nearby nudges (HAN-43). Past the cap, the newest saves win. */
 export async function fetchNudgePlaces(): Promise<NudgePlace[]> {
   const { data, error } = await supabase
     .from('items')
     .select('id, name, lat, lng, created_at, list:lists!inner(id, name, category:categories!inner(kind))')
     .not('lat', 'is', null)
     .not('lng', 'is', null)
+    .order('created_at', { ascending: false })
     .limit(1000)
     .returns<NudgeItemRow[]>();
   if (error) throw error;

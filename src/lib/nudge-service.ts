@@ -221,20 +221,19 @@ export async function setDigestSlot(digestSlot: DigestSlot) {
 let lastSync = 0;
 
 /**
- * Refreshes the cached places and the digest text. Runs when the app opens or comes back to the foreground, at most
- * every 15 minutes. If a permission was revoked in Settings, that nudge stays on but does nothing until it's back;
- * the Nudges screen says so.
+ * Refreshes the digest text and the cached places. Runs when the app opens, comes back to the foreground or goes to
+ * the background, so saves made just before leaving are counted. The digest is one small query and refreshes every
+ * time; places re-read every saved item, so at most every 15 minutes. If a permission was revoked in Settings, that
+ * nudge stays on but does nothing until it's back; the Nudges screen says so.
  */
 export async function syncNudges({ force = false } = {}) {
-  if (!force && Date.now() - lastSync < SYNC_EVERY_MS) return;
-  lastSync = Date.now();
   const settings = await getNudgeSettings();
   const notifications = (await Notifications.getPermissionsAsync()).granted;
-  if (settings.nearby) {
-    if (notifications && (await Location.getBackgroundPermissionsAsync()).granted) await syncNearby();
-    else await stopNearby();
-  }
   if (settings.digest && notifications) await syncDigest();
+  if (!settings.nearby || (!force && Date.now() - lastSync < SYNC_EVERY_MS)) return;
+  lastSync = Date.now();
+  if (notifications && (await Location.getBackgroundPermissionsAsync()).granted) await syncNearby();
+  else await stopNearby();
 }
 
 /** What the Nudges screen shows: each setting and whether the OS still lets it work. */
