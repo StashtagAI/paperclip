@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -13,6 +13,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
 import { addSharedList, fetchSharedList } from '@/lib/data';
 import { pendingShare } from '@/lib/share';
+import { markSeen } from '@/lib/shared-with-me';
 import { supabase } from '@/lib/supabase';
 import { KIND_LABELS, PLATFORM_LABELS, type SharedItem } from '@/lib/types';
 
@@ -30,6 +31,11 @@ export default function SharedListScreen() {
   const list = shared.data;
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Opening the list counts as seeing it (HAN-71), so the new-share popup doesn't offer it again. No-op for the owner.
+  useEffect(() => {
+    if (list) markSeen([token]).catch(() => {});
+  }, [list, token]);
 
   async function add() {
     setAdding(true);

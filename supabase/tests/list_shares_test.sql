@@ -1,5 +1,5 @@
--- HAN-50 / HAN-68: checks for list_shares, list_share_recipients, get_shared_list, add_shared_list and
--- add_share_recipient. Run against a scratch database that has every
+-- HAN-50 / HAN-68 / HAN-71: checks for list_shares, list_share_recipients, get_shared_list, add_shared_list,
+-- add_share_recipient, get_shared_with_me and mark_shares_seen. Run against a scratch database that has every
 -- migration applied (e.g. the supabase/postgres Docker image), as the postgres superuser:
 --   psql -v ON_ERROR_STOP=1 -f supabase/tests/list_shares_test.sql
 -- Both claim settings are set because older auth.uid() versions read request.jwt.claim.sub.
@@ -135,6 +135,49 @@ begin
   assert public.get_shared_list(null) is null, 'null token';
 end $$;
 
+-- HAN-71: B's "Shared with me" lists the share with who sent it, and it stays new until B marks it seen.
+do $$
+declare r record;
+begin
+  assert (select count(*) from public.get_shared_with_me()) = 1, 'recipient sees one shared list';
+  select * into r from public.get_shared_with_me();
+  assert r.token = (select token from t) and r.kind = 'eats' and r.category = 'Restaurants' and r.list = 'Denver', 'list';
+  assert r.shared_by = 'owner@example.com', 'sharer email';
+  assert r.item_count = 2, 'item count';
+  assert r.shared_at is not null and r.seen_at is null, 'new';
+  begin
+    update public.list_share_recipients set seen_at = now();
+    assert false, 'no direct updates to seen_at';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
+-- D isn't a recipient: sees nothing and can't mark B's share as seen.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000d","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000d', true);
+do $$ begin
+  assert (select count(*) from public.get_shared_with_me()) = 0, 'non-recipient sees nothing';
+  assert public.mark_shares_seen(array[(select token from t)]) = 0, 'cannot mark another user''s share';
+end $$;
+
+-- The owner's own shares aren't "shared with me".
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+do $$ begin
+  assert (select count(*) from public.get_shared_with_me()) = 0, 'owner sees none of their own shares';
+  assert public.mark_shares_seen(array[(select token from t)]) = 0, 'owner cannot mark the recipient''s row';
+end $$;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000b","role":"authenticated"}', true),
+  set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', true);
+do $$ begin
+  assert (select seen_at from public.get_shared_with_me()) is null, 'still new after others tried';
+  assert public.mark_shares_seen(array[(select token from t), 'nope']) = 1, 'marks own share, ignores unknown tokens';
+  assert (select seen_at from public.get_shared_with_me()) is not null, 'seen';
+  assert public.mark_shares_seen(array[(select token from t)]) = 0, 'marking again changes nothing';
+  assert public.mark_shares_seen(null) = 0, 'null list is fine';
+end $$;
+
 -- Signed out (HAN-68): no access at all, not even through the token.
 reset role;
 set local role anon;
@@ -165,9 +208,21 @@ do $$ begin
     assert false, 'anon must not add';
   exception when insufficient_privilege then null;
   end;
+  begin
+    perform 1 from public.get_shared_with_me();
+    assert false, 'anon must not list shares';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.mark_shares_seen(array[(select token from t)]);
+    assert false, 'anon must not mark shares seen';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 reset role;
 do $$ begin
+  assert not has_function_privilege('anon', 'public.get_shared_with_me()', 'execute'), 'anon has no shared-with-me grant';
+  assert not has_function_privilege('anon', 'public.mark_shares_seen(text[])', 'execute'), 'anon has no mark-seen grant';
   assert not has_function_privilege('anon', 'public.get_shared_list(text)', 'execute'), 'anon has no execute grant';
   assert not has_function_privilege('anon', 'public.add_shared_list(text)', 'execute'), 'anon has no add grant';
   assert not has_function_privilege('anon', 'public.add_share_recipient(text,text)', 'execute'), 'anon has no recipient grant';
@@ -215,6 +270,7 @@ select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000
   set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', true);
 do $$ begin
   assert public.get_shared_list((select token from t)) is null, 'removed recipient is cut off';
+  assert (select count(*) from public.get_shared_with_me()) = 0, 'removed recipient loses it from Shared with me';
 end $$;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true),
   set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
@@ -232,6 +288,7 @@ select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000
   set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', true);
 do $$ begin
   assert public.get_shared_list((select token from t)) is null, 'revoked share returns nothing to a former recipient';
+  assert (select count(*) from public.get_shared_with_me()) = 0, 'stopped share leaves Shared with me';
 end $$;
 
 -- A brand-new recipient C gets the category and list created.
@@ -266,6 +323,7 @@ select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000
   set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000c', true);
 do $$ begin
   assert public.get_shared_list((select token from t2)) is null, 'recipient of one share cannot read another';
+  assert (select count(*) from public.get_shared_with_me()) = 1, 'only the share C is on';
   begin
     perform public.add_shared_list((select token from t2));
     assert false, 'recipient of one share cannot add another';
@@ -282,6 +340,7 @@ select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000
   set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000c', true);
 do $$ begin
   assert public.get_shared_list((select token from t))->>'list' = 'Boulder', 'recipients follow a moved share';
+  assert (select list from public.get_shared_with_me()) = 'Boulder', 'Shared with me follows a moved share';
 end $$;
 
 -- Deleted accounts don't count, and anonymous sessions can't look up emails.

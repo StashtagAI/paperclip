@@ -48,7 +48,7 @@ We share information only as follows:
   - hosting, analytics, and crash-reporting providers we use to operate the app.
 - **Legal and safety:** when required by law or legal process, or when needed to protect the rights, property, or safety of StashtagAI, our users, or others.
 - **Business transfers:** in connection with a merger, acquisition, or sale of assets. In that case, this Policy will continue to apply to your information, or we will notify you of any changes.
-- **With your direction:** for example, if you choose to share a list.
+- **With your direction:** for example, if you choose to share a list, the people you share it with see that list and the email address of your account, so they know who shared it.
 
 ## 5. Data retention
 
