@@ -7,6 +7,7 @@ import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, 
 import { Button } from '@/components/button';
 import { DeleteButton } from '@/components/delete-button';
 import { DirectionsSheet } from '@/components/directions-sheet';
+import { DisplayNameForm } from '@/components/display-name-form';
 import { PlaceMap } from '@/components/place-map';
 import { RenameForm } from '@/components/rename-form';
 import { Screen } from '@/components/screen';
@@ -21,6 +22,7 @@ import { confirmDestructive } from '@/lib/confirm';
 import {
   addShareRecipient,
   deleteList,
+  fetchDisplayName,
   fetchList,
   fetchListShare,
   fetchShareRecipients,
@@ -67,11 +69,12 @@ export default function ListScreen() {
   const theme = useTheme();
   // The share and who it's for (HAN-68). A share with nobody on it opens only for the owner.
   const share = useAsync(async () => {
-    const token = await fetchListShare(listId);
-    return { token, recipients: token ? await fetchShareRecipients(token) : [] };
+    const [token, name] = await Promise.all([fetchListShare(listId), fetchDisplayName()]);
+    return { token, name, recipients: token ? await fetchShareRecipients(token) : [] };
   }, [listId]);
   const token = share.data?.token ?? null;
   const recipients = share.data?.recipients ?? [];
+  const ownerName = share.data?.name ?? null;
   const [shareOpen, setShareOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareNote, setShareNote] = useState<{ text: string; error?: boolean } | null>(null);
@@ -197,6 +200,7 @@ export default function ListScreen() {
           listId={listId}
           token={token}
           recipients={recipients}
+          ownerName={ownerName}
           onChanged={share.refresh}
           onClose={() => setShareOpen(false)}
           onNote={note}
@@ -294,6 +298,8 @@ type SharedPanelProps = {
   /** Null until the first person is added. */
   token: string | null;
   recipients: string[];
+  /** The owner's display name; friends see it instead of their email. Null until they set one. */
+  ownerName: string | null;
   onChanged: () => Promise<void>;
   onClose: () => void;
   onNote: (text: string, error?: boolean) => void;
@@ -303,7 +309,7 @@ type SharedPanelProps = {
  * Who the list is shared with (HAN-68): add a friend by the email of their Stashtag account, remove them, copy the
  * link, or stop sharing. The link opens only for the people listed here.
  */
-function SharedPanel({ listId, token, recipients, onChanged, onClose, onNote }: SharedPanelProps) {
+function SharedPanel({ listId, token, recipients, ownerName, onChanged, onClose, onNote }: SharedPanelProps) {
   const theme = useTheme();
   const [email, setEmail] = useState('');
   const [adding, setAdding] = useState(false);
@@ -312,7 +318,7 @@ function SharedPanel({ listId, token, recipients, onChanged, onClose, onNote }: 
   const [stopping, setStopping] = useState(false);
 
   async function add() {
-    if (!email.trim()) return;
+    if (!email.trim() || !ownerName) return;
     setAdding(true);
     setAddError(null);
     try {
@@ -372,6 +378,19 @@ function SharedPanel({ listId, token, recipients, onChanged, onClose, onNote }: 
         Add the email your friend uses for Stashtag. The link opens only for the people listed here, once they sign in.
         Your other lists stay private.
       </ThemedText>
+      {ownerName ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          They see it as shared by {ownerName}. You can change your name in Profile.
+        </ThemedText>
+      ) : (
+        <>
+          <ThemedText type="smallBold">First, your name</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Friends see this name on the list, not your email.
+          </ThemedText>
+          <DisplayNameForm name={null} onSaved={() => onChanged()} />
+        </>
+      )}
       <TextField
         value={email}
         onChangeText={(text) => {
@@ -389,14 +408,20 @@ function SharedPanel({ listId, token, recipients, onChanged, onClose, onNote }: 
         returnKeyType="done"
         maxLength={254}
         invalid={!!addError}
-        editable={!adding}
+        editable={!adding && !!ownerName}
       />
       {addError ? (
         <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
           {addError}
         </ThemedText>
       ) : null}
-      <Button title="Add" loading={adding} disabled={!email.trim()} onPress={add} />
+      <Button
+        title="Add"
+        loading={adding}
+        disabled={!email.trim() || !ownerName}
+        accessibilityHint={ownerName ? undefined : 'Save your name first'}
+        onPress={add}
+      />
       {recipients.length ? (
         <View accessibilityRole="list" accessibilityLabel="Shared with" style={styles.recipients}>
           {recipients.map((who) => (

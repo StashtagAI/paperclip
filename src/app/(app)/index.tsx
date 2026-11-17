@@ -22,6 +22,7 @@ import { fetchHomeItems, fetchInFlightLinks, searchItems, searchLists, type List
 import { toError } from '@/lib/errors';
 import { nudgesSupported } from '@/lib/nudge-service';
 import { hasPlaces } from '@/lib/picks';
+import { unseen, useSharedWithMe } from '@/lib/shared-with-me';
 import { KIND_LABELS, type Kind } from '@/lib/types';
 
 const GRID: Kind[][] = [
@@ -47,18 +48,22 @@ export default function HomeScreen() {
   // Pick up new items (and the time of day) when coming back from "Stash a link" or a list.
   const firstFocus = useRef(true);
   const { refresh } = recent;
+  const shared = useSharedWithMe();
+  const refreshShared = shared.refresh;
   useFocusEffect(
     useCallback(() => {
       if (firstFocus.current) firstFocus.current = false;
       else {
         refresh();
+        refreshShared();
         setNow(new Date());
       }
-    }, [refresh]),
+    }, [refresh, refreshShared]),
   );
 
   function pullToRefresh() {
     refresh();
+    refreshShared();
     setNow(new Date());
     location.refresh();
   }
@@ -124,6 +129,8 @@ export default function HomeScreen() {
             ))}
           </View>
 
+          {shared.data?.length ? <SharedWithMeRow count={shared.data.length} fresh={unseen(shared.data).length} /> : null}
+
           {items?.length ? <HomePicks items={items} now={now} here={location.here} onUseLocation={location.request} /> : null}
 
           <ThemedText type="sectionTitle" style={styles.sectionTitle} accessibilityRole="header">
@@ -187,6 +194,19 @@ function Header() {
         </Pressable>
       </View>
     </View>
+  );
+}
+
+/** Shown once anything has been shared with you (HAN-71). "New" is spelled out, not just a coloured dot. */
+function SharedWithMeRow({ count, fresh }: { count: number; fresh: number }) {
+  const subtitle = [fresh ? `${fresh} new` : null, plural(count, 'list')].filter(Boolean).join(' · ');
+  return (
+    <RowLink
+      href="/shared"
+      title="Shared with me"
+      subtitle={subtitle}
+      accessibilityLabel={`Shared with me, ${fresh ? `${fresh} new, ` : ''}${plural(count, 'list')}`}
+    />
   );
 }
 

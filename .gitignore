@@ -45,3 +45,4 @@ example
 
 # agent tooling
 .claude/
+/node_modules

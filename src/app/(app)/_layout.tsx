@@ -2,9 +2,11 @@ import { router, Stack, usePathname } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { useEffect } from 'react';
 
+import { NewSharePrompt } from '@/components/new-share-prompt';
 import { useNudges } from '@/hooks/use-nudges';
 import { useTheme } from '@/hooks/use-theme';
 import { pendingShare } from '@/lib/share';
+import { resetSharedWithMe } from '@/lib/shared-with-me';
 import { KIND_LABELS, KINDS, type Kind } from '@/lib/types';
 
 const kindLabel = (kind?: string) => ((KINDS as readonly string[]).includes(kind ?? '') ? KIND_LABELS[kind as Kind] : '');
@@ -24,48 +26,54 @@ export default function AppLayout() {
       if (token) router.push({ pathname: '/s/[token]', params: { token } });
     });
   }, []);
+  // Signing out unmounts this group; the next account mustn't see these shares.
+  useEffect(() => resetSharedWithMe, []);
   return (
-    <Stack
-      screenOptions={{
-        headerBackButtonDisplayMode: 'minimal',
-        headerTintColor: theme.tint,
-        headerShadowVisible: false,
-        headerStyle: { backgroundColor: theme.background },
-        headerTitleStyle: { color: theme.text },
-        headerLargeTitleStyle: { color: theme.text },
-        contentStyle: { backgroundColor: theme.background },
-      }}>
-      <Stack.Screen name="index" options={{ headerShown: false, title: 'Your stash' }} />
-      {/* Title set here, not via <Stack.Screen> in the screen, so the large title exists from the first frame.
-          No header background: on iOS 26 a background color with a large title hides the title after going back (HAN-31). */}
-      <Stack.Screen
-        name="kind/[kind]"
-        options={({ route }) => ({
-          title: kindLabel((route.params as { kind?: string } | undefined)?.kind),
-          headerLargeTitle: true,
-          headerStyle: {},
-        })}
-      />
-      <Stack.Screen name="list/[listId]" options={{ title: '' }} />
-      <Stack.Screen name="share" options={{ headerShown: false }} />
-      <Stack.Screen name="capture/[linkId]" options={{ title: '' }} />
-      <Stack.Screen name="card/[linkId]" options={{ title: '' }} />
-      <Stack.Screen name="item/[itemId]" options={{ title: '' }} />
-      <Stack.Screen name="sample" options={{ title: 'Example card' }} />
-      <Stack.Screen name="nudges" options={{ title: 'Nudges' }} />
-      <Stack.Screen name="profile" options={{ title: 'Profile' }} />
-      <Stack.Screen
-        name="feedback"
-        options={{ title: 'Send feedback', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.75, 1] }}
-      />
-      <Stack.Screen
-        name="delete-account"
-        options={{ title: 'Delete account', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.6, 1] }}
-      />
-      <Stack.Screen
-        name="stash"
-        options={{ title: 'Stash a link', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.7, 1] }}
-      />
-    </Stack>
+    <>
+      <Stack
+        screenOptions={{
+          headerBackButtonDisplayMode: 'minimal',
+          headerTintColor: theme.tint,
+          headerShadowVisible: false,
+          headerStyle: { backgroundColor: theme.background },
+          headerTitleStyle: { color: theme.text },
+          headerLargeTitleStyle: { color: theme.text },
+          contentStyle: { backgroundColor: theme.background },
+        }}>
+        <Stack.Screen name="index" options={{ headerShown: false, title: 'Your stash' }} />
+        {/* Title set here, not via <Stack.Screen> in the screen, so the large title exists from the first frame.
+            No header background: on iOS 26 a background color with a large title hides the title after going back (HAN-31). */}
+        <Stack.Screen
+          name="kind/[kind]"
+          options={({ route }) => ({
+            title: kindLabel((route.params as { kind?: string } | undefined)?.kind),
+            headerLargeTitle: true,
+            headerStyle: {},
+          })}
+        />
+        <Stack.Screen name="list/[listId]" options={{ title: '' }} />
+        <Stack.Screen name="share" options={{ headerShown: false }} />
+        <Stack.Screen name="capture/[linkId]" options={{ title: '' }} />
+        <Stack.Screen name="card/[linkId]" options={{ title: '' }} />
+        <Stack.Screen name="item/[itemId]" options={{ title: '' }} />
+        <Stack.Screen name="sample" options={{ title: 'Example card' }} />
+        <Stack.Screen name="nudges" options={{ title: 'Nudges' }} />
+        <Stack.Screen name="profile" options={{ title: 'Profile' }} />
+        <Stack.Screen name="shared" options={{ title: 'Shared with me' }} />
+        <Stack.Screen
+          name="feedback"
+          options={{ title: 'Send feedback', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.75, 1] }}
+        />
+        <Stack.Screen
+          name="delete-account"
+          options={{ title: 'Delete account', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.6, 1] }}
+        />
+        <Stack.Screen
+          name="stash"
+          options={{ title: 'Stash a link', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.7, 1] }}
+        />
+      </Stack>
+      <NewSharePrompt />
+    </>
   );
 }

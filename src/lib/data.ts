@@ -1,3 +1,4 @@
+import { cleanDisplayName } from '@/lib/display-name';
 import { hasCoords } from '@/lib/geo';
 import type { LinkCheck } from '@/lib/link-filter';
 import type { DigestStats, NudgePlace } from '@/lib/nudges';
@@ -480,6 +481,54 @@ export async function addSharedList(token: string): Promise<{ list_id: string; a
   const { data, error } = await supabase.rpc('add_shared_list', { p_token: token });
   if (error) throw error.code === 'P0002' ? new Error('This list is no longer shared.') : error;
   return data as { list_id: string; added: number; own: boolean };
+}
+
+/** A list someone shared with the signed-in user (HAN-71). `seen_at` is null until the new-share popup has shown it. */
+export type SharedWithMe = {
+  token: string;
+  kind: Kind;
+  category: string;
+  list: string;
+  /** The owner's display name, or null if they haven't set one. */
+  shared_by: string | null;
+  item_count: number;
+  shared_at: string;
+  seen_at: string | null;
+};
+
+/** Lists shared with the signed-in user, newest first. */
+export async function fetchSharedWithMe(): Promise<SharedWithMe[]> {
+  const { data, error } = await supabase.rpc('get_shared_with_me');
+  if (error) throw error;
+  return (data as SharedWithMe[] | null) ?? [];
+}
+
+/** The signed-in user's display name, or null if they haven't set one. */
+export async function fetchDisplayName(): Promise<string | null> {
+  const { data, error } = await supabase.from('profiles').select('display_name').maybeSingle<{ display_name: string }>();
+  if (error) throw error;
+  return data?.display_name ?? null;
+}
+
+/** Saves the name friends see on lists you share with them. Returns it as saved. */
+export async function saveDisplayName(name: string): Promise<string> {
+  const display_name = cleanDisplayName(name);
+  if (!display_name) throw new Error('Enter your name.');
+  const { data } = await supabase.auth.getSession();
+  const user_id = data.session?.user.id;
+  if (!user_id) throw new Error('Sign in first.');
+  const { error } = await supabase
+    .from('profiles')
+    .upsert({ user_id, display_name, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  if (error) throw error;
+  return display_name;
+}
+
+/** Marks these shares as seen so the new-share popup doesn't show them again. */
+export async function markSharesSeen(tokens: string[]): Promise<void> {
+  if (!tokens.length) return;
+  const { error } = await supabase.rpc('mark_shares_seen', { p_tokens: tokens });
+  if (error) throw error;
 }
 
 export async function rateLink(linkId: string, rating: 'up' | 'down', reason?: FeedbackReason): Promise<void> {
