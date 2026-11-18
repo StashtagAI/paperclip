@@ -18,6 +18,7 @@ import {
   type LinkItem,
   type LinkRow,
   type ListRow,
+  type RawContent,
   type SharedList,
 } from '@/lib/types';
 
@@ -223,6 +224,41 @@ export async function fetchLinkItems(linkId: string): Promise<LinkItem[]> {
     .returns<LinkItem[]>();
   if (error) throw error;
   return data;
+}
+
+/** A saved recipe with the ingredients and steps process-link read from its post (HAN-74). */
+export type Recipe = Pick<ItemRow, 'id' | 'name' | 'description' | 'link_id'> & {
+  list: Pick<ListRow, 'id' | 'name'>;
+  ingredients: string[];
+  steps: string[];
+};
+
+type RecipeQueryRow = Pick<ItemRow, 'id' | 'name' | 'description' | 'link_id'> & {
+  list: Pick<ListRow, 'id' | 'name'>;
+  link: { recipe_details: RawContent['recipe_details'] | null } | null;
+};
+
+/**
+ * These items as recipes, in the order asked for. Ids that no longer exist are left out. The details live in
+ * links.raw_content keyed by item name (docs/extraction.md), so only that part of the link is read.
+ * The embed names items.link_id's key: production also joins items to links through item_posts and
+ * item_reports, and PostgREST refuses an ambiguous embed.
+ */
+export async function fetchRecipes(itemIds: string[]): Promise<Recipe[]> {
+  if (!itemIds.length) return [];
+  const { data, error } = await supabase
+    .from('items')
+    .select('id, name, description, link_id, list:lists!inner(id, name), link:links!items_link_id_fkey(recipe_details:raw_content->recipe_details)')
+    .in('id', itemIds)
+    .returns<RecipeQueryRow[]>();
+  if (error) throw error;
+  const byId = new Map(
+    data.map(({ link, ...item }) => {
+      const details = link?.recipe_details?.[item.name];
+      return [item.id, { ...item, ingredients: details?.ingredients ?? [], steps: details?.steps ?? [] }] as const;
+    }),
+  );
+  return itemIds.flatMap((id) => byId.get(id) ?? []);
 }
 
 /** Limits from the HAN-45 migration's check constraints. */
@@ -501,6 +537,49 @@ export async function fetchSharedWithMe(): Promise<SharedWithMe[]> {
   const { data, error } = await supabase.rpc('get_shared_with_me');
   if (error) throw error;
   return (data as SharedWithMe[] | null) ?? [];
+}
+
+/** One of the signed-in user's own shared lists (HAN-75), with who it's shared with. */
+export type SharedByMe = {
+  token: string;
+  list_id: string;
+  kind: Kind;
+  category: string;
+  list: string;
+  item_count: number;
+  shared_at: string;
+  /** Recipient emails, oldest first. Empty when the list is shared but nobody has been added yet. */
+  recipients: string[];
+};
+
+type SharedByMeRow = {
+  token: string;
+  created_at: string;
+  list: { id: string; name: string; category: { kind: Kind; name: string }; items: { count: number }[] };
+  recipients: { email: string; created_at: string }[];
+};
+
+/** The lists the signed-in user has shared, newest share first. Row-level security limits list_shares to their own. */
+export async function fetchSharedByMe(): Promise<SharedByMe[]> {
+  const { data, error } = await supabase
+    .from('list_shares')
+    .select(
+      'token, created_at, list:lists!inner(id, name, category:categories!inner(kind, name), items(count)), recipients:list_share_recipients(email, created_at)',
+    )
+    .order('created_at', { ascending: false })
+    .order('token')
+    .returns<SharedByMeRow[]>();
+  if (error) throw error;
+  return data.map((s) => ({
+    token: s.token,
+    list_id: s.list.id,
+    kind: s.list.category.kind,
+    category: s.list.category.name,
+    list: s.list.name,
+    item_count: s.list.items[0]?.count ?? 0,
+    shared_at: s.created_at,
+    recipients: [...s.recipients].sort((a, b) => a.created_at.localeCompare(b.created_at)).map((r) => r.email),
+  }));
 }
 
 /** The signed-in user's display name, or null if they haven't set one. */
