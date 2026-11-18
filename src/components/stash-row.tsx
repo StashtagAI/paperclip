@@ -10,9 +10,10 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useKindColors, useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
-import { deleteLink, primaryTag, type InFlightLink, type StashItem } from '@/lib/data';
-import { FAILED_TITLE, failureReason, retryAction } from '@/lib/link-outcome';
-import { needsTextReason, postName } from '@/lib/link-summary';
+import { deleteLink, dismissLink, primaryTag, type InFlightLink, type StashItem } from '@/lib/data';
+import { announce } from '@/lib/announce';
+import { FAILED_TITLE, failureReason, linkStatusLabel, NOT_SORTED_REASON, NOT_SORTED_TITLE, retryAction } from '@/lib/link-outcome';
+import { needsTextReason, postName, shortUrl } from '@/lib/link-summary';
 import { KIND_LABELS, PLATFORM_LABELS } from '@/lib/types';
 
 /** A "Recently stashed" row: kind-coloured thumbnail, title, "Kind · from Instagram", #tag. */
@@ -41,9 +42,10 @@ export function StashRow({ item }: { item: StashItem }) {
 }
 
 /**
- * A link that isn't filed yet: being sorted ("processing"), waiting for what the post says ("pending"), or failed. A
- * waiting row names the post (caption line, else its URL) and why it's waiting, with buttons to open the post or remove
- * it (HAN-32), so it still makes sense after leaving the app. A failed row says why, with Try again and Remove (HAN-77).
+ * A link that isn't filed yet: being sorted ("processing"), waiting for what the post says ("pending"), failed, or done
+ * with nothing filed ("not sorted"). A waiting row names the post (caption line, else its URL) and why it's waiting,
+ * with buttons to open the post or remove it (HAN-32), so it still makes sense after leaving the app. A failed row says
+ * why, with Try again and Remove (HAN-77). A not-sorted row offers Choose a category and Dismiss (HAN-89).
  */
 export function PendingLinkRow({ link, onRemoved }: { link: InFlightLink; onRemoved: () => void }) {
   const theme = useTheme();
@@ -71,6 +73,8 @@ export function PendingLinkRow({ link, onRemoved }: { link: InFlightLink; onRemo
       </Pressable>
     );
   }
+
+  if (link.not_sorted) return <NotSortedRow link={link} onRemoved={onRemoved} />;
 
   const failed = link.status === 'failed';
   const retry = failed ? retryAction(link.status, link.error) : null;
@@ -160,6 +164,134 @@ export function PendingLinkRow({ link, onRemoved }: { link: InFlightLink; onRemo
         </ThemedText>
       ) : null}
     </View>
+  );
+}
+
+/** Done with nothing filed (HAN-89): stays on Home until it's filed from its card or dismissed here. */
+function NotSortedRow({ link, onRemoved }: { link: InFlightLink; onRemoved: () => void }) {
+  const theme = useTheme();
+  const [dismissing, setDismissing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const platform = PLATFORM_LABELS[link.platform];
+  const post = postName(link);
+  const openCard = () => router.push({ pathname: '/card/[linkId]', params: { linkId: link.id } });
+
+  async function dismiss() {
+    setDismissing(true);
+    setError(null);
+    try {
+      await dismissLink(link.id);
+      // The row goes away, so iOS and Android both need telling; it's still under All stashes.
+      AccessibilityInfo.announceForAccessibility(`Dismissed: ${post}. It’s still under All stashes.`);
+      onRemoved();
+    } catch (e) {
+      const message = `Couldn’t dismiss: ${(e as Error).message}`;
+      setError(message);
+      announce(message);
+      setDismissing(false);
+    }
+  }
+
+  return (
+    <View style={[styles.frame, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${post}, from ${platform}. ${NOT_SORTED_TITLE}. ${NOT_SORTED_REASON}.`}
+        accessibilityHint="Opens the card"
+        onPress={openCard}
+        style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+        <View
+          style={[styles.thumb, { backgroundColor: theme.backgroundSelected }]}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants">
+          <SymbolView name={{ ios: 'tray', android: 'inbox', web: 'inbox' }} tintColor={theme.textSecondary} size={24} />
+        </View>
+        <View style={styles.text}>
+          <ThemedText type="smallBold" themeColor="textSecondary">
+            {NOT_SORTED_TITLE}
+          </ThemedText>
+          <ThemedText type="defaultBold" numberOfLines={2}>
+            {post}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {platform} · {NOT_SORTED_REASON}
+          </ThemedText>
+        </View>
+      </Pressable>
+      <View style={styles.actions}>
+        <Button
+          title="Choose a category"
+          accessibilityLabel={`Choose a category: ${post}`}
+          onPress={openCard}
+          style={styles.action}
+        />
+        <Button
+          title="Dismiss"
+          accessibilityLabel={`Dismiss: ${post}`}
+          accessibilityHint="Takes it off Home. It stays under All stashes."
+          variant="secondary"
+          onPress={dismiss}
+          loading={dismissing}
+          style={styles.action}
+        />
+      </View>
+      {error ? (
+        <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+          {error}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * One stash in Recent links or All stashes: which post, and its status as a word (HAN-89: "Not sorted", never "Filed",
+ * when nothing was filed). Opens the card.
+ */
+export function LinkStatusRow({ link }: { link: InFlightLink }) {
+  const theme = useTheme();
+  const label = linkStatusLabel(link);
+  const color = link.status === 'failed' ? theme.danger : label === 'Filed' ? theme.success : theme.textSecondary;
+  const detail =
+    link.status === 'failed'
+      ? failureReason(link.error)
+      : link.not_sorted
+        ? `${NOT_SORTED_REASON}${link.dismissed_at ? ' · Dismissed' : ''}`
+        : link.status === 'pending' && link.error === 'needs_capture'
+          ? needsTextReason(link.fetch_reason)
+          : null;
+  const post = postName(link);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={[post, label, detail].filter(Boolean).join('. ')}
+      accessibilityHint="Opens the card"
+      onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: link.id } })}
+      style={({ pressed }) => [
+        styles.frame,
+        styles.row,
+        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+        pressed && styles.pressed,
+      ]}>
+      <View style={styles.text}>
+        <ThemedText type="small" numberOfLines={2}>
+          {post}
+        </ThemedText>
+        {post !== shortUrl(link.url) ? (
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            {shortUrl(link.url)}
+          </ThemedText>
+        ) : null}
+        {detail ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {detail}
+          </ThemedText>
+        ) : null}
+      </View>
+      <ThemedText type="smallBold" style={{ color }}>
+        {label}
+      </ThemedText>
+    </Pressable>
   );
 }
 

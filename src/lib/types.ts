@@ -112,7 +112,7 @@ export type RawContent = {
   recipe_details?: Record<string, { ingredients: string[]; steps: string[] }>;
 };
 
-export type LinkDetail = LinkRow & { raw_content: RawContent | null };
+export type LinkDetail = LinkRow & { raw_content: RawContent | null; dismissed_at: string | null };
 
 export type LinkItem = ItemRow & { list: Pick<ListRow, 'id' | 'name'> & { category: Pick<CategoryRow, 'kind' | 'name'> } };
 

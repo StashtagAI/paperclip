@@ -5,6 +5,24 @@ import type { LinkStatus } from '@/lib/types';
 export const FAILED_TITLE = 'Couldn’t build this card';
 
 /**
+ * A link process-link finished ("done") without filing anything (HAN-89). It's in no list, so Home keeps it until the
+ * user files it under a kind or dismisses it.
+ */
+export const NOT_SORTED_TITLE = 'Not sorted';
+export const NOT_SORTED_REASON = 'Nothing in it could be sorted into a list';
+
+/** Done, no items from this post, and none skipped as already in their list (link_overview.not_sorted). */
+export function isNotSorted(status: LinkStatus, itemCount: number, alreadyListed: number): boolean {
+  return status === 'done' && itemCount === 0 && alreadyListed === 0;
+}
+
+/** The status word for a stash in a list of stashes. Text, so it never relies on its colour. */
+export function linkStatusLabel(link: { status: LinkStatus; not_sorted?: boolean | null }): string {
+  if (link.not_sorted) return NOT_SORTED_TITLE;
+  return { pending: 'Needs text', processing: 'Processing', done: 'Filed', failed: 'Failed' }[link.status];
+}
+
+/**
  * The card screen sent the request but the row never left "pending": the request didn't reach process-link (offline,
  * the function didn't start). Not a server code; the card screen gives up waiting after `START_TIMEOUT_MS`.
  */
@@ -46,11 +64,11 @@ export function retryAction(status: LinkStatus, error: string | null | undefined
   return error && NEEDS_NEW_TEXT.has(error) ? 'capture' : 'rerun';
 }
 
-type Tracked = { id: string; status: LinkStatus; error: string | null; post: string };
+type Tracked = { id: string; status: LinkStatus; error: string | null; post: string; not_sorted?: boolean | null };
 
 /**
  * What to read out when a list of not-yet-filed links is re-read (Home, HAN-77): links that were being sorted and have
- * now failed, or left the list because they were filed. Null when nothing settled.
+ * now failed, finished with nothing filed (HAN-89), or left the list because they were filed. Null when nothing settled.
  */
 export function settledMessage(before: readonly Tracked[], after: readonly Tracked[]): string | null {
   const now = new Map(after.map((l) => [l.id, l]));
@@ -60,6 +78,7 @@ export function settledMessage(before: readonly Tracked[], after: readonly Track
       const next = now.get(l.id);
       if (!next) return [`Sorted: ${l.post}`];
       if (next.status === 'failed') return [`${FAILED_TITLE}: ${l.post}. ${failureReason(next.error)}`];
+      if (next.not_sorted) return [`${NOT_SORTED_TITLE}: ${l.post}. ${NOT_SORTED_REASON}`];
       return [];
     });
   return lines.length ? lines.join('. ') : null;

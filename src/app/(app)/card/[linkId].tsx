@@ -6,6 +6,7 @@ import { AccessibilityInfo, ActivityIndicator, Animated, type HostInstance, Plat
 import { Button } from '@/components/button';
 import { ProgressSteps } from '@/components/progress-steps';
 import { Screen } from '@/components/screen';
+import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
@@ -17,15 +18,27 @@ import {
   chooseLinkKind,
   deleteItem,
   deleteLink,
+  dismissLink,
   fetchLink,
+  fileLink,
   fetchLinkItems,
   rateLink,
   subscribeToLink,
 } from '@/lib/data';
 import { type KindChoice, kindChoice } from '@/lib/kind-choice';
-import { FAILED_TITLE, failureReason, NOT_STARTED, retryAction, START_TIMEOUT_MS } from '@/lib/link-outcome';
+import {
+  FAILED_TITLE,
+  failureReason,
+  isNotSorted,
+  NOT_SORTED_REASON,
+  NOT_SORTED_TITLE,
+  NOT_STARTED,
+  retryAction,
+  START_TIMEOUT_MS,
+} from '@/lib/link-outcome';
+import { suggestedItemName } from '@/lib/link-summary';
 import type { FieldSource, Kind, LinkDetail, LinkItem, LinkStatus, RawContent } from '@/lib/types';
-import { KIND_LABELS } from '@/lib/types';
+import { KIND_LABELS, KINDS, PLATFORM_LABELS } from '@/lib/types';
 import { confirmDestructive } from '@/lib/confirm';
 import { currentStep, stepAnnouncement, type StepKey } from '@/lib/progress';
 
@@ -79,7 +92,9 @@ export default function CardScreen() {
   const outcome = link ? outcomeCopy(link, items ?? [], failure) : null;
   const tryAgain = link && failure != null ? retryAction(link.status, failure, sent) : null;
   const choice = link?.status === 'done' ? kindChoice(raw, first?.list.category.kind) : null;
-  // What the user chose in KindChoicePanel, shown (and focused) where the question was once it goes away.
+  // Done with nothing filed (HAN-89): offer Choose a category and Dismiss.
+  const notSorted = !!link && !!items && isNotSorted(link.status, items.length, raw?.already_listed?.length ?? 0);
+  // What the user chose in KindChoicePanel or FilePanel, shown (and focused) where the question was once it goes away.
   const [chosen, setChosen] = useState<string | null>(null);
 
   // Pending rows are never swept on the server, so a request that never arrived would show "Reading the post" forever.
@@ -208,6 +223,7 @@ export default function CardScreen() {
           step={step}
           outcome={outcome}
           failure={failure}
+          notSorted={notSorted}
           celebrate={justFinished && link.status === 'done'}
         />
       )}
@@ -228,14 +244,16 @@ export default function CardScreen() {
           }}
         />
       ) : chosen ? (
-        <ChosenNote message={chosen} />
+        <ChosenNote key={chosen} message={chosen} />
       ) : null}
-      {link?.status === 'done' && items?.length === 0 && !raw?.already_listed?.length ? (
-        <ThemedText themeColor="textSecondary">
-          {raw?.unsorted
-            ? 'Nothing in the text could be sorted into a list. The text is kept with the link.'
-            : 'No items were added.'}
-        </ThemedText>
+      {notSorted && link ? (
+        <FilePanel
+          link={link}
+          onDone={(message) => {
+            setChosen(message);
+            refresh();
+          }}
+        />
       ) : null}
       {items?.map((item) => (
         <ReviewItem key={item.id} item={item} raw={raw} onRemoved={refresh} />
@@ -259,7 +277,11 @@ function outcomeCopy(link: LinkDetail, items: LinkItem[], failure: string | null
   if (failure != null) return `${STATUS_COPY.failed}. ${failureReason(failure)}`;
   if (link.status !== 'done') return null;
   const first = items[0];
-  if (!first) return link.raw_content?.unsorted ? 'Filed, but nothing could be sorted into a list' : STATUS_COPY.done;
+  if (!first) {
+    return isNotSorted(link.status, 0, link.raw_content?.already_listed?.length ?? 0)
+      ? `${NOT_SORTED_TITLE}. ${NOT_SORTED_REASON}.`
+      : STATUS_COPY.done;
+  }
   const n = items.length === 1 ? '1 item' : `${items.length} items`;
   return `Filed ${n} in ${first.list.category.name} › ${first.list.name}`;
 }
@@ -274,22 +296,27 @@ function StatusBanner({
   step,
   outcome,
   failure,
+  notSorted,
   celebrate,
 }: {
   link: LinkDetail;
   step: StepKey | null;
   outcome: string | null;
   failure: string | null;
+  notSorted: boolean;
   celebrate: boolean;
 }) {
   const theme = useTheme();
   const failed = failure != null;
-  const color = failed ? theme.danger : link.status === 'done' ? theme.success : theme.textSecondary;
+  const unsorted = !step && !failed && notSorted;
+  const color = failed ? theme.danger : unsorted ? theme.text : link.status === 'done' ? theme.success : theme.textSecondary;
   const headline = step
     ? stepAnnouncement(step)
     : failed
       ? STATUS_COPY.failed
-      : (outcome ?? STATUS_COPY[link.status]);
+      : unsorted
+        ? NOT_SORTED_TITLE
+        : (outcome ?? STATUS_COPY[link.status]);
   return (
     <View
       style={[
@@ -297,15 +324,16 @@ function StatusBanner({
         step && styles.steps,
         { backgroundColor: theme.backgroundElement, borderColor: failed ? theme.danger : theme.border },
       ]}>
-      {!step && link.status === 'done' ? <DoneMark color={theme.success} pop={celebrate} /> : null}
+      {!step && link.status === 'done' && !unsorted ? <DoneMark color={theme.success} pop={celebrate} /> : null}
+      {unsorted ? <NotSortedMark color={theme.textSecondary} /> : null}
       {!step && failed ? <FailedMark color={theme.danger} /> : null}
       <View style={step ? undefined : styles.flex} accessibilityLiveRegion="polite">
         <ThemedText type={step ? 'smallBold' : 'defaultBold'} style={{ color }}>
           {headline}
         </ThemedText>
-        {!step && failed ? (
+        {!step && (failed || unsorted) ? (
           <ThemedText type="small" themeColor="textSecondary">
-            {failureReason(failure)}
+            {failed ? failureReason(failure) : `${NOT_SORTED_REASON}. The text is kept with the link.`}
           </ThemedText>
         ) : null}
       </View>
@@ -330,6 +358,15 @@ function FailedMark({ color }: { color: string }) {
         size={28}
         weight="semibold"
       />
+    </View>
+  );
+}
+
+/** Not sorted (HAN-89): an inbox tray, not the green check. Decorative; the headline says "Not sorted". */
+function NotSortedMark({ color }: { color: string }) {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <SymbolView name={{ ios: 'tray', android: 'inbox', web: 'inbox' }} tintColor={color} size={28} weight="semibold" />
     </View>
   );
 }
@@ -429,7 +466,120 @@ function KindChoicePanel({
 }
 
 /**
- * Where the post ended up after KindChoicePanel. The button that was pressed is gone, so screen reader and keyboard
+ * "Choose a category" for a stash where nothing was filed (HAN-89): the user names the item (the caption's first line is
+ * suggested) and picks a kind; it's filed as one item in "Saved posts › Instagram" under that kind. "Dismiss" takes it
+ * off Home instead; it stays in All stashes and can still be filed here. Inline rather than a sheet, so there's no focus
+ * trap to manage.
+ */
+function FilePanel({ link, onDone }: { link: LinkDetail; onDone: (message: string) => void }) {
+  const theme = useTheme();
+  const platform = PLATFORM_LABELS[link.platform];
+  const [name, setName] = useState(() => suggestedItemName(link.raw_content?.caption, platform));
+  const [busy, setBusy] = useState<Kind | 'dismiss' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const blank = !name.trim();
+
+  async function file(kind: Kind) {
+    setBusy(kind);
+    setError(null);
+    try {
+      await fileLink(link.id, kind, name);
+      const message = `Filed in ${KIND_LABELS[kind]} › Saved posts › ${platform}`;
+      announce(message);
+      onDone(message);
+    } catch (e) {
+      fail(`Couldn’t file it in ${KIND_LABELS[kind]}: ${(e as Error).message}`);
+    }
+  }
+
+  async function dismiss() {
+    setBusy('dismiss');
+    setError(null);
+    try {
+      await dismissLink(link.id);
+      const message = 'Dismissed. It’s off Home and still under All stashes. You can file it here any time.';
+      announce(message);
+      onDone(message);
+    } catch (e) {
+      fail(`Couldn’t dismiss: ${(e as Error).message}`);
+    }
+    setBusy(null);
+  }
+
+  function fail(message: string) {
+    setError(message);
+    announce(message);
+    setBusy(null);
+  }
+
+  return (
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <ThemedText type="defaultBold" accessibilityRole="header">
+        Choose a category
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Pick where this post goes. It’s saved as one item, with the caption as its description.
+      </ThemedText>
+      <View style={styles.field}>
+        <ThemedText type="smallBold" themeColor="textSecondary">
+          Name
+        </ThemedText>
+        <TextField
+          value={name}
+          onChangeText={(text) => {
+            setName(text);
+            setError(null);
+          }}
+          maxLength={200}
+          returnKeyType="done"
+          accessibilityLabel="Name"
+          invalid={blank}
+        />
+        {blank ? (
+          <ThemedText type="small" themeColor="danger">
+            Add a name to file it.
+          </ThemedText>
+        ) : null}
+      </View>
+      <View style={styles.kinds}>
+        {KINDS.map((kind) => (
+          <Button
+            key={kind}
+            title={KIND_LABELS[kind]}
+            accessibilityLabel={`File in ${KIND_LABELS[kind]}`}
+            variant="secondary"
+            onPress={() => file(kind)}
+            loading={busy === kind}
+            disabled={!!busy || blank}
+            style={styles.kind}
+          />
+        ))}
+      </View>
+      {error ? (
+        <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+          {error}
+        </ThemedText>
+      ) : null}
+      {link.dismissed_at ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Dismissed from Home. It’s still under All stashes.
+        </ThemedText>
+      ) : (
+        <Button
+          title="Dismiss"
+          accessibilityHint="Takes it off Home. It stays under All stashes."
+          variant="secondary"
+          onPress={dismiss}
+          loading={busy === 'dismiss'}
+          disabled={!!busy}
+        />
+      )}
+    </View>
+  );
+}
+
+/**
+ * Where the post ended up after KindChoicePanel or FilePanel. The button that was pressed is gone, so screen reader and keyboard
  * focus move here instead of jumping to the top of the screen.
  */
 function ChosenNote({ message }: { message: string }) {
@@ -578,6 +728,8 @@ const styles = StyleSheet.create({
   steps: { flexDirection: 'column', alignItems: 'stretch' },
   card: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.two },
   field: { gap: 2 },
+  kinds: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  kind: { flexGrow: 1, flexBasis: 130, paddingHorizontal: Spacing.three },
   feedback: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   flex: { flex: 1 },
   footer: { gap: Spacing.two },

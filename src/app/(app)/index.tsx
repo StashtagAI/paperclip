@@ -43,7 +43,10 @@ const GRID: Kind[][] = [
   ['shop', 'watch'],
 ];
 
-/** "Recently stashed" rows, counting links still being read (those always show, so a failure is never hidden). */
+/**
+ * "Recently stashed" rows, counting links that need you (being read, failed, waiting for text or not sorted). Those
+ * always show, up to HOME_ATTENTION_LIMIT, so one is never hidden behind new items.
+ */
 const RECENT_COUNT = 5;
 
 /**
@@ -56,7 +59,8 @@ export default function HomeScreen() {
   const [now, setNow] = useState(() => new Date());
   const search = useDebouncedSearch(query, now);
 
-  const [items, pending] = recent.data ?? [];
+  const [items, attention] = recent.data ?? [];
+  const pending = attention?.links;
   const location = useHere(!!items && hasPlaces(items));
 
   // Pick up new items (and the time of day) when coming back from "Stash a link" or a list.
@@ -179,6 +183,7 @@ export default function HomeScreen() {
               </ThemedText>
             ) : null}
           </View>
+          {/* Stashes that need you can outnumber what Home shows; the rest are a tap away (HAN-89). */}
           {recent.error ? (
             <ErrorNote message={recent.error.message} onRetry={recent.refresh} />
           ) : !recent.data ? (
@@ -187,6 +192,15 @@ export default function HomeScreen() {
             <View style={styles.list}>
               {pending?.map((link) => <PendingLinkRow key={link.id} link={link} onRemoved={refresh} />)}
               {items?.slice(0, Math.max(0, RECENT_COUNT - (pending?.length ?? 0))).map((item) => <StashRow key={item.id} item={item} />)}
+              <RowLink
+                href="/stashes"
+                title="All stashes"
+                subtitle={
+                  attention && attention.total > attention.links.length
+                    ? `${attention.total - attention.links.length} more need you`
+                    : 'Every link you’ve stashed'
+                }
+              />
             </View>
           ) : (
             <FirstStashGuide />
