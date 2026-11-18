@@ -2,7 +2,7 @@
 // Replace with `supabase gen types typescript` once the project is linked.
 import type { Platform } from '@/lib/link-filter';
 
-export const KINDS = ['eats', 'trips', 'recipes', 'do'] as const;
+export const KINDS = ['eats', 'trips', 'recipes', 'do', 'shop', 'watch'] as const;
 export type Kind = (typeof KINDS)[number];
 
 export const KIND_LABELS: Record<Kind, string> = {
@@ -10,6 +10,8 @@ export const KIND_LABELS: Record<Kind, string> = {
   trips: 'Trips',
   recipes: 'Recipes',
   do: 'Do',
+  shop: 'Shop',
+  watch: 'Watch & read',
 };
 
 /** Tile subtitles on Home (design brief, "Home screen.pdf"). */
@@ -18,6 +20,8 @@ export const KIND_SUBTITLES: Record<Kind, string> = {
   trips: 'Places to go',
   recipes: 'To cook next',
   do: 'Things to try',
+  shop: 'Things to buy',
+  watch: 'Shows, films, books',
 };
 
 export const PLATFORM_LABELS: Record<Platform, string> = {

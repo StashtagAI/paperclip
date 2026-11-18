@@ -3,7 +3,7 @@ import { readLinkedSites, type ResolveFn } from "./linked.ts";
 import { extract } from "./extract.ts";
 import { type LookupProvider, stubLookup } from "./lookup.ts";
 import { type SearchProvider, stubSearch } from "./search.ts";
-import type { Extraction } from "./schema.ts";
+import { type Extraction, PLACE_KINDS } from "./schema.ts";
 
 export interface Deps {
   apiKey: string;
@@ -56,7 +56,7 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
   const lookup = d.lookup ?? stubLookup;
   const t1 = Date.now();
   for (const it of ex.items) {
-    if (ex.kind === "recipes") continue;
+    if (!PLACE_KINDS.includes(ex.kind)) continue;
     try {
       if (it.address) {
         // address stated in the text or linked data: geocode it, never replace it

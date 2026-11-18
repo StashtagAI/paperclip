@@ -128,6 +128,15 @@ const r4 = await processCaptured("https://www.tiktok.com/@a/video/1", { transcri
 });
 assert.ok(r4.ok && r4.extraction.items[0].sources?.address === "places_lookup");
 
+// 4a) shop and watch items are products and media, not places: no Places lookup (HAN-84)
+let shopLookups = 0;
+const r4s = await processCaptured("https://www.tiktok.com/@a/video/1", { transcript: "Santal 33" }, {
+  ...key, lookup: { name: "t", findPlace: () => { shopLookups++; return Promise.resolve(null); } },
+  fetchFn: mkFetch({}, { kind: "shop", category: "Fragrances", list_scope: null, tags: [], items: [{ name: "Santal 33", description: "" }] }),
+});
+assert.ok(r4s.ok && r4s.extraction.kind === "shop");
+assert.equal(shopLookups, 0);
+
 // 4b) Google provider: field mask, key only in header, name-match guard, env fallback to stub
 const calls: { url: string; init?: RequestInit }[] = [];
 const gf = ((u: string, init?: RequestInit) => {
@@ -195,6 +204,8 @@ const sf = ((u: string, init?: RequestInit) => {
 const rec = { name: "Shakshuka", description: "" };
 assert.deepEqual(gaps(rec, "recipes"), ["ingredients", "steps"]);
 assert.deepEqual(gaps({ ...rec, address: "1 Main" }, "eats"), []);
+assert.deepEqual(gaps(rec, "shop"), []);
+assert.deepEqual(gaps(rec, "watch"), []);
 const so = await claudeSearch("K", sf).research(rec, "recipes", "Breakfast");
 assert.equal(so.fill?.sourceUrl, "https://blog.example.com/shakshuka");
 assert.equal(so.fill?.address, undefined);

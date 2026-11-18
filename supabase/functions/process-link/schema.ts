@@ -1,5 +1,7 @@
-export const KINDS = ["eats", "trips", "recipes", "do"] as const;
+export const KINDS = ["eats", "trips", "recipes", "do", "shop", "watch"] as const;
 export type Kind = typeof KINDS[number];
+/** Kinds whose items can be places: they get a Places lookup and an address search. Not recipes, products or media. */
+export const PLACE_KINDS: readonly Kind[] = ["eats", "trips", "do"];
 
 export interface Item {
   name: string;
