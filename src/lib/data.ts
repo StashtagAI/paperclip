@@ -403,6 +403,16 @@ export async function deleteLink(linkId: string): Promise<void> {
   await removePhotoFiles(paths);
 }
 
+/**
+ * Answers the card's "which kind?" question for an ambiguous post (HAN-87): keeps it where process-link filed it, or
+ * moves its items to the same category and list names under `kind`. Returns the list the items are in now.
+ */
+export async function chooseLinkKind(linkId: string, kind: Kind): Promise<string> {
+  const { data, error } = await supabase.rpc('choose_link_kind', { p_link_id: linkId, p_kind: kind });
+  if (error) throw error;
+  return data as string;
+}
+
 /** Deletes a list and its items (they cascade), and its category too if that leaves it empty (HAN-62). */
 export async function deleteList(list: Pick<ListRow, 'id' | 'category_id'>): Promise<void> {
   const paths = await photoPaths('items.list_id', list.id);

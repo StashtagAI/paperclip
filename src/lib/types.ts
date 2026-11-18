@@ -105,6 +105,8 @@ export type RawContent = {
   unsorted?: boolean;
   list_id?: string;
   already_listed?: string[];
+  /** The runner-up kind when the post fits two about equally (HAN-85); gone once the user has chosen (HAN-87). */
+  alt_kind?: string;
   item_sources?: Record<string, Partial<Record<string, FieldSource>>>;
   item_source_urls?: Record<string, Partial<Record<string, string>>>;
   recipe_details?: Record<string, { ingredients: string[]; steps: string[] }>;
