@@ -42,7 +42,7 @@ export function parsePlace(p: Record<string, unknown>): PlaceDetails | null {
   }).slice(0, 28);
   // Google's day lines use narrow and thin spaces around times; plain spaces read the same and wrap predictably.
   const weekday = (h?.weekdayDescriptions ?? []).filter((d): d is string => typeof d === "string")
-    .map((d) => d.replace(/[  ]/g, " ").slice(0, 120)).slice(0, 7);
+    .map((d) => d.replace(/[\u202f\u2009]/g, " ").slice(0, 120)).slice(0, 7);
   const offset = typeof p.utcOffsetMinutes === "number" && Math.abs(p.utcOffsetMinutes) <= 14 * 60 ? p.utcOffsetMinutes : null;
   const hours = periods.length || weekday.length ? { periods, weekday, utc_offset_minutes: offset } : null;
   return { placeId: p.id, rating, ratingCount: rating == null ? null : count, hours };
