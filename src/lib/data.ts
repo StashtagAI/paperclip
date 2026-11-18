@@ -241,12 +241,14 @@ type RecipeQueryRow = Pick<ItemRow, 'id' | 'name' | 'description' | 'link_id'> &
 /**
  * These items as recipes, in the order asked for. Ids that no longer exist are left out. The details live in
  * links.raw_content keyed by item name (docs/extraction.md), so only that part of the link is read.
+ * The embed names items.link_id's key: production also joins items to links through item_posts and
+ * item_reports, and PostgREST refuses an ambiguous embed.
  */
 export async function fetchRecipes(itemIds: string[]): Promise<Recipe[]> {
   if (!itemIds.length) return [];
   const { data, error } = await supabase
     .from('items')
-    .select('id, name, description, link_id, list:lists!inner(id, name), link:links(recipe_details:raw_content->recipe_details)')
+    .select('id, name, description, link_id, list:lists!inner(id, name), link:links!items_link_id_fkey(recipe_details:raw_content->recipe_details)')
     .in('id', itemIds)
     .returns<RecipeQueryRow[]>();
   if (error) throw error;
