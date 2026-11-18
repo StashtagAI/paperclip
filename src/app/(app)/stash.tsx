@@ -11,11 +11,11 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { usePollWhile } from '@/hooks/use-poll-while';
 import { useTheme } from '@/hooks/use-theme';
+import { signOutHere } from '@/lib/account';
 import { buildCard, fetchLink, fetchRecentLinks, submitLink } from '@/lib/data';
 import { failureReason } from '@/lib/link-outcome';
 import { shortUrl } from '@/lib/link-summary';
 import { checkLink } from '@/lib/link-filter';
-import { supabase } from '@/lib/supabase';
 import type { LinkRow, LinkStatus } from '@/lib/types';
 
 type Feedback = { tone: 'danger' | 'success'; text: string } | null;
@@ -151,7 +151,7 @@ export default function StashScreen() {
         links.data?.map((link) => <LinkRowView key={link.id} link={link} />)
       )}
 
-      <Button title="Sign out" variant="secondary" onPress={() => supabase.auth.signOut()} style={styles.signOut} />
+      <Button title="Sign out" variant="secondary" onPress={signOutHere} style={styles.signOut} />
     </Screen>
   );
 }

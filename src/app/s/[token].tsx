@@ -64,7 +64,7 @@ export default function SharedListScreen() {
 
   async function switchAccount() {
     await pendingShare.set(token);
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     router.replace('/sign-in');
   }
 

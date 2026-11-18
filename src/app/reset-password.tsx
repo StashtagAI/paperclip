@@ -49,7 +49,7 @@ export default function ResetPassword() {
   async function cancel() {
     setBusy(true);
     // Back to signed out; the old password still works.
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
   }
 
   return (
