@@ -42,7 +42,7 @@ describe('tonightPicks', () => {
       item('eats', 'Sushi Den'),
       item('recipes', 'Miso salmon'),
       item('do', 'Red Rocks'),
-      item('trips', 'Aspen'),
+      item('travel', 'Aspen'),
       item('eats', 'Hop Alley'),
     ];
     const picks = tonightPicks(items, evening).picks;
@@ -88,7 +88,7 @@ describe('tonightPicks', () => {
 describe('nearPicks', () => {
   const near = item('eats', 'Close', { lat: 39.7402, lng: -104.9903 }); // ~110 m
   const mid = item('do', 'Mid', { lat: 39.76, lng: -104.99 }); // ~2.3 km
-  const far = item('trips', 'Boulder', { lat: 40.015, lng: -105.2705 }); // ~39 km
+  const far = item('travel', 'Boulder', { lat: 40.015, lng: -105.2705 }); // ~39 km
   const recipe = item('recipes', 'Soup', { lat: 39.7392, lng: -104.9903 });
   const noCoords = item('eats', 'Nowhere');
 
@@ -110,9 +110,9 @@ describe('nearPicks', () => {
 });
 
 describe('weekPicks', () => {
-  it('picks do and trips, older saves first, skipping excluded items', () => {
+  it('picks do and travel, older saves first, skipping excluded items', () => {
     const old = item('do', 'Old hike', { created_at: '2026-09-01T00:00:00Z' });
-    const fresh1 = item('trips', 'New trip', { created_at: '2026-11-12T00:00:00Z' });
+    const fresh1 = item('travel', 'New trip', { created_at: '2026-11-12T00:00:00Z' });
     const fresh2 = item('do', 'New class', { created_at: '2026-11-11T00:00:00Z' });
     const shown = item('do', 'Already near', { created_at: '2026-08-01T00:00:00Z' });
     const picks = weekPicks([fresh1, item('eats', 'Cafe'), fresh2, old, shown], evening, new Set([shown.id])).picks;

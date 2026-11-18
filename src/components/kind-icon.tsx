@@ -5,7 +5,7 @@ import type { Kind } from '@/lib/types';
 /** SF Symbols on iOS, Material Symbols on Android and web. */
 const KIND_SYMBOLS: Record<Kind, SymbolViewProps['name']> = {
   eats: { ios: 'fork.knife', android: 'restaurant', web: 'restaurant' },
-  trips: { ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' },
+  travel: { ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' },
   recipes: { ios: 'frying.pan', android: 'soup_kitchen', web: 'soup_kitchen' },
   do: { ios: 'sparkle', android: 'auto_awesome', web: 'auto_awesome' },
   shop: { ios: 'bag', android: 'shopping_bag', web: 'shopping_bag' },

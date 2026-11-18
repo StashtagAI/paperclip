@@ -45,7 +45,7 @@ import { filterByTag, tagCounts } from '@/lib/tag-filter';
 import type { ItemRow, Kind } from '@/lib/types';
 
 /** Kinds whose items are places: their lists get a map and directions (HAN-24). */
-const PLACE_KINDS: readonly Kind[] = ['eats', 'trips'];
+const PLACE_KINDS: readonly Kind[] = ['eats', 'travel'];
 
 /** Level 3: the items in one list, e.g. Restaurants > Denver. */
 export default function ListScreen() {

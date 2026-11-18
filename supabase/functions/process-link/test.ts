@@ -30,6 +30,9 @@ assert.equal(v.items[0].lat, undefined);
 assert.equal(v.items[1].lat, 39.7);
 assert.deepEqual(v.tags, ["brunch"]);
 assert.throws(() => validateExtraction({ kind: "food", category: "x", items: [] }));
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "shop", category: "x", items: [] }).alt_kind, "shop");
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "travel", category: "x", items: [] }).alt_kind, undefined);
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "bogus", category: "x", items: [] }).alt_kind, undefined);
 
 // Linked-site DNS check: the default resolver is Deno.resolveDns, stubbed here to a public address.
 (globalThis as Record<string, unknown>).Deno = { resolveDns: async () => ["93.184.216.34"] };
@@ -259,14 +262,14 @@ import { ground } from "./extract.ts";
 // place names that the caption only has as @handles still ground; unrelated names do not
 {
   const c = { platform: "instagram", url: IG, caption: "Check into @badruttspalace\nDinner at @carltonstmoritz" } as never;
-  const mk = (names: string[]) => ({ kind: "trips" as const, category: "Hotels", list_scope: null, tags: [], items: names.map((name) => ({ name, description: "" })) });
+  const mk = (names: string[]) => ({ kind: "travel" as const, category: "Hotels", list_scope: null, tags: [], items: names.map((name) => ({ name, description: "" })) });
   assert.deepEqual(ground(mk(["Badrutt's Palace", "Hotel Eden"]), c, []).items.map((i) => i.name), ["Badrutt's Palace"]);
 }
 
 // grounding reports the names it dropped (for process_events)
 {
   const c = { platform: "instagram", url: IG, caption: "Check into @badruttspalace" } as never;
-  const ex = { kind: "trips" as const, category: "Hotels", list_scope: null, tags: [], items: ["Badrutt's Palace", "Hotel Eden"].map((name) => ({ name, description: "" })) };
+  const ex = { kind: "travel" as const, category: "Hotels", list_scope: null, tags: [], items: ["Badrutt's Palace", "Hotel Eden"].map((name) => ({ name, description: "" })) };
   const dropped: string[] = [];
   ground(ex, c, [], dropped);
   assert.deepEqual(dropped, ["Hotel Eden"]);

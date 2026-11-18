@@ -36,7 +36,7 @@ import { unseen, useSharedWithMe } from '@/lib/shared-with-me';
 import { KIND_LABELS, type Kind } from '@/lib/types';
 
 const GRID: Kind[][] = [
-  ['eats', 'trips'],
+  ['eats', 'travel'],
   ['recipes', 'do'],
   ['shop', 'watch'],
 ];
@@ -120,7 +120,7 @@ export default function HomeScreen() {
       <TextField
         value={query}
         onChangeText={setQuery}
-        placeholder="Search cafés, trips, recipes"
+        placeholder="Search cafés, travel, recipes"
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"

@@ -51,7 +51,7 @@ supabase db push            # applies supabase/migrations/*.sql
 ```
 
 Schema: `links` (url, platform, status `pending|processing|done|failed`, raw_content, tags, error) →
-`categories` (kind `eats|trips|recipes|do`, name) › `lists` (name = scope such as "Denver", tags) › `items`
+`categories` (kind `eats|travel|recipes|do`, name) › `lists` (name = scope such as "Denver", tags) › `items`
 (name, description, address, lat/lng, source `link_id`). RLS limits every table to the signed-in user's rows; clients may
 only insert links as `pending` and cannot update them; `process-link` uses the service role.
 

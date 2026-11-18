@@ -74,7 +74,7 @@ export type KindColor = {
 export const KindColors: Record<ColorScheme, Record<Kind, KindColor>> = {
   light: {
     eats: { color: L.mint, onColor: L.ink, chip: '#D1F3E8', onChip: '#0A6E4F' },
-    trips: { color: L.cobalt, onColor: L.white, chip: '#D2E2FB', onChip: '#1A4FB5' },
+    travel: { color: L.cobalt, onColor: L.white, chip: '#D2E2FB', onChip: '#1A4FB5' },
     recipes: { color: L.aqua, onColor: L.ink, chip: '#D8F7F7', onChip: '#0B6563' },
     do: { color: L.indigo, onColor: L.white, chip: '#DEDEFC', onChip: '#3E3FC2' },
     shop: { color: L.coral, onColor: L.ink, chip: '#FFE3D6', onChip: '#A83F12' },
@@ -82,7 +82,7 @@ export const KindColors: Record<ColorScheme, Record<Kind, KindColor>> = {
   },
   dark: {
     eats: { color: D.mint, onColor: D.night, chip: '#194045', onChip: D.mint },
-    trips: { color: D.cobalt, onColor: D.night, chip: '#1B3554', onChip: '#7DB7FF' },
+    travel: { color: D.cobalt, onColor: D.night, chip: '#1B3554', onChip: '#7DB7FF' },
     recipes: { color: D.aqua, onColor: D.night, chip: '#1E4250', onChip: D.aqua },
     do: { color: D.indigo, onColor: D.night, chip: '#263354', onChip: '#ABACFF' },
     shop: { color: D.coral, onColor: D.night, chip: '#3D2A26', onChip: D.coral },

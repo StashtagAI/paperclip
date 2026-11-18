@@ -232,7 +232,7 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
       status: "done",
       error: null,
       tags: ex.tags,
-      raw_content: { ...r.raw_content, list_id: list!.id, already_listed: already },
+      raw_content: { ...r.raw_content, list_id: list!.id, already_listed: already, ...(ex.alt_kind ? { alt_kind: ex.alt_kind } : {}) },
       processed_at: new Date().toISOString(),
     }).eq("id", link_id);
     await Promise.allSettled(pending);
