@@ -8,6 +8,8 @@ const KIND_SYMBOLS: Record<Kind, SymbolViewProps['name']> = {
   trips: { ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' },
   recipes: { ios: 'frying.pan', android: 'soup_kitchen', web: 'soup_kitchen' },
   do: { ios: 'sparkle', android: 'auto_awesome', web: 'auto_awesome' },
+  shop: { ios: 'bag', android: 'shopping_bag', web: 'shopping_bag' },
+  watch: { ios: 'play.rectangle', android: 'movie', web: 'movie' },
 };
 
 export function KindIcon({ kind, color, size = 26 }: { kind: Kind; color: string; size?: number }) {

@@ -1,5 +1,5 @@
 /** Web search research step: Claude's server-side web search tool, only for gaps the captured text and linked sites leave. Results are untrusted data. */
-import type { Item, Kind } from "./schema.ts";
+import { type Item, type Kind, PLACE_KINDS } from "./schema.ts";
 
 export const SEARCH_TOOL = "web_search_20260209";
 export const MAX_SEARCHES_PER_CARD = 3;
@@ -19,9 +19,10 @@ export interface SearchProvider {
 }
 export const stubSearch: SearchProvider = { name: "stub", research: () => Promise.resolve({ fill: null, searches: 0 }) };
 
-/** Which gaps search may fill. Recipes: missing ingredients or steps. Places: no address after the Places lookup. */
+/** Which gaps search may fill. Recipes: missing ingredients or steps. Places: no address after the Places lookup. Shop, watch: none. */
 export function gaps(item: Item, kind: Kind): ("address" | "ingredients" | "steps")[] {
   if (kind === "recipes") return (["ingredients", "steps"] as const).filter((k) => !item[k]?.length);
+  if (!PLACE_KINDS.includes(kind)) return [];
   return item.address ? [] : ["address"];
 }
 

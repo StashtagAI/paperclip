@@ -38,12 +38,13 @@ import { KIND_LABELS, type Kind } from '@/lib/types';
 const GRID: Kind[][] = [
   ['eats', 'trips'],
   ['recipes', 'do'],
+  ['shop', 'watch'],
 ];
 
 const RECENT_COUNT = 20;
 
 /**
- * Home ("Home screen.pdf"): header + search, the four kinds, picks from the stash (Tonight / Near you / Try this week,
+ * Home ("Home screen.pdf"): header + search, the six kinds, picks from the stash (Tonight / Near you / Try this week,
  * HAN-48), and recently stashed items.
  */
 export default function HomeScreen() {
@@ -320,7 +321,7 @@ function Results({ query, state }: { query: string; state: SearchState }) {
 const FIRST_STEPS = [
   'Find a post worth keeping: a café list, a weekend trip, a recipe.',
   'Tap Share, then StashtagAI. Or copy the link and tap Stash a link below.',
-  'We read the post and sort what it names into Eats, Trips, Recipes or Do.',
+  'We read the post and sort what it names into Eats, Trips, Recipes, Do, Shop or Watch & read.',
 ];
 
 /** First run (HAN-42): how to stash a first post, and an example of what comes back. Shown while the stash is empty. */
