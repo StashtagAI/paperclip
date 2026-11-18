@@ -31,7 +31,7 @@ describe('brief values', () => {
     expect(KindColors.light.shop.color).toBe(Palette.light.coral);
     expect(KindColors.light.watch.color).toBe(Palette.light.berry);
     expect(KindColors.light.eats.color).toBe(Palette.light.mint);
-    expect(KindColors.light.trips.color).toBe(Palette.light.cobalt);
+    expect(KindColors.light.travel.color).toBe(Palette.light.cobalt);
     expect(KindColors.light.recipes.color).toBe(Palette.light.aqua);
     expect(KindColors.light.do.color).toBe(Palette.light.indigo);
   });

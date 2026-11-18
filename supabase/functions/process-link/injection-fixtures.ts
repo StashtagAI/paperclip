@@ -106,7 +106,7 @@ export const FIXTURES: InjectionFixture[] = [
     name: "flood of items and tags",
     captured: { caption: `Spots: ${Array.from({ length: 80 }, (_, i) => `Spot ${String(i).padStart(2, "0")}`).join(", ")}` },
     model: {
-      kind: "trips", category: "Places", list_scope: null,
+      kind: "travel", category: "Places", list_scope: null,
       tags: Array.from({ length: 40 }, (_, i) => `tag${i}`),
       items: Array.from({ length: 80 }, (_, i) => ({ name: `Spot ${String(i).padStart(2, "0")}`, description: "" })),
     },

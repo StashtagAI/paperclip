@@ -22,7 +22,7 @@ Captured text and linked data go to Claude inside `<post>` / `<linked_site>` tag
 - Recipe ingredients/steps come from the linked page, or from the model only if every line appears in the captured text.
 - Each field records its source: `capture`, `linked_site`, `places_lookup` or `search`.
 
-Output shape: `{kind: eats|trips|recipes|shop|watch|do, category, list_scope|null, tags[], items:[{name, description, address?, lat?, lng?, ingredients?, steps?, sources}]}`. Zero items -> `failed: no_items_found`.
+Output shape: `{kind: eats|travel|recipes|shop|watch|do, category, list_scope|null, tags[], items:[{name, description, address?, lat?, lng?, ingredients?, steps?, sources}]}`. Zero items -> `failed: no_items_found`.
 
 ## Place lookups (`lookup.ts`)
 `LookupProvider` has `findPlace(name, hint)` and optional `geocode(address)`. `lookupFromEnv` returns the Google provider when the Edge Function secret **`GOOGLE_PLACES_API_KEY`** is set (`Deno.env.get`), otherwise the no-op `stubLookup`. The pipeline then runs as before, with no address or map pin on the cards. The key is never committed, logged, or sent to the client.

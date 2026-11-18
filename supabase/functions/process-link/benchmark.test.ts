@@ -23,7 +23,7 @@ for (const p of posts) {
   assert.ok(e.empty || e.items?.length, `${p.id}: needs items or empty`);
 }
 
-const ex = (items: Extraction["items"], o: Partial<Extraction> = {}): Extraction => ({ kind: "trips", category: "Itineraries", list_scope: "St. Moritz", tags: [], items, ...o });
+const ex = (items: Extraction["items"], o: Partial<Extraction> = {}): Extraction => ({ kind: "travel", category: "Itineraries", list_scope: "St. Moritz", tags: [], items, ...o });
 const it = (name: string, description = "") => ({ name, description });
 
 // empty expected

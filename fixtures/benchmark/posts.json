@@ -34,7 +34,7 @@
    },
    "note": "Real itinerary; HAN-17 saw 2-4 of 7 places returned",
    "expect": {
-    "kind": "trips",
+    "kind": "travel",
     "category_any": [
      "itinerar",
      "trip",
@@ -297,9 +297,9 @@
    "captured": {
     "caption": "Best perfume shop in Austin 🌸 Scent Bar Austin lets you blend your own fragrance, the staff are so sweet. 1204 S Congress Ave, Austin TX"
    },
-   "note": "Perfume shop with its own address -> eats/trips-style place, not shop",
+   "note": "Perfume shop with its own address -> eats/travel-style place, not shop",
    "expect": {
-    "kind": "trips",
+    "kind": "travel",
     "category_any": [
      "perfume",
      "shop",
@@ -455,6 +455,57 @@
       ],
       "reason_any": [
        "morning"
+      ]
+     }
+    ],
+    "min_recall": 0.66
+   }
+  },
+  {
+   "id": "travel-hacks",
+   "synthetic": true,
+   "source": "synthetic (HAN-85)",
+   "url": "https://www.instagram.com/p/SYNTH-travel-hacks/",
+   "captured": {
+    "caption": "Travel hacks I wish I knew sooner ✈️\nPacking cubes: fit a week of clothes in a carry-on\nDownload offline maps: saves roaming data abroad\nBook flights on Tuesdays: usually cheaper fares\n#travelhacks"
+   },
+   "note": "Travel hacks, not places or generic do tips -> travel",
+   "expect": {
+    "kind": "travel",
+    "category_any": [
+     "travel",
+     "hack",
+     "tip",
+     "pack",
+     "flight"
+    ],
+    "items": [
+     {
+      "name_any": [
+       "packing cubes"
+      ],
+      "reason_any": [
+       "carry-on",
+       "week"
+      ]
+     },
+     {
+      "name_any": [
+       "offline maps"
+      ],
+      "reason_any": [
+       "roaming",
+       "data"
+      ]
+     },
+     {
+      "name_any": [
+       "tuesday",
+       "flights"
+      ],
+      "reason_any": [
+       "cheaper",
+       "fare"
       ]
      }
     ],
