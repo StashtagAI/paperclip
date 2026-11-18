@@ -32,7 +32,6 @@ import {
 import { toError } from '@/lib/errors';
 import { settledMessage } from '@/lib/link-outcome';
 import { postName } from '@/lib/link-summary';
-import { nudgesSupported } from '@/lib/nudge-service';
 import { hasPlaces } from '@/lib/picks';
 import { sharedByMeSummary } from '@/lib/shared-by-me';
 import { unseen, useSharedWithMe } from '@/lib/shared-with-me';
@@ -205,38 +204,16 @@ function Header() {
       <ThemedText type="heading" accessibilityRole="header" style={styles.headerTitle}>
         Your stash
       </ThemedText>
-      <View style={styles.headerActions}>
-        {nudgesSupported ? (
-          <Pressable
-            onPress={() => router.push('/nudges')}
-            accessibilityRole="button"
-            accessibilityLabel="Nudges"
-            accessibilityHint="Reminders for saved places near you and a weekly digest"
-            hitSlop={Spacing.two}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
-            <SymbolView name={{ ios: 'bell', android: 'notifications', web: 'notifications' }} tintColor={theme.tint} size={26} />
-          </Pressable>
-        ) : null}
-        {Features.shared ? (
+      {/* Nudges and Profile moved to the bottom bar (HAN-91). */}
+      {Features.shared ? (
+        <View style={styles.headerActions}>
           <Pressable style={[styles.pill, { backgroundColor: theme.backgroundSelected }]} accessibilityRole="button">
             <ThemedText type="smallBold" themeColor="textSecondary">
               Shared
             </ThemedText>
           </Pressable>
-        ) : null}
-        <Pressable
-          onPress={() => router.push('/profile')}
-          accessibilityRole="button"
-          accessibilityLabel="Profile and settings"
-          hitSlop={Spacing.two}
-          style={({ pressed }) => [styles.profile, { backgroundColor: theme.backgroundSelected }, pressed && styles.pressed]}>
-          <SymbolView
-            name={{ ios: 'person.crop.circle', android: 'account_circle', web: 'account_circle' }}
-            tintColor={theme.tint}
-            size={26}
-          />
-        </Pressable>
-      </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -425,8 +402,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginTop: Spacing.two },
   headerTitle: { flex: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  iconButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  profile: { width: 44, height: 44, borderRadius: Radius.chip, alignItems: 'center', justifyContent: 'center' },
   pill: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.chip },
   grid: { gap: Spacing.three - 2 },
   gridRow: { flexDirection: 'row', gap: Spacing.three - 2 },

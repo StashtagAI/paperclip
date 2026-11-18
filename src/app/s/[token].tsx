@@ -3,7 +3,9 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
 
+import { BottomNav } from '@/components/bottom-nav';
 import { Button } from '@/components/button';
+import { HomeBackButton } from '@/components/home-back-button';
 import { Screen } from '@/components/screen';
 import { TagChip } from '@/components/tag-chip';
 import { ThemedText } from '@/components/themed-text';
@@ -23,6 +25,7 @@ import { KIND_LABELS, PLATFORM_LABELS, type SharedItem } from '@/lib/types';
  * to sign in first and the token is kept across sign-in (see (app)/_layout).
  */
 export default function SharedListScreen() {
+  const theme = useTheme();
   const { token } = useLocalSearchParams<{ token: string }>();
   const { session, loading: authLoading } = useAuth();
   const userId = session?.user.id;
@@ -77,52 +80,68 @@ export default function SharedListScreen() {
   const checking = authLoading || (session && shared.loading && !shared.data);
 
   return (
-    <Screen footer={footer}>
-      <Stack.Screen options={{ title: list ? `${list.category} › ${list.list}` : 'Shared list' }} />
-      {checking ? <ActivityIndicator accessibilityLabel="Loading the shared list" /> : null}
-      {!authLoading && !session ? <SignInFirst onSignIn={signIn} /> : null}
-      {shared.error ? (
-        <View style={styles.gap}>
-          <ThemedText themeColor="danger" accessibilityRole="alert">
-            Couldn’t open the shared list: {shared.error.message}
-          </ThemedText>
-          <Button title="Try again" variant="secondary" onPress={shared.refresh} />
-        </View>
-      ) : null}
-      {session && !shared.loading && !shared.error && !list ? <NotShared email={session.user.email} onSwitch={switchAccount} /> : null}
-      {list ? (
-        <>
-          <View style={styles.header}>
-            <ThemedText type="smallBold" themeColor="textSecondary">
-              Shared from Stashtag · {KIND_LABELS[list.kind]}
+    <View style={styles.fill}>
+      <Screen footer={footer} edges="none">
+        {/* The root stack hides headers; this screen needs one for its back button (HAN-91). */}
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: list ? `${list.category} › ${list.list}` : 'Shared list',
+            headerLeft: router.canGoBack() ? undefined : () => <HomeBackButton />,
+            headerBackButtonDisplayMode: 'minimal',
+            headerTintColor: theme.tint,
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: theme.background },
+            headerTitleStyle: { color: theme.text },
+          }}
+        />
+        {checking ? <ActivityIndicator accessibilityLabel="Loading the shared list" /> : null}
+        {!authLoading && !session ? <SignInFirst onSignIn={signIn} /> : null}
+        {shared.error ? (
+          <View style={styles.gap}>
+            <ThemedText themeColor="danger" accessibilityRole="alert">
+              Couldn’t open the shared list: {shared.error.message}
             </ThemedText>
-            <ThemedText type="sectionTitle" accessibilityRole="header">
-              {list.category} › {list.list}
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {list.items.length} {list.items.length === 1 ? 'item' : 'items'}
-            </ThemedText>
+            <Button title="Try again" variant="secondary" onPress={shared.refresh} />
           </View>
-          {list.tags.length ? (
-            <View style={styles.tags}>
-              {list.tags.map((tag) => (
-                <TagChip key={tag} kind={list.kind} tag={tag.replace(/^#+/, '')} />
-              ))}
+        ) : null}
+        {session && !shared.loading && !shared.error && !list ? <NotShared email={session.user.email} onSwitch={switchAccount} /> : null}
+        {list ? (
+          <>
+            <View style={styles.header}>
+              <ThemedText type="smallBold" themeColor="textSecondary">
+                Shared from Stashtag · {KIND_LABELS[list.kind]}
+              </ThemedText>
+              <ThemedText type="sectionTitle" accessibilityRole="header">
+                {list.category} › {list.list}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {list.items.length} {list.items.length === 1 ? 'item' : 'items'}
+              </ThemedText>
             </View>
-          ) : null}
-          {list.items.length === 0 ? <ThemedText themeColor="textSecondary">No items in this list yet.</ThemedText> : null}
-          {list.items.map((item) => (
-            <SharedItemCard key={item.name} item={item} />
-          ))}
-          {error ? (
-            <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
-              {error}
-            </ThemedText>
-          ) : null}
-          <Button title="Not now" variant="secondary" onPress={() => router.replace('/')} />
-        </>
-      ) : null}
-    </Screen>
+            {list.tags.length ? (
+              <View style={styles.tags}>
+                {list.tags.map((tag) => (
+                  <TagChip key={tag} kind={list.kind} tag={tag.replace(/^#+/, '')} />
+                ))}
+              </View>
+            ) : null}
+            {list.items.length === 0 ? <ThemedText themeColor="textSecondary">No items in this list yet.</ThemedText> : null}
+            {list.items.map((item) => (
+              <SharedItemCard key={item.name} item={item} />
+            ))}
+            {error ? (
+              <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
+                {error}
+              </ThemedText>
+            ) : null}
+            <Button title="Not now" variant="secondary" onPress={() => router.replace('/')} />
+          </>
+        ) : null}
+      </Screen>
+      {/* Signed in, it's part of the app like any other screen, so it gets the bottom bar too. */}
+      {session ? <BottomNav /> : null}
+    </View>
   );
 }
 
@@ -187,6 +206,7 @@ function SharedItemCard({ item }: { item: SharedItem }) {
 }
 
 const styles = StyleSheet.create({
+  fill: { flex: 1 },
   header: { gap: Spacing.one, marginTop: Spacing.two },
   gap: { gap: Spacing.three, marginTop: Spacing.four },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
