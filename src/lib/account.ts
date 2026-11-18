@@ -24,6 +24,21 @@ export function supportMailto(): string {
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Stashtag support')}&body=${encodeURIComponent(body)}`;
 }
 
+/** Signs out on this device only. Supabase's default is every device, which is "Sign out everywhere" below. */
+export async function signOutHere(): Promise<void> {
+  await supabase.auth.signOut({ scope: 'local' });
+}
+
+/**
+ * Revokes every session of this account (HAN-49), then signs out here. Other devices can't refresh any more and are
+ * signed out when their current access token expires (within the hour). On a network error nothing is signed out
+ * and the error is thrown, so the user can retry.
+ */
+export async function signOutEverywhere(): Promise<void> {
+  const { error } = await supabase.auth.signOut({ scope: 'global' });
+  if (error) throw error;
+}
+
 /**
  * Permanently deletes the account through the delete-account function (service role, server side only), then signs
  * out locally. The server session is already gone with the user, so a global sign-out would fail.

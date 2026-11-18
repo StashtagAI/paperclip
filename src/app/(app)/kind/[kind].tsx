@@ -26,17 +26,22 @@ const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'place', label: 'By place' },
 ];
 const groupByKey = (kind: Kind) => `kind-group-by:${kind}`;
+// Only kinds whose lists are tied to a place get the switch; Recipes and Do always group by type.
+const PLACE_KINDS: readonly Kind[] = ['eats', 'travel'];
 
 /**
  * One top-level kind: its categories, each with its lists (e.g. Eats > Restaurants > Denver), or flipped to show
- * each place with its lists (Winter Park > Bakeries, Coffee shops) (HAN-76). The choice is remembered per kind.
+ * each place with its lists (Winter Park > Bakeries, Coffee shops) (HAN-76). The choice is remembered per kind, and
+ * only offered for Eats and Travel.
  */
 export default function KindScreen() {
   const params = useLocalSearchParams<{ kind: string }>();
   const kind = (KINDS as readonly string[]).includes(params.kind) ? (params.kind as Kind) : null;
   const categories = useAsync(() => (kind ? fetchKind(kind) : Promise.resolve([])), [kind]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [groupBy, setGroupBy] = useState<GroupBy>('type');
+  const [savedGroupBy, setGroupBy] = useState<GroupBy>('type');
+  const canGroupByPlace = kind !== null && PLACE_KINDS.includes(kind);
+  const groupBy = canGroupByPlace ? savedGroupBy : 'type';
   const typeSections = groupBy === 'type' ? categories.data : undefined;
   const places = useMemo(
     () => (groupBy === 'place' ? groupByPlace(categories.data ?? []) : []),
@@ -104,7 +109,7 @@ export default function KindScreen() {
           Nothing here yet. {KIND_SUBTITLES[kind]} you stash will be sorted into lists here.
         </ThemedText>
       ) : null}
-      {categories.data?.length ? <GroupByPicker value={groupBy} onChange={chooseGroupBy} /> : null}
+      {canGroupByPlace && categories.data?.length ? <GroupByPicker value={groupBy} onChange={chooseGroupBy} /> : null}
       {places.map((place) => (
         <View key={place.key} style={styles.section}>
           <ThemedText type="smallBold" themeColor="textSecondary" accessibilityRole="header">

@@ -13,9 +13,9 @@ import { Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { usePollWhile } from '@/hooks/use-poll-while';
 import { useTheme } from '@/hooks/use-theme';
+import { signOutHere } from '@/lib/account';
 import { buildCard, fetchLink, fetchRecentLinks, submitLink } from '@/lib/data';
 import { checkLink } from '@/lib/link-filter';
-import { supabase } from '@/lib/supabase';
 
 type Feedback = { tone: 'danger' | 'success'; text: string } | null;
 
@@ -152,7 +152,7 @@ export default function StashScreen() {
       {/* Recent links stops at 20; every stash stays reachable from here (HAN-89). */}
       {links.data?.length ? <RowLink href="/stashes" title="All stashes" subtitle="Every link you’ve stashed, and the ones not sorted" /> : null}
 
-      <Button title="Sign out" variant="secondary" onPress={() => supabase.auth.signOut()} style={styles.signOut} />
+      <Button title="Sign out" variant="secondary" onPress={signOutHere} style={styles.signOut} />
     </Screen>
   );
 }
