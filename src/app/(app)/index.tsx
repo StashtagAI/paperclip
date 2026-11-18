@@ -41,7 +41,8 @@ const GRID: Kind[][] = [
   ['shop', 'watch'],
 ];
 
-const RECENT_COUNT = 20;
+/** "Recently stashed" rows, counting links still being read (those always show, so a failure is never hidden). */
+const RECENT_COUNT = 5;
 
 /**
  * Home ("Home screen.pdf"): header + search, the six kinds, picks from the stash (Tonight / Near you / Try this week,
@@ -159,7 +160,7 @@ export default function HomeScreen() {
           ) : items?.length || pending?.length ? (
             <View style={styles.list}>
               {pending?.map((link) => <PendingLinkRow key={link.id} link={link} onRemoved={refresh} />)}
-              {items?.slice(0, RECENT_COUNT).map((item) => <StashRow key={item.id} item={item} />)}
+              {items?.slice(0, Math.max(0, RECENT_COUNT - (pending?.length ?? 0))).map((item) => <StashRow key={item.id} item={item} />)}
             </View>
           ) : (
             <FirstStashGuide />
