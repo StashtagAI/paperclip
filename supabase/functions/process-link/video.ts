@@ -122,7 +122,7 @@ export function videoReader(video: VideoRef | undefined, env: Env, fetchFn: type
 
       if (via === "transcribe") {
         const form = new FormData();
-        form.append("model", env("TRANSCRIBE_MODEL")?.trim() || "gpt-4o-mini-transcribe");
+        form.append("model", env("TRANSCRIBE_MODEL")?.trim() || "gpt-transcribe");
         form.append("response_format", "text");
         form.append("file", new Blob([bytes], { type: "video/mp4" }), "reel.mp4");
         const r = await fetchFn("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: `Bearer ${key}` }, body: form, signal });
