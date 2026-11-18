@@ -54,6 +54,17 @@ export type ItemRow = {
   /** The user's own note and 1–5 star rating (HAN-45); process-link never writes these. */
   note: string;
   rating: number | null;
+  /** Google's rating and hours for Eats items (HAN-83), filled in by the place-details function; null until found. */
+  google_rating: number | null;
+  google_rating_count: number | null;
+  opening_hours: OpeningHours | null;
+};
+
+/** As place-details stores it: `day` 0 is Sunday; `weekday` is Google's Monday-to-Sunday lines. */
+export type OpeningHours = {
+  periods: { open: { day: number; hour: number; minute: number }; close?: { day: number; hour: number; minute: number } }[];
+  weekday: string[];
+  utc_offset_minutes: number | null;
 };
 
 /** A photo the user added to an item (HAN-45). `alt` is required and is what screen readers read out. */

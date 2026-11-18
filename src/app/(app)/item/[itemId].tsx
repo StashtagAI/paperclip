@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { WeeklyHours } from '@/components/google-place-info';
 import { Screen } from '@/components/screen';
 import { ratingLabel, StarRating } from '@/components/star-rating';
 import { TextField } from '@/components/text-field';
@@ -58,6 +59,7 @@ export default function ItemScreen() {
               </ThemedText>
             ) : null}
           </View>
+          <WeeklyHours item={data} />
           <Rating itemId={data.id} initial={data.rating} />
           <Note itemId={data.id} initial={data.note} />
           <Photos itemId={data.id} photos={data.photos} onChanged={item.refresh} />
