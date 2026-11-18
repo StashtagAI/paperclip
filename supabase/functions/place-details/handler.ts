@@ -44,7 +44,7 @@ export async function handle(req: Request, { db, env, fetchFn }: Deps): Promise<
   const { data: due, error: de, count } = await db.from("items")
     .select("id, name, address, lat, lng, google_place_id", { count: "exact" })
     .eq("list_id", list_id).eq("user_id", userId)
-    .or(`google_checked_at.is.null,google_checked_at.lt.${cutoff}`)
+    .or(`google_checked_at.is.null,google_checked_at.lt."${cutoff}"`)
     .order("google_checked_at", { ascending: true, nullsFirst: true })
     .limit(MAX_ITEMS);
   if (de) return json({ error: "lookup failed" }, 500);
