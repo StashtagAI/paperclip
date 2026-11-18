@@ -27,12 +27,12 @@ const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
 ];
 const groupByKey = (kind: Kind) => `kind-group-by:${kind}`;
 // Only kinds whose lists are tied to a place get the switch; Recipes and Do always group by type.
-const PLACE_KINDS: readonly Kind[] = ['eats', 'trips'];
+const PLACE_KINDS: readonly Kind[] = ['eats', 'travel'];
 
 /**
  * One top-level kind: its categories, each with its lists (e.g. Eats > Restaurants > Denver), or flipped to show
  * each place with its lists (Winter Park > Bakeries, Coffee shops) (HAN-76). The choice is remembered per kind, and
- * only offered for Eats and Trips.
+ * only offered for Eats and Travel.
  */
 export default function KindScreen() {
   const params = useLocalSearchParams<{ kind: string }>();

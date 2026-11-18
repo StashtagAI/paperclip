@@ -104,20 +104,49 @@ export async function searchLists(query: string, limit = 30): Promise<ListMatch[
     .slice(0, limit);
 }
 
-/** A link on Home that isn't filed yet, with what process-link managed to read so the row can say which post it is. */
-export type InFlightLink = LinkRow & { caption: string | null; fetch_reason: string | null };
+/**
+ * A stash as listed on Home and in the list of stashes (view link_overview, HAN-89), with what process-link managed to
+ * read so a row can say which post it is.
+ */
+export type InFlightLink = LinkRow & {
+  caption: string | null;
+  fetch_reason: string | null;
+  /** Done, but nothing was filed: it's in no list until the user files or dismisses it. */
+  not_sorted: boolean;
+  dismissed_at: string | null;
+};
+
+const OVERVIEW_COLUMNS = 'id, url, platform, status, error, tags, created_at, caption, fetch_reason, not_sorted, dismissed_at';
+
+/** How many stashes that need the user Home shows before "See all". */
+export const HOME_ATTENTION_LIMIT = 8;
 
 /**
- * Links that haven't been sorted into items yet, so a fresh stash shows up on Home straight away, and ones that failed,
- * so they can be tried again or removed (HAN-77).
+ * Stashes that need the user, for Home: still being sorted (so a fresh stash shows straight away), failed or waiting for
+ * text (HAN-77), or not sorted and not dismissed (HAN-89). `total` counts all of them, for "See all".
  */
-export async function fetchInFlightLinks(): Promise<InFlightLink[]> {
-  const { data, error } = await supabase
-    .from('links')
-    .select('id, url, platform, status, error, tags, created_at, caption:raw_content->>caption, fetch_reason:raw_content->fetch->>reason')
-    .in('status', ['pending', 'processing', 'failed'])
+export async function fetchInFlightLinks(): Promise<{ links: InFlightLink[]; total: number }> {
+  const { data, error, count } = await supabase
+    .from('link_overview')
+    .select(OVERVIEW_COLUMNS, { count: 'exact' })
+    .or('status.in.(pending,processing,failed),and(not_sorted.is.true,dismissed_at.is.null)')
     .order('created_at', { ascending: false })
-    .limit(5)
+    .limit(HOME_ATTENTION_LIMIT)
+    .returns<InFlightLink[]>();
+  if (error) throw error;
+  return { links: data, total: count ?? data.length };
+}
+
+export type StashFilter = 'all' | 'not_sorted';
+export const STASH_PAGE = 30;
+
+/** Every stash, newest first, a page at a time (HAN-89), so none is out of reach. */
+export async function fetchStashes(filter: StashFilter, page: number): Promise<InFlightLink[]> {
+  let query = supabase.from('link_overview').select(OVERVIEW_COLUMNS);
+  if (filter === 'not_sorted') query = query.eq('not_sorted', true);
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .range(page * STASH_PAGE, (page + 1) * STASH_PAGE - 1)
     .returns<InFlightLink[]>();
   if (error) throw error;
   return data;
@@ -152,15 +181,8 @@ export async function fetchList(listId: string): Promise<ListDetail> {
   return data;
 }
 
-export async function fetchRecentLinks(): Promise<LinkRow[]> {
-  const { data, error } = await supabase
-    .from('links')
-    .select('id, url, platform, status, error, tags, created_at')
-    .order('created_at', { ascending: false })
-    .limit(20)
-    .returns<LinkRow[]>();
-  if (error) throw error;
-  return data;
+export async function fetchRecentLinks(): Promise<InFlightLink[]> {
+  return fetchStashes('all', 0).then((links) => links.slice(0, 20));
 }
 
 /** Insert a link that already passed checkLink. Re-submitting the same post returns the existing row's id. */
@@ -182,7 +204,7 @@ export async function submitLink(
 export async function fetchLink(linkId: string): Promise<LinkDetail> {
   const { data, error } = await supabase
     .from('links')
-    .select('id, url, platform, status, error, tags, created_at, raw_content')
+    .select('id, url, platform, status, error, tags, created_at, raw_content, dismissed_at')
     .eq('id', linkId)
     .single<LinkDetail>();
   if (error) throw error;
@@ -414,6 +436,22 @@ export async function chooseLinkKind(linkId: string, kind: Kind): Promise<string
   const { data, error } = await supabase.rpc('choose_link_kind', { p_link_id: linkId, p_kind: kind });
   if (error) throw error;
   return data as string;
+}
+
+/**
+ * Files a not-sorted stash by hand (HAN-89): one item called `name`, with the caption as its description, in
+ * "Saved posts › Instagram" (or TikTok) under `kind`. Returns that list.
+ */
+export async function fileLink(linkId: string, kind: Kind, name: string): Promise<string> {
+  const { data, error } = await supabase.rpc('file_link', { p_link_id: linkId, p_kind: kind, p_name: name });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Takes a not-sorted stash off Home (HAN-89). It stays in the list of stashes and can still be filed. */
+export async function dismissLink(linkId: string): Promise<void> {
+  const { error } = await supabase.rpc('dismiss_link', { p_link_id: linkId });
+  if (error) throw error;
 }
 
 /** Deletes a list and its items (they cascade), and its category too if that leaves it empty (HAN-62). */
