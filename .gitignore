@@ -45,3 +45,6 @@ example
 
 # agent tooling
 .claude/
+
+# Supabase CLI scratch files (some are root-owned and break EAS uploads)
+supabase/.temp/
