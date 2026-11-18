@@ -292,6 +292,16 @@ export async function fetchItem(itemId: string): Promise<ItemDetail> {
   return { ...data, photos: rows.map((p) => ({ ...p, url: urls.get(p.path) ?? null })) };
 }
 
+/**
+ * Asks place-details to fill in Google ratings and hours for an Eats list's restaurants (HAN-83). Returns how many
+ * items changed, so the list only reloads when there is something new. Best-effort: a failure leaves the list as is.
+ */
+export async function refreshPlaceDetails(listId: string): Promise<number> {
+  const { data, error } = await supabase.functions.invoke<{ updated?: number }>('place-details', { body: { list_id: listId } });
+  if (error) return 0;
+  return data?.updated ?? 0;
+}
+
 export async function saveItemNote(itemId: string, note: string): Promise<void> {
   const trimmed = note.trim();
   if (trimmed.length > ITEM_LIMITS.note) throw new Error(`Keep the note to ${ITEM_LIMITS.note} characters or fewer.`);

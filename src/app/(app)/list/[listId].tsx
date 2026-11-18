@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, View, type ScrollViewInstance } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -9,6 +9,7 @@ import { CheckRow } from '@/components/check-row';
 import { DeleteButton } from '@/components/delete-button';
 import { DirectionsSheet } from '@/components/directions-sheet';
 import { DisplayNameForm } from '@/components/display-name-form';
+import { PlaceFacts } from '@/components/google-place-info';
 import { PlaceMap } from '@/components/place-map';
 import { RenameForm } from '@/components/rename-form';
 import { Screen } from '@/components/screen';
@@ -29,6 +30,7 @@ import {
   fetchListShare,
   fetchShareRecipients,
   NAME_LIMITS,
+  refreshPlaceDetails,
   removeShareRecipient,
   renameCategory,
   renameList,
@@ -134,6 +136,20 @@ export default function ListScreen() {
   // Pick up a stash deleted from its card.
   const firstFocus = useRef(true);
   const { refresh } = list;
+
+  // Google ratings and hours for restaurants (HAN-83): fetched in the background once the list is open, at most once
+  // a week per item, and shown quietly when they arrive.
+  const eats = data?.category.kind === 'eats';
+  useEffect(() => {
+    if (!eats) return;
+    let live = true;
+    refreshPlaceDetails(listId).then((updated) => {
+      if (live && updated) refresh();
+    });
+    return () => {
+      live = false;
+    };
+  }, [eats, listId, refresh]);
   useFocusEffect(
     useCallback(() => {
       if (firstFocus.current) firstFocus.current = false;
@@ -321,6 +337,7 @@ function ItemCard({ item, selected, onPress, onLayoutY, recipe }: ItemCardProps)
           </ThemedText>
         ) : null}
       </Pressable>
+      <PlaceFacts item={item} />
       {item.rating ? (
         <ThemedText type="small" style={{ color: theme.link }} accessibilityLabel={`Your rating: ${ratingLabel(item.rating)}`}>
           {'★'.repeat(item.rating)}
