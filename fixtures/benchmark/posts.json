@@ -247,6 +247,219 @@
    "expect": {
     "empty": true
    }
+  },
+  {
+   "id": "perfume-products",
+   "synthetic": true,
+   "source": "synthetic (HAN-85)",
+   "url": "https://www.instagram.com/reel/SYNTH-perfume-products/",
+   "captured": {
+    "caption": "3 fragrances I'm obsessed with this fall 🍂\nBaccarat Rouge 540 by Maison Francis Kurkdjian: sweet, airy, lasts all day\nLibre by Yves Saint Laurent: lavender and vanilla, great for work\nSave this for your next birthday wishlist! #perfume #fragrancetok"
+   },
+   "note": "Named perfumes with reasons, no store address -> shop",
+   "expect": {
+    "kind": "shop",
+    "category_any": [
+     "fragrance",
+     "perfume",
+     "scent"
+    ],
+    "items": [
+     {
+      "name_any": [
+       "baccarat"
+      ],
+      "reason_any": [
+       "sweet",
+       "airy",
+       "all day"
+      ]
+     },
+     {
+      "name_any": [
+       "libre"
+      ],
+      "reason_any": [
+       "lavender",
+       "vanilla",
+       "work"
+      ]
+     }
+    ],
+    "min_recall": 1
+   }
+  },
+  {
+   "id": "perfume-store-address",
+   "synthetic": true,
+   "source": "synthetic (HAN-85)",
+   "url": "https://www.instagram.com/p/SYNTH-perfume-store/",
+   "captured": {
+    "caption": "Best perfume shop in Austin 🌸 Scent Bar Austin lets you blend your own fragrance, the staff are so sweet. 1204 S Congress Ave, Austin TX"
+   },
+   "note": "Perfume shop with its own address -> eats/trips-style place, not shop",
+   "expect": {
+    "kind": "trips",
+    "category_any": [
+     "perfume",
+     "shop",
+     "store",
+     "place",
+     "fragrance"
+    ],
+    "items": [
+     {
+      "name_any": [
+       "scent bar"
+      ],
+      "reason_any": [
+       "blend",
+       "fragrance",
+       "staff"
+      ],
+      "address_contains": "1204 S Congress"
+     }
+    ],
+    "min_recall": 1
+   }
+  },
+  {
+   "id": "shows-to-watch",
+   "synthetic": true,
+   "source": "synthetic (HAN-85)",
+   "url": "https://www.instagram.com/reel/SYNTH-shows/",
+   "captured": {
+    "caption": "Shows to binge this weekend 📺\nSeverance: office thriller that will mess with your head\nThe Bear: chaotic kitchen drama, so good\nPachinko: multi-generational epic\n#whattowatch"
+   },
+   "note": "Named shows -> watch",
+   "expect": {
+    "kind": "watch",
+    "category_any": [
+     "show",
+     "watch",
+     "tv",
+     "series",
+     "binge"
+    ],
+    "items": [
+     {
+      "name_any": [
+       "severance"
+      ],
+      "reason_any": [
+       "thriller",
+       "head"
+      ]
+     },
+     {
+      "name_any": [
+       "the bear"
+      ],
+      "reason_any": [
+       "kitchen",
+       "drama"
+      ]
+     },
+     {
+      "name_any": [
+       "pachinko"
+      ],
+      "reason_any": [
+       "epic",
+       "generation"
+      ]
+     }
+    ],
+    "min_recall": 1
+   }
+  },
+  {
+   "id": "books-podcasts",
+   "synthetic": true,
+   "source": "synthetic (HAN-85)",
+   "url": "https://www.instagram.com/p/SYNTH-books-podcasts/",
+   "captured": {
+    "caption": "Books and podcasts that changed how I think 📚🎧\nAtomic Habits by James Clear - tiny habits compound\nHuberman Lab podcast - sleep and focus science"
+   },
+   "note": "Books and a podcast -> watch (Watch & read)",
+   "expect": {
+    "kind": "watch",
+    "category_any": [
+     "book",
+     "podcast",
+     "read",
+     "listen",
+     "watch"
+    ],
+    "items": [
+     {
+      "name_any": [
+       "atomic habits"
+      ],
+      "reason_any": [
+       "habit",
+       "compound"
+      ]
+     },
+     {
+      "name_any": [
+       "huberman"
+      ],
+      "reason_any": [
+       "sleep",
+       "focus",
+       "science"
+      ]
+     }
+    ],
+    "min_recall": 1
+   }
+  },
+  {
+   "id": "activities-stay-do",
+   "synthetic": true,
+   "source": "synthetic (HAN-85)",
+   "url": "https://www.instagram.com/reel/SYNTH-do/",
+   "captured": {
+    "caption": "Things to try this winter ⛸️\nIce skating at Bryant Park\nPottery class: no experience needed, so relaxing\nCold plunge: best way to start the morning"
+   },
+   "note": "Activities with no product/media -> do (guards against over-using shop/watch)",
+   "expect": {
+    "kind": "do",
+    "category_any": [
+     "activit",
+     "things",
+     "try",
+     "winter",
+     "experience"
+    ],
+    "items": [
+     {
+      "name_any": [
+       "ice skating"
+      ],
+      "reason_any": []
+     },
+     {
+      "name_any": [
+       "pottery"
+      ],
+      "reason_any": [
+       "relax",
+       "experience"
+      ]
+     },
+     {
+      "name_any": [
+       "cold plunge"
+      ],
+      "reason_any": [
+       "morning"
+      ]
+     }
+    ],
+    "min_recall": 0.66
+   }
   }
  ]
 }
