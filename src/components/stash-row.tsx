@@ -11,7 +11,8 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useKindColors, useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { deleteLink, primaryTag, type InFlightLink, type StashItem } from '@/lib/data';
-import { captionSnippet, needsTextReason, shortUrl } from '@/lib/link-summary';
+import { FAILED_TITLE, failureReason, retryAction } from '@/lib/link-outcome';
+import { needsTextReason, postName } from '@/lib/link-summary';
 import { KIND_LABELS, PLATFORM_LABELS } from '@/lib/types';
 
 /** A "Recently stashed" row: kind-coloured thumbnail, title, "Kind · from Instagram", #tag. */
@@ -40,16 +41,16 @@ export function StashRow({ item }: { item: StashItem }) {
 }
 
 /**
- * A link that isn't filed yet: being sorted ("processing") or waiting for what the post says ("pending"). A waiting
- * row names the post (caption line, else its URL) and why it's waiting, with buttons to open the post or remove it
- * (HAN-32), so it still makes sense after leaving the app.
+ * A link that isn't filed yet: being sorted ("processing"), waiting for what the post says ("pending"), or failed. A
+ * waiting row names the post (caption line, else its URL) and why it's waiting, with buttons to open the post or remove
+ * it (HAN-32), so it still makes sense after leaving the app. A failed row says why, with Try again and Remove (HAN-77).
  */
 export function PendingLinkRow({ link, onRemoved }: { link: InFlightLink; onRemoved: () => void }) {
   const theme = useTheme();
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const platform = PLATFORM_LABELS[link.platform];
-  const post = captionSnippet(link.caption) ?? shortUrl(link.url);
+  const post = postName(link);
 
   if (link.status === 'processing') {
     return (
@@ -71,8 +72,16 @@ export function PendingLinkRow({ link, onRemoved }: { link: InFlightLink; onRemo
     );
   }
 
+  const failed = link.status === 'failed';
+  const retry = failed ? retryAction(link.status, link.error) : null;
   // A request still on its way is "pending" without an error; only a finished read gives a reason.
-  const reason = link.error === 'needs_capture' ? needsTextReason(link.fetch_reason) : 'Add what the post says';
+  const reason = failed
+    ? failureReason(link.error)
+    : link.error === 'needs_capture'
+      ? needsTextReason(link.fetch_reason)
+      : 'Add what the post says';
+  const openCard = () => router.push({ pathname: '/card/[linkId]', params: { linkId: link.id } });
+  const openCapture = () => router.push({ pathname: '/capture/[linkId]', params: { linkId: link.id } });
 
   async function remove() {
     if (!(await confirmDestructive('Remove this link?', `${post} will be removed from your stash.`, 'Remove'))) return;
@@ -92,14 +101,27 @@ export function PendingLinkRow({ link, onRemoved }: { link: InFlightLink; onRemo
     <View style={[styles.frame, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${post}, from ${platform}. ${reason}.`}
-        accessibilityHint="Add what the post says"
-        onPress={() => router.push({ pathname: '/capture/[linkId]', params: { linkId: link.id } })}
+        accessibilityLabel={failed ? `${post}, from ${platform}. ${FAILED_TITLE}. ${reason}` : `${post}, from ${platform}. ${reason}.`}
+        accessibilityHint={failed ? 'Opens the card' : 'Add what the post says'}
+        onPress={failed ? openCard : openCapture}
         style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
         <View style={[styles.thumb, { backgroundColor: theme.backgroundSelected }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <SymbolView name={{ ios: 'square.and.pencil', android: 'edit', web: 'edit' }} tintColor={theme.textSecondary} size={24} />
+          {failed ? (
+            <SymbolView
+              name={{ ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' }}
+              tintColor={theme.danger}
+              size={24}
+            />
+          ) : (
+            <SymbolView name={{ ios: 'square.and.pencil', android: 'edit', web: 'edit' }} tintColor={theme.textSecondary} size={24} />
+          )}
         </View>
         <View style={styles.text}>
+          {failed ? (
+            <ThemedText type="smallBold" themeColor="danger">
+              {FAILED_TITLE}
+            </ThemedText>
+          ) : null}
           <ThemedText type="defaultBold" numberOfLines={2}>
             {post}
           </ThemedText>
@@ -109,8 +131,28 @@ export function PendingLinkRow({ link, onRemoved }: { link: InFlightLink; onRemo
         </View>
       </Pressable>
       <View style={styles.actions}>
-        <Button title={`Open in ${platform}`} variant="secondary" onPress={() => Linking.openURL(link.url)} style={styles.action} />
-        <Button title="Remove" variant="secondary" onPress={remove} loading={removing} style={styles.action} />
+        {retry ? (
+          <Button
+            title={retry === 'rerun' ? 'Try again' : 'Add text'}
+            accessibilityLabel={retry === 'rerun' ? `Try again: ${post}` : `Add what the post says: ${post}`}
+            onPress={() =>
+              retry === 'rerun'
+                ? router.push({ pathname: '/card/[linkId]', params: { linkId: link.id, retry: '1' } })
+                : openCapture()
+            }
+            style={styles.action}
+          />
+        ) : (
+          <Button title={`Open in ${platform}`} variant="secondary" onPress={() => Linking.openURL(link.url)} style={styles.action} />
+        )}
+        <Button
+          title="Remove"
+          accessibilityLabel={`Remove: ${post}`}
+          variant="secondary"
+          onPress={remove}
+          loading={removing}
+          style={styles.action}
+        />
       </View>
       {error ? (
         <ThemedText type="small" themeColor="danger" accessibilityRole="alert">

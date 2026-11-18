@@ -107,12 +107,15 @@ export async function searchLists(query: string, limit = 30): Promise<ListMatch[
 /** A link on Home that isn't filed yet, with what process-link managed to read so the row can say which post it is. */
 export type InFlightLink = LinkRow & { caption: string | null; fetch_reason: string | null };
 
-/** Links that haven't been sorted into items yet, so a fresh stash shows up on Home straight away. */
+/**
+ * Links that haven't been sorted into items yet, so a fresh stash shows up on Home straight away, and ones that failed,
+ * so they can be tried again or removed (HAN-77).
+ */
 export async function fetchInFlightLinks(): Promise<InFlightLink[]> {
   const { data, error } = await supabase
     .from('links')
     .select('id, url, platform, status, error, tags, created_at, caption:raw_content->>caption, fetch_reason:raw_content->fetch->>reason')
-    .in('status', ['pending', 'processing'])
+    .in('status', ['pending', 'processing', 'failed'])
     .order('created_at', { ascending: false })
     .limit(5)
     .returns<InFlightLink[]>();

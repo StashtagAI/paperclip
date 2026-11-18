@@ -16,6 +16,7 @@ import { Features } from '@/constants/features';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useHere } from '@/hooks/use-here';
+import { usePollWhile } from '@/hooks/use-poll-while';
 import { useTheme } from '@/hooks/use-theme';
 import { announce } from '@/lib/announce';
 import {
@@ -29,6 +30,8 @@ import {
   type StashItem,
 } from '@/lib/data';
 import { toError } from '@/lib/errors';
+import { settledMessage } from '@/lib/link-outcome';
+import { postName } from '@/lib/link-summary';
 import { nudgesSupported } from '@/lib/nudge-service';
 import { hasPlaces } from '@/lib/picks';
 import { sharedByMeSummary } from '@/lib/shared-by-me';
@@ -75,6 +78,22 @@ export default function HomeScreen() {
       }
     }, [refresh, refreshShared, refreshSharedByMe]),
   );
+
+  // A link being sorted ends by itself: filed, or failed (by process-link, or the server's 5-minute timeout). Re-read
+  // while one is, and say how it ended (HAN-77).
+  usePollWhile(pending?.some((l) => l.status === 'processing') ?? false, recent.poll);
+  const [settled, setSettled] = useState<string | null>(null);
+  const seen = useRef<typeof pending>(undefined);
+  useEffect(() => {
+    if (!pending) return;
+    const named = (links: NonNullable<typeof pending>) => links.map((l) => ({ ...l, post: postName(l) }));
+    const message = seen.current ? settledMessage(named(seen.current), named(pending)) : null;
+    seen.current = pending;
+    if (message) {
+      setSettled(message);
+      announce(message);
+    }
+  }, [pending]);
 
   function pullToRefresh() {
     refresh();
@@ -153,6 +172,14 @@ export default function HomeScreen() {
           <ThemedText type="sectionTitle" style={styles.sectionTitle} accessibilityRole="header">
             Recently stashed
           </ThemedText>
+          {/* Android and web read this out when a line appears; iOS hears it from `announce` above. */}
+          <View accessibilityLiveRegion="polite">
+            {settled ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {settled}
+              </ThemedText>
+            ) : null}
+          </View>
           {recent.error ? (
             <ErrorNote message={recent.error.message} onRetry={recent.refresh} />
           ) : !recent.data ? (
