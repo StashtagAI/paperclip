@@ -24,7 +24,9 @@ import {
 
 export type KindList = ListRow & { itemCount: number };
 export type KindCategory = CategoryRow & { lists: KindList[] };
-export type ListDetail = ListRow & { category: CategoryRow; items: ItemRow[] };
+/** An item on its list screen, with its source post's #tags so the list can be filtered by tag (HAN-79). */
+export type ListItem = ItemRow & { link: Pick<LinkRow, 'tags'> | null };
+export type ListDetail = ListRow & { category: CategoryRow; items: ListItem[] };
 
 /** An item as shown in "Recently stashed" and search results. */
 export type StashItem = Pick<ItemRow, 'id' | 'name' | 'tags'> & {
@@ -139,7 +141,7 @@ export async function fetchKind(kind: Kind): Promise<KindCategory[]> {
 export async function fetchList(listId: string): Promise<ListDetail> {
   const { data, error } = await supabase
     .from('lists')
-    .select('id, category_id, name, tags, category:categories(id, kind, name), items(*)')
+    .select('id, category_id, name, tags, category:categories(id, kind, name), items(*, link:links!items_link_id_fkey(tags))')
     .eq('id', listId)
     .order('name', { referencedTable: 'items' })
     .single<ListDetail>();

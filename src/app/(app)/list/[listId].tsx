@@ -39,6 +39,7 @@ import { hasCoords } from '@/lib/geo';
 import { openShareSheet, shareMessage, shareUrl } from '@/lib/share';
 import { recipesLabel } from '@/lib/shopping-list';
 import { toggleRecipe, useShoppingSelection } from '@/lib/shopping-selection';
+import { filterByTag, tagCounts } from '@/lib/tag-filter';
 import type { ItemRow, Kind } from '@/lib/types';
 
 /** Kinds whose items are places: their lists get a map and directions (HAN-24). */
@@ -52,7 +53,12 @@ export default function ListScreen() {
   const places = !!data && PLACE_KINDS.includes(data.category.kind);
   const recipes = data?.category.kind === 'recipes';
   const picked = useShoppingSelection().ids;
-  const pins = places ? data.items.flatMap((i) => (hasCoords(i) ? [{ id: i.id, name: i.name, lat: i.lat, lng: i.lng }] : [])) : [];
+  // Tapping a #tag narrows the list and its map to the items from posts with that tag (HAN-79).
+  const [tag, setTag] = useState<string | null>(null);
+  const tags = data ? tagCounts(data.tags, data.items) : [];
+  const activeTag = tags.some((t) => t.tag === tag) ? tag : null;
+  const shown = data ? filterByTag(data.items, activeTag) : [];
+  const pins = places ? shown.flatMap((i) => (hasCoords(i) ? [{ id: i.id, name: i.name, lat: i.lat, lng: i.lng }] : [])) : [];
 
   const scrollRef = useRef<ScrollViewInstance>(null);
   const rowY = useRef(new Map<string, number>());
@@ -69,6 +75,19 @@ export default function ListScreen() {
     const y = rowY.current.get(id);
     if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - Spacing.four), animated: true });
     select(item);
+  };
+
+  const pickTag = (next: string | null) => {
+    if (!data) return;
+    const { items, category } = data;
+    setTag(next);
+    setSelectedId(null);
+    setSheetItem(null);
+    announce(
+      next
+        ? tagStatus(filterByTag(items, next).length, items.length, category.kind, next)
+        : `Showing all ${items.length} ${itemNoun(category.kind, items.length)}.`,
+    );
   };
 
   const [editing, setEditing] = useState(false);
@@ -228,9 +247,11 @@ export default function ListScreen() {
         />
       ) : null}
       {pins.length ? <PlaceMap pins={pins} selectedId={selectedId} onPinPress={selectPin} /> : null}
-      {data?.tags.length ? <Tags kind={data.category.kind} tags={data.tags} /> : null}
+      {data && tags.length ? (
+        <Tags kind={data.category.kind} tags={tags} active={activeTag} total={data.items.length} onPick={pickTag} />
+      ) : null}
       {data?.items.length === 0 ? <ThemedText themeColor="textSecondary">No items in this list yet.</ThemedText> : null}
-      {data?.items.map((item) => (
+      {shown.map((item) => (
         <ItemCard
           key={item.id}
           item={item}
@@ -244,6 +265,15 @@ export default function ListScreen() {
     </Screen>
   );
 }
+
+/** What a list holds, for the tag filter's status line: "3 places", "1 recipe". */
+function itemNoun(kind: Kind, n: number): string {
+  const noun = PLACE_KINDS.includes(kind) ? 'place' : kind === 'recipes' ? 'recipe' : 'item';
+  return n === 1 ? noun : `${noun}s`;
+}
+
+const tagStatus = (count: number, total: number, kind: Kind, tag: string) =>
+  `Showing ${count} of ${total} ${itemNoun(kind, total)} tagged #${tag}.`;
 
 const itemsLabel = (n: number) => (n === 1 ? ' and its 1 item' : n ? ` and all ${n} items in it` : '');
 
@@ -518,12 +548,47 @@ function SharedPanel({ listId, token, recipients, ownerName, onChanged, onClose,
   );
 }
 
-function Tags({ kind, tags }: { kind: Kind; tags: string[] }) {
+type TagsProps = {
+  kind: Kind;
+  tags: { tag: string; count: number }[];
+  active: string | null;
+  total: number;
+  onPick: (tag: string | null) => void;
+};
+
+/** The list's #tags as toggles (HAN-79): one at a time; tapping the picked one, or Show all, clears it. */
+function Tags({ kind, tags, active, total, onPick }: TagsProps) {
+  const theme = useTheme();
+  const activeCount = tags.find((t) => t.tag === active)?.count ?? 0;
   return (
-    <View style={styles.tags}>
-      {tags.map((tag) => (
-        <TagChip key={tag} kind={kind} tag={tag.replace(/^#+/, '')} />
-      ))}
+    <View style={styles.tagFilter}>
+      <View style={styles.tags} accessibilityRole="toolbar" accessibilityLabel="Filter by tag">
+        {tags.map(({ tag, count }) => (
+          <TagChip
+            key={tag}
+            kind={kind}
+            tag={tag}
+            selected={tag === active}
+            onPress={() => onPick(tag === active ? null : tag)}
+            accessibilityLabel={`#${tag}, ${count} ${itemNoun(kind, count)}`}
+            accessibilityHint={
+              tag === active ? 'Shows everything in the list again' : `Shows only ${itemNoun(kind, 2)} tagged ${tag}`
+            }
+          />
+        ))}
+      </View>
+      {active ? (
+        <View style={styles.tagStatus}>
+          <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite" style={styles.grow}>
+            {tagStatus(activeCount, total, kind, active)}
+          </ThemedText>
+          <Pressable onPress={() => onPick(null)} accessibilityRole="button" style={styles.link}>
+            <ThemedText type="smallBold" style={{ color: theme.link }}>
+              Show all
+            </ThemedText>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -534,7 +599,12 @@ const styles = StyleSheet.create({
   links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.four },
   footer: { gap: Spacing.two },
   link: { minHeight: 44, justifyContent: 'center' },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  tagFilter: { gap: Spacing.one },
+  // Rows sit 16 apart so each chip's 44pt hit area doesn't overlap the next row's.
+  tags: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.two, rowGap: Spacing.three },
+  // The status and Show all side by side; Show all wraps below at large text sizes.
+  tagStatus: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: Spacing.three },
+  grow: { flexShrink: 1 },
   shared: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.two },
   // Side by side when they fit; stacked at large text sizes.
   sharedActions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
