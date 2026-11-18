@@ -96,7 +96,14 @@ select created_at, ok, ms, detail->>'via' via, detail->>'reason' reason, (detail
 from process_events where stage = 'fetch_caption' order by created_at desc limit 50;
 ```
 
-Not in this task: server-side audio transcription for posts with an empty caption.
+Video fallback (HAN-88, built, **unmeasured**): when the fetched caption is empty or names no items, `video.ts` downloads
+the reel (Instagram CDN hosts only, <= 90 s, <= 25 MB), transcribes the audio (stage A, OpenAI transcription), and only
+if that yields no items sends the same bytes to Gemini (stage B, also reads on-screen text). The result fills
+`captured.transcript` / `captured.ocr`, so it is kept in `raw_content` for captions/alt text. Secrets: `OPENAI_API_KEY`,
+`GEMINI_API_KEY` (optional models `TRANSCRIBE_MODEL`, `GEMINI_MODEL`). Kill switch: `LINK_FETCH_VIDEO=false`. Per-video cap
+$0.10. Prices in `VIDEO_PRICES` are list-price guesses; `process_events` stages `video_transcribe` / `video_vision` record
+cost and outcome so real numbers can be read after the first runs. Apify's `videoUrl` / `videoDuration` field names are
+assumed from the actor docs and must be confirmed on a real run.
 
 ## Decision: trigger = direct call from the client (deliverable 1)
 

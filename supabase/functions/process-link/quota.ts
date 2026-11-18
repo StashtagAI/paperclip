@@ -53,12 +53,14 @@ export interface Meter {
   places_calls: number;
   geocode_calls: number;
   apify_usd: number;
+  /** video transcription / vision estimate (video.ts), booked with bookVideo() */
+  video_usd: number;
   /** paid calls refused because the run reached its budget */
   refused: number;
 }
 
 export const newMeter = (): Meter => ({
-  usd: 0, anthropic_calls: 0, input_tokens: 0, output_tokens: 0, web_searches: 0, places_calls: 0, geocode_calls: 0, apify_usd: 0, refused: 0,
+  usd: 0, anthropic_calls: 0, input_tokens: 0, output_tokens: 0, web_searches: 0, places_calls: 0, geocode_calls: 0, apify_usd: 0, video_usd: 0, refused: 0,
 });
 
 type Paid = "anthropic" | "places" | "geocode" | "apify";
@@ -111,6 +113,12 @@ export function meteredFetch(m: Meter, runUsd: number, inner: typeof fetch = fet
 export function book(m: Meter, apifyUsd: number) {
   m.apify_usd += apifyUsd;
   m.usd += apifyUsd;
+}
+
+/** Adds video.ts's estimate (transcription or vision call) to the meter. */
+export function bookVideo(m: Meter, usd: number) {
+  m.video_usd += usd;
+  m.usd += usd;
 }
 
 /** What process_events stores for the run (stage "cost"); the daily caps sum `usd`. */
