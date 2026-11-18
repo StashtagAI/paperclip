@@ -199,6 +199,10 @@ function StatusBanner({
           {stepAnnouncement(step)}
         </ThemedText>
         <ProgressSteps current={step} />
+        {/* The run happens on the server, so the card keeps building on other screens (HAN-82). */}
+        <ThemedText type="small" themeColor="textSecondary">
+          Feel free to leave this page while the post processes. Just don’t close the app.
+        </ThemedText>
       </View>
     );
   }
