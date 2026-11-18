@@ -34,3 +34,15 @@ const REASONS: Record<string, string> = {
 export function needsTextReason(reason: string | null | undefined): string {
   return (reason && REASONS[reason]) || 'Couldn’t read it';
 }
+
+/**
+ * The item name "Choose a category" suggests for a not-sorted stash (HAN-89): the caption's first line with links and
+ * hashtags taken out, else "Instagram post". The user can change it before filing.
+ */
+export function suggestedItemName(caption: string | null | undefined, platformLabel: string): string {
+  const cleaned = caption
+    ?.split('\n')
+    .map((l) => l.replace(/https?:\/\/\S+/gi, '').replace(/#[\p{L}\p{N}_]+/gu, '').replace(/\s+/g, ' ').trim())
+    .join('\n');
+  return captionSnippet(cleaned, 120) ?? `${platformLabel} post`;
+}
