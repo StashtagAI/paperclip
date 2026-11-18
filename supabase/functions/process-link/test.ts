@@ -30,6 +30,9 @@ assert.equal(v.items[0].lat, undefined);
 assert.equal(v.items[1].lat, 39.7);
 assert.deepEqual(v.tags, ["brunch"]);
 assert.throws(() => validateExtraction({ kind: "food", category: "x", items: [] }));
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "shop", category: "x", items: [] }).alt_kind, "shop");
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "travel", category: "x", items: [] }).alt_kind, undefined);
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "bogus", category: "x", items: [] }).alt_kind, undefined);
 
 // Linked-site DNS check: the default resolver is Deno.resolveDns, stubbed here to a public address.
 (globalThis as Record<string, unknown>).Deno = { resolveDns: async () => ["93.184.216.34"] };
