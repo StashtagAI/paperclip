@@ -6,10 +6,25 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /** A tappable card row used by the Category > List > Items browser. */
-export function RowLink({ href, title, subtitle }: { href: Href; title: string; subtitle?: string }) {
+export function RowLink({
+  href,
+  title,
+  subtitle,
+  accessibilityLabel,
+}: {
+  href: Href;
+  title: string;
+  subtitle?: string;
+  /** Defaults to the title and subtitle as shown. */
+  accessibilityLabel?: string;
+}) {
   const theme = useTheme();
   return (
-    <Pressable onPress={() => router.push(href)} accessibilityRole="button" style={({ pressed }) => pressed && styles.pressed}>
+    <Pressable
+      onPress={() => router.push(href)}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={({ pressed }) => pressed && styles.pressed}>
       <View style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
         <View style={styles.text}>
           <ThemedText type="defaultBold">{title}</ThemedText>

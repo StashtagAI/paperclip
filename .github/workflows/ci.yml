@@ -23,6 +23,8 @@ jobs:
       - run: node --experimental-strip-types supabase/functions/process-link/test.ts
       # HAN-46: other users' link_id and prompt-injection fixtures against the process-link handler.
       - run: node --experimental-strip-types supabase/functions/process-link/security.test.ts
+      # HAN-83: Google rating and hours for Eats items.
+      - run: node --experimental-strip-types supabase/functions/place-details/test.ts
       # Same Metro bundle step EAS runs ("Bundle JavaScript"), so a missing
       # native-only dependency fails here instead of in a cloud build.
       - run: npx expo export --platform ios --platform android --output-dir /tmp/native-export
@@ -41,6 +43,10 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 30
     steps:
       - uses: actions/checkout@v4
+      # Two migrations with the same version clash in Supabase's history, and one is skipped.
+      - run: |
+          dupes=$(ls supabase/migrations | cut -c1-14 | sort | uniq -d)
+          if [ -n "$dupes" ]; then echo "Duplicate migration versions: $dupes"; exit 1; fi
       - run: scripts/test-db.sh
         env:
           DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres

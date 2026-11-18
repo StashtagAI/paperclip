@@ -2,16 +2,19 @@ import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Alert, Linking, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 
+import { DisplayNameForm } from '@/components/display-name-form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { Radius, Spacing, type ThemeColor } from '@/constants/theme';
 import { useSchemePreference, type SchemePreference } from '@/hooks/use-color-scheme';
+import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { SUPPORT_EMAIL, appVersion, signOutEverywhere, signOutHere, supportMailto } from '@/lib/account';
 import { appLockSupported, authenticate, biometricName, useAppLock } from '@/lib/app-lock';
 import { useAuth } from '@/lib/auth';
 import { confirmDestructive } from '@/lib/confirm';
+import { fetchDisplayName } from '@/lib/data';
 
 const SCHEMES: { value: SchemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -24,9 +27,10 @@ function showAlert(title: string, message: string) {
   else Alert.alert(title, message);
 }
 
-/** Profile (HAN-34): appearance, security (HAN-49), feedback, support, billing (later) and account deletion. */
+/** Profile (HAN-34): your name (HAN-71), appearance, security (HAN-49), feedback, support, billing (later) and account deletion. */
 export default function ProfileScreen() {
   const { session } = useAuth();
+  const displayName = useAsync(fetchDisplayName, []);
   const toast = useToast();
   const [signingOut, setSigningOut] = useState(false);
 
@@ -76,6 +80,19 @@ export default function ProfileScreen() {
           {session?.user.email ?? 'Unknown email'}
         </ThemedText>
       </View>
+
+      <Section title="Your name">
+        <ThemedText type="small" themeColor="textSecondary">
+          Friends see this name on lists you share with them, not your email.
+        </ThemedText>
+        {displayName.error ? (
+          <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+            Couldn’t load your name: {displayName.error.message}
+          </ThemedText>
+        ) : displayName.loading && displayName.data === undefined ? null : (
+          <DisplayNameForm name={displayName.data ?? null} onSaved={() => displayName.refresh()} />
+        )}
+      </Section>
 
       <Section title="Appearance">
         <SchemePicker />

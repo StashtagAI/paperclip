@@ -42,20 +42,34 @@ export function LockScreen({ prompt }: { prompt: boolean }) {
     }
   }
 
-  // Move VoiceOver/TalkBack to the heading, and ask for Face ID once the app is in the foreground. After that only the
-  // button asks, so cancelling doesn't bring the sheet straight back.
+  // Ask for Face ID once the app is in the foreground. After that only the button asks, so cancelling doesn't bring
+  // the sheet straight back. With VoiceOver/TalkBack on, focus moves to the heading instead and the user taps Unlock:
+  // a sheet opening at once would cut the heading off before it's read.
   useEffect(() => {
     if (!prompt) return;
-    const node = findNodeHandle(heading.current);
-    if (node) AccessibilityInfo.setAccessibilityFocus(node);
-    const askOnce = () => {
-      if (prompted.current || AppState.currentState !== 'active') return;
-      prompted.current = true;
-      tryUnlock();
+    let cancelled = false;
+    let sub: { remove: () => void } | undefined;
+    AccessibilityInfo.isScreenReaderEnabled()
+      .catch(() => false)
+      .then((screenReader) => {
+        if (cancelled) return;
+        if (screenReader) {
+          const node = findNodeHandle(heading.current);
+          if (node) AccessibilityInfo.setAccessibilityFocus(node);
+          return;
+        }
+        const askOnce = () => {
+          if (prompted.current || AppState.currentState !== 'active') return;
+          prompted.current = true;
+          tryUnlock();
+        };
+        askOnce();
+        sub = AppState.addEventListener('change', askOnce);
+      });
+    return () => {
+      cancelled = true;
+      sub?.remove();
     };
-    askOnce();
-    const sub = AppState.addEventListener('change', askOnce);
-    return () => sub.remove();
     // tryUnlock is recreated every render; this should only run when the lock screen starts prompting.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt]);

@@ -16,23 +16,39 @@ import { Features } from '@/constants/features';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useHere } from '@/hooks/use-here';
+import { usePollWhile } from '@/hooks/use-poll-while';
 import { useTheme } from '@/hooks/use-theme';
 import { announce } from '@/lib/announce';
-import { fetchHomeItems, fetchInFlightLinks, searchItems, searchLists, type ListMatch, type StashItem } from '@/lib/data';
+import {
+  fetchHomeItems,
+  fetchInFlightLinks,
+  fetchSharedByMe,
+  searchItems,
+  searchLists,
+  type ListMatch,
+  type SharedByMe,
+  type StashItem,
+} from '@/lib/data';
 import { toError } from '@/lib/errors';
+import { settledMessage } from '@/lib/link-outcome';
+import { postName } from '@/lib/link-summary';
 import { nudgesSupported } from '@/lib/nudge-service';
 import { hasPlaces } from '@/lib/picks';
+import { sharedByMeSummary } from '@/lib/shared-by-me';
+import { unseen, useSharedWithMe } from '@/lib/shared-with-me';
 import { KIND_LABELS, type Kind } from '@/lib/types';
 
 const GRID: Kind[][] = [
-  ['eats', 'trips'],
+  ['eats', 'travel'],
   ['recipes', 'do'],
+  ['shop', 'watch'],
 ];
 
-const RECENT_COUNT = 20;
+/** "Recently stashed" rows, counting links still being read (those always show, so a failure is never hidden). */
+const RECENT_COUNT = 5;
 
 /**
- * Home ("Home screen.pdf"): header + search, the four kinds, picks from the stash (Tonight / Near you / Try this week,
+ * Home ("Home screen.pdf"): header + search, the six kinds, picks from the stash (Tonight / Near you / Try this week,
  * HAN-48), and recently stashed items.
  */
 export default function HomeScreen() {
@@ -47,18 +63,42 @@ export default function HomeScreen() {
   // Pick up new items (and the time of day) when coming back from "Stash a link" or a list.
   const firstFocus = useRef(true);
   const { refresh } = recent;
+  const shared = useSharedWithMe();
+  const sharedByMe = useAsync(fetchSharedByMe, []);
+  const refreshShared = shared.refresh;
+  const refreshSharedByMe = sharedByMe.refresh;
   useFocusEffect(
     useCallback(() => {
       if (firstFocus.current) firstFocus.current = false;
       else {
         refresh();
+        refreshShared();
+        refreshSharedByMe();
         setNow(new Date());
       }
-    }, [refresh]),
+    }, [refresh, refreshShared, refreshSharedByMe]),
   );
+
+  // A link being sorted ends by itself: filed, or failed (by process-link, or the server's 5-minute timeout). Re-read
+  // while one is, and say how it ended (HAN-77).
+  usePollWhile(pending?.some((l) => l.status === 'processing') ?? false, recent.poll);
+  const [settled, setSettled] = useState<string | null>(null);
+  const seen = useRef<typeof pending>(undefined);
+  useEffect(() => {
+    if (!pending) return;
+    const named = (links: NonNullable<typeof pending>) => links.map((l) => ({ ...l, post: postName(l) }));
+    const message = seen.current ? settledMessage(named(seen.current), named(pending)) : null;
+    seen.current = pending;
+    if (message) {
+      setSettled(message);
+      announce(message);
+    }
+  }, [pending]);
 
   function pullToRefresh() {
     refresh();
+    refreshShared();
+    refreshSharedByMe();
     setNow(new Date());
     location.refresh();
   }
@@ -99,7 +139,7 @@ export default function HomeScreen() {
       <TextField
         value={query}
         onChangeText={setQuery}
-        placeholder="Search cafés, trips, recipes"
+        placeholder="Search cafés, travel, recipes"
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
@@ -124,11 +164,22 @@ export default function HomeScreen() {
             ))}
           </View>
 
+          {shared.data?.length ? <SharedWithMeRow count={shared.data.length} fresh={unseen(shared.data).length} /> : null}
+          {sharedByMe.data?.length ? <SharedByYouRow rows={sharedByMe.data} /> : null}
+
           {items?.length ? <HomePicks items={items} now={now} here={location.here} onUseLocation={location.request} /> : null}
 
           <ThemedText type="sectionTitle" style={styles.sectionTitle} accessibilityRole="header">
             Recently stashed
           </ThemedText>
+          {/* Android and web read this out when a line appears; iOS hears it from `announce` above. */}
+          <View accessibilityLiveRegion="polite">
+            {settled ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {settled}
+              </ThemedText>
+            ) : null}
+          </View>
           {recent.error ? (
             <ErrorNote message={recent.error.message} onRetry={recent.refresh} />
           ) : !recent.data ? (
@@ -136,7 +187,7 @@ export default function HomeScreen() {
           ) : items?.length || pending?.length ? (
             <View style={styles.list}>
               {pending?.map((link) => <PendingLinkRow key={link.id} link={link} onRemoved={refresh} />)}
-              {items?.slice(0, RECENT_COUNT).map((item) => <StashRow key={item.id} item={item} />)}
+              {items?.slice(0, Math.max(0, RECENT_COUNT - (pending?.length ?? 0))).map((item) => <StashRow key={item.id} item={item} />)}
             </View>
           ) : (
             <FirstStashGuide />
@@ -187,6 +238,27 @@ function Header() {
         </Pressable>
       </View>
     </View>
+  );
+}
+
+/** Shown once anything has been shared with you (HAN-71). "New" is spelled out, not just a coloured dot. */
+function SharedWithMeRow({ count, fresh }: { count: number; fresh: number }) {
+  const subtitle = [fresh ? `${fresh} new` : null, plural(count, 'list')].filter(Boolean).join(' · ');
+  return (
+    <RowLink
+      href="/shared"
+      title="Shared with me"
+      subtitle={subtitle}
+      accessibilityLabel={`Shared with me, ${fresh ? `${fresh} new, ` : ''}${plural(count, 'list')}`}
+    />
+  );
+}
+
+/** Shown once you've shared a list (HAN-75): how many lists, and with how many people. */
+function SharedByYouRow({ rows }: { rows: SharedByMe[] }) {
+  const subtitle = sharedByMeSummary(rows);
+  return (
+    <RowLink href="/shared-by-you" title="Shared by you" subtitle={subtitle} accessibilityLabel={`Shared by you, ${subtitle}`} />
   );
 }
 
@@ -277,7 +349,7 @@ function Results({ query, state }: { query: string; state: SearchState }) {
 const FIRST_STEPS = [
   'Find a post worth keeping: a café list, a weekend trip, a recipe.',
   'Tap Share, then StashtagAI. Or copy the link and tap Stash a link below.',
-  'We read the post and sort what it names into Eats, Trips, Recipes or Do.',
+  'We read the post and sort what it names into Eats, Trips, Recipes, Do, Shop or Watch & read.',
 ];
 
 /** First run (HAN-42): how to stash a first post, and an example of what comes back. Shown while the stash is empty. */

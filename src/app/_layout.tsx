@@ -14,8 +14,9 @@ import { ThemedView } from '@/components/themed-view';
 import { ToastProvider } from '@/components/toast';
 import { Spacing } from '@/constants/theme';
 import { ColorSchemeProvider, useColorScheme, useSchemePreference } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
 import { AppLockProvider, useAppLock } from '@/lib/app-lock';
-import { AuthProvider, useAuth } from '@/lib/auth';
+import { AuthProvider, useAuth, useRecovering } from '@/lib/auth';
 import { supabaseConfigured } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
@@ -33,8 +34,23 @@ export default function RootLayout() {
 
 function ThemedRoot() {
   const colorScheme = useColorScheme();
+  const theme = useTheme();
+  const base = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
+  // Our tokens, not the navigator's stock near-black / white, so screen transitions don't flash another colour (HAN-78).
+  const navTheme = {
+    ...base,
+    colors: {
+      ...base.colors,
+      primary: theme.tint,
+      background: theme.background,
+      card: theme.backgroundElement,
+      text: theme.text,
+      border: theme.border,
+      notification: theme.danger,
+    },
+  };
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={navTheme}>
       <AuthProvider>
         <AppLockProvider>
           <ToastProvider>
@@ -50,6 +66,7 @@ function ThemedRoot() {
 
 function RootStack() {
   const { session, loading: authLoading } = useAuth();
+  const recovering = useRecovering();
   // Wait for the saved appearance too, so the first frame is already in the user's chosen theme.
   const { ready } = useSchemePreference();
   // And for the saved Face ID setting, so a locked app never shows a frame of the stash.
@@ -73,13 +90,19 @@ function RootStack() {
       importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}
       aria-hidden={covered}>
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Protected guard={!!session}>
+        <Stack.Protected guard={!!session && !recovering}>
           <Stack.Screen name="(app)" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" />
         </Stack.Protected>
+        {/* Signed in by a password-reset link or code: set the new password before anything else (HAN-70). */}
+        <Stack.Protected guard={!!session && recovering}>
+          <Stack.Screen name="reset-password" />
+        </Stack.Protected>
         <Stack.Screen name="auth/callback" />
+        {/* A friend's shared list opens signed in or out (HAN-50). */}
+        <Stack.Screen name="s/[token]" />
       </Stack>
     </View>
   );

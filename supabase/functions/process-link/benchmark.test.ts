@@ -13,15 +13,17 @@ const by = (id: string) => posts.find((p) => p.id === id)!;
 
 // fixtures are verbatim copies of real captured text, and patterns compile
 for (const p of posts) {
+  if (!p.synthetic) {
   const src = han6.find((h) => h.url === p.url);
   assert.ok(src, `${p.id}: url not in han6-batch1.json`);
   assert.deepEqual(src.captured, p.captured, `${p.id}: captured text drifted from the real post`);
+  }
   const e = p.expect;
   for (const pat of [...(e.category_any ?? []), ...(e.list_scope_any ?? []), ...(e.items ?? []).flatMap((i) => [...i.name_any, ...(i.reason_any ?? [])])]) new RegExp(pat, "iu");
   assert.ok(e.empty || e.items?.length, `${p.id}: needs items or empty`);
 }
 
-const ex = (items: Extraction["items"], o: Partial<Extraction> = {}): Extraction => ({ kind: "trips", category: "Itineraries", list_scope: "St. Moritz", tags: [], items, ...o });
+const ex = (items: Extraction["items"], o: Partial<Extraction> = {}): Extraction => ({ kind: "travel", category: "Itineraries", list_scope: "St. Moritz", tags: [], items, ...o });
 const it = (name: string, description = "") => ({ name, description });
 
 // empty expected

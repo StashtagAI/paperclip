@@ -1,26 +1,60 @@
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
+import { Button } from '@/components/button';
 import { DeleteButton } from '@/components/delete-button';
 import { RenameForm } from '@/components/rename-form';
 import { RowLink } from '@/components/row-link';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { deleteCategory, fetchKind, NAME_LIMITS, renameCategory, type KindCategory } from '@/lib/data';
+import { groupByPlace } from '@/lib/places';
+import { recipesLabel } from '@/lib/shopping-list';
+import { useShoppingSelection } from '@/lib/shopping-selection';
 import { KIND_SUBTITLES, KINDS, type Kind } from '@/lib/types';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** One top-level kind: its categories, each with its lists (e.g. Eats > Restaurants > Denver). */
+type GroupBy = 'type' | 'place';
+const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: 'type', label: 'By type' },
+  { value: 'place', label: 'By place' },
+];
+const groupByKey = (kind: Kind) => `kind-group-by:${kind}`;
+
+/**
+ * One top-level kind: its categories, each with its lists (e.g. Eats > Restaurants > Denver), or flipped to show
+ * each place with its lists (Winter Park > Bakeries, Coffee shops) (HAN-76). The choice is remembered per kind.
+ */
 export default function KindScreen() {
   const params = useLocalSearchParams<{ kind: string }>();
   const kind = (KINDS as readonly string[]).includes(params.kind) ? (params.kind as Kind) : null;
   const categories = useAsync(() => (kind ? fetchKind(kind) : Promise.resolve([])), [kind]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [groupBy, setGroupBy] = useState<GroupBy>('type');
+  const typeSections = groupBy === 'type' ? categories.data : undefined;
+  const places = useMemo(
+    () => (groupBy === 'place' ? groupByPlace(categories.data ?? []) : []),
+    [groupBy, categories.data],
+  );
+
+  useEffect(() => {
+    if (!kind) return;
+    AsyncStorage.getItem(groupByKey(kind))
+      .then((saved) => saved === 'place' && setGroupBy('place'))
+      .catch(() => {});
+  }, [kind]);
+  const chooseGroupBy = (value: GroupBy) => {
+    setGroupBy(value);
+    setEditingId(null);
+    if (kind) AsyncStorage.setItem(groupByKey(kind), value).catch(() => {});
+  };
+  const picked = useShoppingSelection().ids;
 
   // Pick up renames and deletions made on a list or card screen.
   const firstFocus = useRef(true);
@@ -52,7 +86,17 @@ export default function KindScreen() {
   return (
     <Screen
       edges="none"
-      refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} />}>
+      refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} />}
+      footer={
+        kind === 'recipes' && picked.length ? (
+          <Button
+            title={`Shopping list · ${recipesLabel(picked.length)}`}
+            size="large"
+            onPress={() => router.push('/shopping-list')}
+            accessibilityHint="Opens the ingredients for the recipes you picked"
+          />
+        ) : null
+      }>
       {categories.error ? <ThemedText themeColor="danger">{categories.error.message}</ThemedText> : null}
       {!categories.data && !categories.error ? <ActivityIndicator /> : null}
       {categories.data?.length === 0 ? (
@@ -60,7 +104,30 @@ export default function KindScreen() {
           Nothing here yet. {KIND_SUBTITLES[kind]} you stash will be sorted into lists here.
         </ThemedText>
       ) : null}
-      {categories.data?.map((category) => (
+      {categories.data?.length ? <GroupByPicker value={groupBy} onChange={chooseGroupBy} /> : null}
+      {places.map((place) => (
+        <View key={place.key} style={styles.section}>
+          <ThemedText type="smallBold" themeColor="textSecondary" accessibilityRole="header">
+            {place.name.toUpperCase()}
+          </ThemedText>
+          {place.lists.map((list) => {
+            // Show the list's own name when it adds something, e.g. "Winter Park, CO" under WINTER PARK.
+            const subtitle = [list.name === place.name ? null : list.name, plural(list.itemCount, 'item')]
+              .filter(Boolean)
+              .join(' · ');
+            return (
+              <RowLink
+                key={list.id}
+                href={{ pathname: '/list/[listId]', params: { listId: list.id } }}
+                title={list.categoryName}
+                subtitle={subtitle}
+                accessibilityLabel={`${list.categoryName} in ${list.name}, ${plural(list.itemCount, 'item')}`}
+              />
+            );
+          })}
+        </View>
+      ))}
+      {typeSections?.map((category) => (
         <View key={category.id} style={styles.section}>
           {editingId === category.id ? (
             <>
@@ -104,6 +171,40 @@ export default function KindScreen() {
   );
 }
 
+/** By type / By place as a radio group; the selected option has a check mark and a thicker border, not just colour. */
+function GroupByPicker({ value, onChange }: { value: GroupBy; onChange: (value: GroupBy) => void }) {
+  const theme = useTheme();
+  return (
+    <View accessibilityRole="radiogroup" accessibilityLabel="Group lists" style={styles.segments}>
+      {GROUP_BY_OPTIONS.map((option) => {
+        const selected = value === option.value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="radio"
+            aria-checked={selected}
+            accessibilityLabel={option.label}
+            onPress={() => onChange(option.value)}
+            style={({ pressed }) => [
+              styles.segment,
+              {
+                backgroundColor: selected ? theme.backgroundSelected : theme.backgroundElement,
+                borderColor: selected ? theme.tint : theme.border,
+                borderWidth: selected ? 2 : StyleSheet.hairlineWidth * 2,
+              },
+              pressed && styles.pressed,
+            ]}>
+            <ThemedText type={selected ? 'smallBold' : 'small'}>
+              {selected ? '✓ ' : ''}
+              {option.label}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function CategoryHeader({ category, onEdit }: { category: KindCategory; onEdit: () => void }) {
   const theme = useTheme();
   return (
@@ -129,4 +230,16 @@ const styles = StyleSheet.create({
   section: { gap: Spacing.two },
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   flex: { flex: 1 },
+  segments: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  segment: {
+    flexGrow: 1,
+    flexBasis: 120,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.row,
+  },
+  pressed: { opacity: 0.7 },
 });

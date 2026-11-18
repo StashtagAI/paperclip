@@ -5,7 +5,7 @@ import { handle } from "./handler.ts";
 import { FIXTURES, VICTIM } from "./injection-fixtures.ts";
 
 type Row = Record<string, unknown>;
-type Filter = [op: "eq" | "neq", col: string, val: unknown];
+type Filter = [op: "eq" | "neq" | "notin" | "gt", col: string, val: unknown];
 
 /** Just enough of supabase-js's query builder for handler.ts, with the service role's view (no RLS). */
 class FakeDb {
@@ -43,13 +43,18 @@ class Query {
   }
   eq(c: string, v: unknown) { this.filters.push(["eq", c, v]); return this; }
   neq(c: string, v: unknown) { this.filters.push(["neq", c, v]); return this; }
+  /** only the `not(col, "in", "(a,b)")` form handler.ts uses */
+  not(c: string, _op: string, v: string) { this.filters.push(["notin", c, v.slice(1, -1).split(",")]); return this; }
+  /** cache expiry: rows the fake never stamped count as fresh */
+  gt(c: string, v: unknown) { this.filters.push(["gt", c, v]); return this; }
   single() { this.mode = "single"; return this; }
   maybeSingle() { this.mode = "maybe"; return this; }
   then<T>(ok: (r: { data: any; error: any }) => T, bad?: (e: unknown) => T) { return Promise.resolve(this.run()).then(ok, bad); }
 
   private run() {
     const rows = (this.db.tables[this.table] ??= []);
-    const match = (r: Row) => this.filters.every(([op, c, v]) => (op === "eq" ? r[c] === v : r[c] !== v));
+    const match = (r: Row) => this.filters.every(([op, c, v]) =>
+      op === "eq" ? r[c] === v : op === "neq" ? r[c] !== v : op === "notin" ? !(v as string[]).includes(r[c] as string) : r[c] === undefined || (r[c] as string) > (v as string));
     let data: Row[];
     if (this.op === "select") data = rows.filter(match);
     else if (this.op === "update") data = rows.filter(match).map((r) => Object.assign(r, this.payload[0]));

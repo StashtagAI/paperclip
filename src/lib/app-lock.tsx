@@ -21,6 +21,13 @@ export const LOCK_AFTER_MS = 60_000;
 
 export const appLockSupported = Platform.OS === 'ios' || Platform.OS === 'android';
 
+/**
+ * True while our own Face ID / passcode sheet is up. iOS reports 'inactive' then, which would otherwise show the
+ * app switcher cover over the screen that asked (and drop VoiceOver focus). The app switcher still covers it,
+ * because leaving for it goes through 'background'.
+ */
+let authenticating = false;
+
 export function shouldLockOnReturn(backgroundedAt: number | null, now: number): boolean {
   return backgroundedAt !== null && now - backgroundedAt >= LOCK_AFTER_MS;
 }
@@ -75,6 +82,7 @@ export function AppLockProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!appLockSupported) return;
     const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'inactive' && authenticating) return;
       setActive(next === 'active');
       // iOS goes 'inactive' while the Face ID sheet is up, so only a real trip to the background counts.
       if (next === 'background') backgroundedAt.current ??= Date.now();
@@ -112,13 +120,13 @@ export function useAppLock() {
   return use(AppLockContext);
 }
 
-/** "Face ID", "Touch ID" or the Android wording, for labels. */
+/** "Face ID", "Touch ID" or the Android wording, for labels such as "Face ID lock" and "Unlock with Face ID". */
 export async function biometricName(): Promise<string> {
-  if (Platform.OS !== 'ios') return 'Biometric unlock';
   const types = await LocalAuthentication.supportedAuthenticationTypesAsync().catch(() => [] as LocalAuthentication.AuthenticationType[]);
-  if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) return 'Face ID';
-  if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) return 'Touch ID';
-  return 'Passcode';
+  const face = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
+  const finger = types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT);
+  if (Platform.OS === 'ios') return face ? 'Face ID' : finger ? 'Touch ID' : 'Passcode';
+  return finger ? 'Fingerprint' : face ? 'Face unlock' : 'Screen lock';
 }
 
 /**
@@ -126,12 +134,15 @@ export async function biometricName(): Promise<string> {
  * `message` is null when the user cancelled, which needs no error.
  */
 export async function authenticate(promptMessage: string): Promise<UnlockResult> {
+  authenticating = true;
   try {
     const result = await LocalAuthentication.authenticateAsync({ promptMessage, cancelLabel: 'Cancel' });
     if (result.success) return { ok: true };
     return { ok: false, message: errorMessage(result.error) };
   } catch {
     return { ok: false, message: 'Couldn’t check Face ID. Try again.' };
+  } finally {
+    authenticating = false;
   }
 }
 

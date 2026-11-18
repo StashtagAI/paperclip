@@ -18,6 +18,11 @@ export function captionSnippet(caption: string | null | undefined, max = 80): st
   return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
 }
 
+/** How a not-yet-filed link is named on screen and to screen readers: its caption line, else its URL. */
+export function postName(link: { caption: string | null; url: string }): string {
+  return captionSnippet(link.caption) ?? shortUrl(link.url);
+}
+
 /** process-link's link-first fetch reasons (raw_content.fetch.reason), short enough for a row subtitle. */
 const REASONS: Record<string, string> = {
   not_available: 'Couldn’t open it, it may be private',
