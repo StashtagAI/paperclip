@@ -27,15 +27,18 @@ describe('brief values', () => {
       night: '#0A1420', surface: '#122233', cobalt: '#4C9BFF', mint: '#3DE0A6',
       aqua: '#5CEBEA', indigo: '#8C8DFF', cloud: '#EAF3FF',
     });
+    // Shop and Watch & read (HAN-84) aren't in the brief; contrast is checked below with the rest.
+    expect(KindColors.light.shop.color).toBe(Palette.light.coral);
+    expect(KindColors.light.watch.color).toBe(Palette.light.berry);
     expect(KindColors.light.eats.color).toBe(Palette.light.mint);
-    expect(KindColors.light.trips.color).toBe(Palette.light.cobalt);
+    expect(KindColors.light.travel.color).toBe(Palette.light.cobalt);
     expect(KindColors.light.recipes.color).toBe(Palette.light.aqua);
     expect(KindColors.light.do.color).toBe(Palette.light.indigo);
   });
 
   it('never puts white text on Mint or Aqua', () => {
     for (const scheme of schemes) {
-      for (const kind of ['eats', 'recipes'] as const) {
+      for (const kind of ['eats', 'recipes', 'shop'] as const) {
         expect(KindColors[scheme][kind].onColor).not.toBe('#FFFFFF');
       }
     }

@@ -67,21 +67,26 @@ export type KindColor = {
 /**
  * One colour per kind of save, with the text colour that is allowed on it.
  * Contrast rule from the brief: Ink on Mint and Aqua, never white (white on Mint is 2.25:1);
- * white is allowed on Cobalt (4.6:1) and Indigo (5.0:1). In dark mode the kind colours are
- * lighter and white fails on all four, so everything uses Night.
+ * white is allowed on Cobalt (4.6:1) and Indigo (5.0:1). Shop and Watch & read (HAN-84) follow the
+ * same rule: Ink on Coral (white is 2.3:1), white on Berry (5.1:1). In dark mode the kind colours are
+ * lighter and white fails on all of them, so everything uses Night.
  */
 export const KindColors: Record<ColorScheme, Record<Kind, KindColor>> = {
   light: {
     eats: { color: L.mint, onColor: L.ink, chip: '#D1F3E8', onChip: '#0A6E4F' },
-    trips: { color: L.cobalt, onColor: L.white, chip: '#D2E2FB', onChip: '#1A4FB5' },
+    travel: { color: L.cobalt, onColor: L.white, chip: '#D2E2FB', onChip: '#1A4FB5' },
     recipes: { color: L.aqua, onColor: L.ink, chip: '#D8F7F7', onChip: '#0B6563' },
     do: { color: L.indigo, onColor: L.white, chip: '#DEDEFC', onChip: '#3E3FC2' },
+    shop: { color: L.coral, onColor: L.ink, chip: '#FFE3D6', onChip: '#A83F12' },
+    watch: { color: L.berry, onColor: L.white, chip: '#FADBEA', onChip: '#9C2160' },
   },
   dark: {
     eats: { color: D.mint, onColor: D.night, chip: '#194045', onChip: D.mint },
-    trips: { color: D.cobalt, onColor: D.night, chip: '#1B3554', onChip: '#7DB7FF' },
+    travel: { color: D.cobalt, onColor: D.night, chip: '#1B3554', onChip: '#7DB7FF' },
     recipes: { color: D.aqua, onColor: D.night, chip: '#1E4250', onChip: D.aqua },
     do: { color: D.indigo, onColor: D.night, chip: '#263354', onChip: '#ABACFF' },
+    shop: { color: D.coral, onColor: D.night, chip: '#3D2A26', onChip: D.coral },
+    watch: { color: D.berry, onColor: D.night, chip: '#3A2238', onChip: D.berry },
   },
 };
 

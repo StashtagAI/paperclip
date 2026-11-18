@@ -30,6 +30,9 @@ assert.equal(v.items[0].lat, undefined);
 assert.equal(v.items[1].lat, 39.7);
 assert.deepEqual(v.tags, ["brunch"]);
 assert.throws(() => validateExtraction({ kind: "food", category: "x", items: [] }));
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "shop", category: "x", items: [] }).alt_kind, "shop");
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "travel", category: "x", items: [] }).alt_kind, undefined);
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "bogus", category: "x", items: [] }).alt_kind, undefined);
 
 // Linked-site DNS check: the default resolver is Deno.resolveDns, stubbed here to a public address.
 (globalThis as Record<string, unknown>).Deno = { resolveDns: async () => ["93.184.216.34"] };
@@ -128,6 +131,15 @@ const r4 = await processCaptured("https://www.tiktok.com/@a/video/1", { transcri
 });
 assert.ok(r4.ok && r4.extraction.items[0].sources?.address === "places_lookup");
 
+// 4a) shop and watch items are products and media, not places: no Places lookup (HAN-84)
+let shopLookups = 0;
+const r4s = await processCaptured("https://www.tiktok.com/@a/video/1", { transcript: "Santal 33" }, {
+  ...key, lookup: { name: "t", findPlace: () => { shopLookups++; return Promise.resolve(null); } },
+  fetchFn: mkFetch({}, { kind: "shop", category: "Fragrances", list_scope: null, tags: [], items: [{ name: "Santal 33", description: "" }] }),
+});
+assert.ok(r4s.ok && r4s.extraction.kind === "shop");
+assert.equal(shopLookups, 0);
+
 // 4b) Google provider: field mask, key only in header, name-match guard, env fallback to stub
 const calls: { url: string; init?: RequestInit }[] = [];
 const gf = ((u: string, init?: RequestInit) => {
@@ -195,6 +207,8 @@ const sf = ((u: string, init?: RequestInit) => {
 const rec = { name: "Shakshuka", description: "" };
 assert.deepEqual(gaps(rec, "recipes"), ["ingredients", "steps"]);
 assert.deepEqual(gaps({ ...rec, address: "1 Main" }, "eats"), []);
+assert.deepEqual(gaps(rec, "shop"), []);
+assert.deepEqual(gaps(rec, "watch"), []);
 const so = await claudeSearch("K", sf).research(rec, "recipes", "Breakfast");
 assert.equal(so.fill?.sourceUrl, "https://blog.example.com/shakshuka");
 assert.equal(so.fill?.address, undefined);
@@ -248,14 +262,14 @@ import { ground } from "./extract.ts";
 // place names that the caption only has as @handles still ground; unrelated names do not
 {
   const c = { platform: "instagram", url: IG, caption: "Check into @badruttspalace\nDinner at @carltonstmoritz" } as never;
-  const mk = (names: string[]) => ({ kind: "trips" as const, category: "Hotels", list_scope: null, tags: [], items: names.map((name) => ({ name, description: "" })) });
+  const mk = (names: string[]) => ({ kind: "travel" as const, category: "Hotels", list_scope: null, tags: [], items: names.map((name) => ({ name, description: "" })) });
   assert.deepEqual(ground(mk(["Badrutt's Palace", "Hotel Eden"]), c, []).items.map((i) => i.name), ["Badrutt's Palace"]);
 }
 
 // grounding reports the names it dropped (for process_events)
 {
   const c = { platform: "instagram", url: IG, caption: "Check into @badruttspalace" } as never;
-  const ex = { kind: "trips" as const, category: "Hotels", list_scope: null, tags: [], items: ["Badrutt's Palace", "Hotel Eden"].map((name) => ({ name, description: "" })) };
+  const ex = { kind: "travel" as const, category: "Hotels", list_scope: null, tags: [], items: ["Badrutt's Palace", "Hotel Eden"].map((name) => ({ name, description: "" })) };
   const dropped: string[] = [];
   ground(ex, c, [], dropped);
   assert.deepEqual(dropped, ["Hotel Eden"]);

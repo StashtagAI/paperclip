@@ -17,6 +17,7 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 | `supabase/migrations/` | Database schema and row-level security |
 | `supabase/functions/process-link/` | Extraction edge function (owned by Extraction, HAN-6) |
 | `supabase/functions/delete-account/` | Deletes the caller's rows, storage objects and auth user with the service role (HAN-34, matches `legal/data-deletion.md`). Deploy with `supabase functions deploy delete-account` |
+| `supabase/functions/place-details/` | Fills in the Google rating and opening hours for restaurants on an Eats list when it opens, refreshed weekly; uses `GOOGLE_PLACES_API_KEY` and counts toward process-link's daily spend caps (HAN-83). Deploy with `supabase functions deploy place-details` |
 
 ## Setup
 
@@ -50,7 +51,7 @@ supabase db push            # applies supabase/migrations/*.sql
 ```
 
 Schema: `links` (url, platform, status `pending|processing|done|failed`, raw_content, tags, error) →
-`categories` (kind `eats|trips|recipes|do`, name) › `lists` (name = scope such as "Denver", tags) › `items`
+`categories` (kind `eats|travel|recipes|do`, name) › `lists` (name = scope such as "Denver", tags) › `items`
 (name, description, address, lat/lng, source `link_id`). RLS limits every table to the signed-in user's rows; clients may
 only insert links as `pending` and cannot update them; `process-link` uses the service role.
 
@@ -124,6 +125,8 @@ npx eas-cli@latest update --channel preview --environment preview --message "...
 `runtimeVersion` uses the `fingerprint` policy, so an update only reaches builds with the same
 native code. After adding or upgrading a native module, or changing plugins in `app.json`, make a
 new build. `npx expo-updates fingerprint:generate` prints the current fingerprint to compare.
+The fingerprint also hashes `.gitignore`: editing it changes the runtime version just like a native
+change, so an update published afterwards silently skips the current TestFlight build.
 
 ### Releasing to the App Store
 

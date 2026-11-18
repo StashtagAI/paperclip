@@ -24,7 +24,9 @@ import {
 
 export type KindList = ListRow & { itemCount: number };
 export type KindCategory = CategoryRow & { lists: KindList[] };
-export type ListDetail = ListRow & { category: CategoryRow; items: ItemRow[] };
+/** An item on its list screen, with its source post's #tags so the list can be filtered by tag (HAN-79). */
+export type ListItem = ItemRow & { link: Pick<LinkRow, 'tags'> | null };
+export type ListDetail = ListRow & { category: CategoryRow; items: ListItem[] };
 
 /** An item as shown in "Recently stashed" and search results. */
 export type StashItem = Pick<ItemRow, 'id' | 'name' | 'tags'> & {
@@ -142,7 +144,7 @@ export async function fetchKind(kind: Kind): Promise<KindCategory[]> {
 export async function fetchList(listId: string): Promise<ListDetail> {
   const { data, error } = await supabase
     .from('lists')
-    .select('id, category_id, name, tags, category:categories(id, kind, name), items(*)')
+    .select('id, category_id, name, tags, category:categories(id, kind, name), items(*, link:links!items_link_id_fkey(tags))')
     .eq('id', listId)
     .order('name', { referencedTable: 'items' })
     .single<ListDetail>();
@@ -244,12 +246,14 @@ type RecipeQueryRow = Pick<ItemRow, 'id' | 'name' | 'description' | 'link_id'> &
 /**
  * These items as recipes, in the order asked for. Ids that no longer exist are left out. The details live in
  * links.raw_content keyed by item name (docs/extraction.md), so only that part of the link is read.
+ * The embed names items.link_id's key: production also joins items to links through item_posts and
+ * item_reports, and PostgREST refuses an ambiguous embed.
  */
 export async function fetchRecipes(itemIds: string[]): Promise<Recipe[]> {
   if (!itemIds.length) return [];
   const { data, error } = await supabase
     .from('items')
-    .select('id, name, description, link_id, list:lists!inner(id, name), link:links(recipe_details:raw_content->recipe_details)')
+    .select('id, name, description, link_id, list:lists!inner(id, name), link:links!items_link_id_fkey(recipe_details:raw_content->recipe_details)')
     .in('id', itemIds)
     .returns<RecipeQueryRow[]>();
   if (error) throw error;
@@ -289,6 +293,16 @@ export async function fetchItem(itemId: string): Promise<ItemDetail> {
     urls = new Map(signed.data.flatMap((s) => (s.path && s.signedUrl ? [[s.path, s.signedUrl] as const] : [])));
   }
   return { ...data, photos: rows.map((p) => ({ ...p, url: urls.get(p.path) ?? null })) };
+}
+
+/**
+ * Asks place-details to fill in Google ratings and hours for an Eats list's restaurants (HAN-83). Returns how many
+ * items changed, so the list only reloads when there is something new. Best-effort: a failure leaves the list as is.
+ */
+export async function refreshPlaceDetails(listId: string): Promise<number> {
+  const { data, error } = await supabase.functions.invoke<{ updated?: number }>('place-details', { body: { list_id: listId } });
+  if (error) return 0;
+  return data?.updated ?? 0;
 }
 
 export async function saveItemNote(itemId: string, note: string): Promise<void> {
@@ -390,6 +404,16 @@ export async function deleteLink(linkId: string): Promise<void> {
   const { error } = await supabase.rpc('delete_link', { p_link_id: linkId });
   if (error) throw error;
   await removePhotoFiles(paths);
+}
+
+/**
+ * Answers the card's "which kind?" question for an ambiguous post (HAN-87): keeps it where process-link filed it, or
+ * moves its items to the same category and list names under `kind`. Returns the list the items are in now.
+ */
+export async function chooseLinkKind(linkId: string, kind: Kind): Promise<string> {
+  const { data, error } = await supabase.rpc('choose_link_kind', { p_link_id: linkId, p_kind: kind });
+  if (error) throw error;
+  return data as string;
 }
 
 /** Deletes a list and its items (they cascade), and its category too if that leaves it empty (HAN-62). */

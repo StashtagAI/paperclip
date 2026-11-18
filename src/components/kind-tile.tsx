@@ -6,7 +6,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useKindColors } from '@/hooks/use-theme';
 import { KIND_LABELS, KIND_SUBTITLES, type Kind } from '@/lib/types';
 
-/** One of the four fixed top-level kinds on Home; opens that kind's categories and lists. */
+/** One of the six fixed top-level kinds on Home; opens that kind's categories and lists. */
 export function KindTile({ kind }: { kind: Kind }) {
   const { color, onColor } = useKindColors()[kind];
   return (

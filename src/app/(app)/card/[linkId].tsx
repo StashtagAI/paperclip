@@ -1,7 +1,7 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Platform, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Animated, type HostInstance, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { ProgressSteps } from '@/components/progress-steps';
@@ -12,9 +12,19 @@ import { useAsync } from '@/hooks/use-async';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import { useTheme } from '@/hooks/use-theme';
 import { announce } from '@/lib/announce';
-import { buildCard, deleteItem, deleteLink, fetchLink, fetchLinkItems, rateLink, subscribeToLink } from '@/lib/data';
+import {
+  buildCard,
+  chooseLinkKind,
+  deleteItem,
+  deleteLink,
+  fetchLink,
+  fetchLinkItems,
+  rateLink,
+  subscribeToLink,
+} from '@/lib/data';
+import { type KindChoice, kindChoice } from '@/lib/kind-choice';
 import { FAILED_TITLE, failureReason, NOT_STARTED, retryAction, START_TIMEOUT_MS } from '@/lib/link-outcome';
-import type { FieldSource, LinkDetail, LinkItem, LinkStatus, RawContent } from '@/lib/types';
+import type { FieldSource, Kind, LinkDetail, LinkItem, LinkStatus, RawContent } from '@/lib/types';
 import { KIND_LABELS } from '@/lib/types';
 import { confirmDestructive } from '@/lib/confirm';
 import { currentStep, stepAnnouncement, type StepKey } from '@/lib/progress';
@@ -68,6 +78,9 @@ export default function CardScreen() {
   const failure = localError ?? (link?.status === 'failed' && !retrying ? (link.error ?? '') : null);
   const outcome = link ? outcomeCopy(link, items ?? [], failure) : null;
   const tryAgain = link && failure != null ? retryAction(link.status, failure, sent) : null;
+  const choice = link?.status === 'done' ? kindChoice(raw, first?.list.category.kind) : null;
+  // What the user chose in KindChoicePanel, shown (and focused) where the question was once it goes away.
+  const [chosen, setChosen] = useState<string | null>(null);
 
   // Pending rows are never swept on the server, so a request that never arrived would show "Reading the post" forever.
   // Same for Try again: until process-link claims the row it still reads "failed" (or "pending").
@@ -204,6 +217,19 @@ export default function CardScreen() {
           {KIND_LABELS[first.list.category.kind]} › {first.list.category.name} › {first.list.name}
         </ThemedText>
       ) : null}
+      {choice ? (
+        <KindChoicePanel
+          linkId={linkId}
+          choice={choice}
+          path={`${first!.list.category.name} › ${first!.list.name}`}
+          onChosen={(message) => {
+            setChosen(message);
+            refresh();
+          }}
+        />
+      ) : chosen ? (
+        <ChosenNote message={chosen} />
+      ) : null}
       {link?.status === 'done' && items?.length === 0 && !raw?.already_listed?.length ? (
         <ThemedText themeColor="textSecondary">
           {raw?.unsorted
@@ -284,6 +310,12 @@ function StatusBanner({
         ) : null}
       </View>
       {step ? <ProgressSteps current={step} /> : null}
+      {/* The run happens on the server, so the card keeps building on other screens (HAN-82). */}
+      {step ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Feel free to leave this page while the post processes. Just don’t close the app.
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
@@ -324,6 +356,96 @@ function DoneMark({ color, pop }: { color: string; pop: boolean }) {
         weight="semibold"
       />
     </Animated.View>
+  );
+}
+
+/**
+ * "Travel or Shop?" (HAN-87): process-link filed the post under one kind but it fits another about as well. Keep it or
+ * move this post's items to the same category and list under the other kind. Leaving without choosing keeps it where
+ * it is, and the question stays on the card. Inline rather than a sheet, so there's no focus trap to manage.
+ */
+function KindChoicePanel({
+  linkId,
+  choice,
+  path,
+  onChosen,
+}: {
+  linkId: string;
+  choice: KindChoice;
+  path: string;
+  onChosen: (message: string) => void;
+}) {
+  const theme = useTheme();
+  const [busy, setBusy] = useState<Kind | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const current = KIND_LABELS[choice.current];
+  const alt = KIND_LABELS[choice.alt];
+
+  async function choose(kind: Kind) {
+    setBusy(kind);
+    setError(null);
+    try {
+      await chooseLinkKind(linkId, kind);
+      const message = kind === choice.current ? `Kept in ${current} › ${path}` : `Moved to ${alt} › ${path}`;
+      announce(message);
+      onChosen(message);
+    } catch (e) {
+      const message = `Couldn’t ${kind === choice.current ? 'save that' : `move it to ${alt}`}: ${(e as Error).message}`;
+      setError(message);
+      announce(message);
+      setBusy(null);
+    }
+  }
+
+  return (
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <ThemedText type="defaultBold" accessibilityRole="header">
+        {current} or {alt}?
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        This post could go in either. It’s in {current} for now.
+      </ThemedText>
+      <Button
+        title={`Keep in ${current}`}
+        variant="secondary"
+        onPress={() => choose(choice.current)}
+        loading={busy === choice.current}
+        disabled={!!busy}
+      />
+      <Button
+        title={`Move to ${alt}`}
+        variant="secondary"
+        onPress={() => choose(choice.alt)}
+        loading={busy === choice.alt}
+        disabled={!!busy}
+      />
+      {error ? (
+        <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+          {error}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * Where the post ended up after KindChoicePanel. The button that was pressed is gone, so screen reader and keyboard
+ * focus move here instead of jumping to the top of the screen.
+ */
+function ChosenNote({ message }: { message: string }) {
+  const ref = useRef<HostInstance>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (Platform.OS === 'web') (node as unknown as HTMLElement).focus?.();
+    else AccessibilityInfo.sendAccessibilityEvent(node, 'focus');
+  }, []);
+  return (
+    <View ref={ref} accessible tabIndex={-1} accessibilityLiveRegion="polite">
+      <ThemedText type="smallBold" themeColor="textSecondary">
+        {message}
+      </ThemedText>
+    </View>
   );
 }
 
