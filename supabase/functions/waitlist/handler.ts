@@ -34,9 +34,12 @@ export function normalizeEmail(raw: unknown): string | null {
 /**
  * The one header we trust for the caller's IP. It must be one the Supabase gateway sets itself, overwriting whatever the
  * client sent; a header the client can set would let a script send a new "IP" each time and skip the per-IP limit.
- * HAN-106: PENDING VERIFICATION. Probe the hosted gateway (see HAN-106) and record the finding here before deploying.
+ * HAN-106, probed on the hosted project (2026-11-19): requests reach the function through Cloudflare, which sets
+ * `cf-connecting-ip` to the address that connected to it. A request that sends its own `CF-Connecting-IP` is rejected
+ * at the edge (Cloudflare "error code: 1000") and never reaches us. `x-real-ip` isn't set at all, and `x-forwarded-for`
+ * is a chain the client can prepend to ("<client>,<client>, <AWS hop>"), so neither is used.
  */
-export const CLIENT_IP_HEADER = "x-real-ip";
+export const CLIENT_IP_HEADER = "cf-connecting-ip";
 const IP = /^[0-9a-f.:]{2,45}$/i;
 
 /** The caller's IP from CLIENT_IP_HEADER, or null if it's missing or isn't an IP. No fallbacks, no shared bucket. */
