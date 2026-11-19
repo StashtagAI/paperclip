@@ -4,12 +4,10 @@ import * as Linking from 'expo-linking';
 import { Platform, Share } from 'react-native';
 
 /**
- * Link to a shared list (HAN-50). The web app's own origin on web; on a phone, the deployed web app when
- * EXPO_PUBLIC_WEB_URL is set (opens for anyone), else the app's scheme (opens only where Stashtag is installed).
+ * Link to a shared list (HAN-50): the app's scheme, so it opens only where Stashtag is installed. The web app that
+ * used to open these for friends without the app is retired (HAN-103).
  */
-export function shareUrl(token: string, webUrl = process.env.EXPO_PUBLIC_WEB_URL): string {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') return `${window.location.origin}/s/${token}`;
-  if (webUrl) return `${webUrl.replace(/\/+$/, '')}/s/${token}`;
+export function shareUrl(token: string): string {
   return Linking.createURL(`s/${token}`);
 }
 

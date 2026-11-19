@@ -3,7 +3,9 @@
 Paste or share an Instagram or TikTok link; StashtagAI extracts what the post mentions and files it into lists,
 e.g. a "restaurants to try in Denver" reel becomes **Eats › Restaurants › Denver** with five places.
 
-Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and web, backed by Supabase.
+Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android, backed by Supabase. The Expo web app
+(planned for app.stashtag.ai) is retired (HAN-103): there is no web deploy, and the only web presence is the static
+landing page at stashtag.ai.
 
 | Path | What |
 | --- | --- |
@@ -85,8 +87,8 @@ Supabase dashboard › Authentication:
 1. **Providers › Email**: enabled. The sign-in screen defaults to email + password (for testing), with the magic link
    as an alternative. To sign in straight after **Create account**, turn off **Confirm email**, or add the user under
    **Users › Add user** with **Auto Confirm User** ticked.
-2. **URL Configuration › Redirect URLs**: add `stashtag://auth/callback`, `stashtag://**`, and your web origins, e.g.
-   `http://localhost:8081/auth/callback` and the deployed web URL.
+2. **URL Configuration › Redirect URLs**: add `stashtag://auth/callback` and `stashtag://**`. Magic links, sign-up
+   confirmations and password resets all return to the app through `stashtag://auth/callback`; there is no web origin.
 3. Optional but recommended on iOS: in **Email Templates › Magic Link** add `{{ .Token }}` so the email also carries a
    6-digit code that can be typed into the app when the link opens in a different browser.
 4. **Rate Limits** (HAN-38, abuse limits on sign-in): keep Supabase's throttles on, with these values or tighter:
@@ -105,7 +107,6 @@ draft and says to try later.
 ```bash
 npm run ios        # iOS simulator (main target); needs Xcode on macOS
 npm run android    # Android emulator/device
-npm run web        # http://localhost:8081
 ```
 
 `expo-dev-client` is installed, so native runs use a **development build** rather than Expo Go:
@@ -165,17 +166,9 @@ The workflow can't prompt for an Apple login, so it relies on (both already in p
 - `submit.production.ios.ascAppId` in `eas.json`: the app's numeric Apple ID (App Store Connect ›
   the app › App Information › General Information › Apple ID).
 
-Static web build: `npm run build:web` (outputs `dist/`, one pre-rendered HTML page per route).
+CI scans for secrets (gitleaks) and vulnerable dependencies (dependency review on PRs, `npm audit --audit-level=high`).
 
-Web security headers (CSP, HSTS, `X-Frame-Options`, referrer and permissions policy) live in `app.json` under the
-`expo-router` plugin's `headers`. Expo Hosting only serves them with `web.output: "static"`: the export writes them to
-`dist/_expo/.routes.json`. `npx expo serve` serves `dist/` with the same headers for a local check. If the web app
-starts loading from a new origin, add it to the CSP. CI runs `scripts/check-web-headers.mjs` on the export, which
-also fails if an inline script isn't allowed by its hash. CI also scans for secrets (gitleaks) and vulnerable
-dependencies (dependency review on PRs, `npm audit --audit-level=high`).
-
-Shared lists (HAN-50) open at `/s/<token>`, so the web host must serve `index.html` for unknown paths (SPA fallback).
-Set `EXPO_PUBLIC_WEB_URL` to that host so links shared from a phone open for friends without the app.
+Shared lists (HAN-50) open at `stashtag://s/<token>`, so the link only opens where the app is installed.
 
 Share sheet, OCR and transcription use native modules (`expo-share-intent`, `expo-text-extractor`, `whisper.rn`, the
 local `modules/media-extract`), so they need a development build. They don't work in Expo Go. Flow and package choices:
