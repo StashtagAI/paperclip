@@ -15,6 +15,9 @@ import { appLockSupported, authenticate, biometricName, useAppLock } from '@/lib
 import { useAuth } from '@/lib/auth';
 import { confirmDestructive } from '@/lib/confirm';
 import { fetchDisplayName } from '@/lib/data';
+import { PROVIDER_NAMES, SOCIAL_PROVIDERS, isAppleRelayEmail, linkedProviders, socialErrorMessage, type SocialProvider } from '@/lib/sign-in-providers';
+import { continueWith } from '@/lib/social-auth';
+import { supabase } from '@/lib/supabase';
 
 const SCHEMES: { value: SchemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -27,7 +30,10 @@ function showAlert(title: string, message: string) {
   else Alert.alert(title, message);
 }
 
-/** Profile (HAN-34): your name (HAN-71), appearance, security (HAN-49), feedback, support, billing (later) and account deletion. */
+/**
+ * Profile (HAN-34): your name (HAN-71), sign-in methods (HAN-112), appearance, security (HAN-49), feedback, support,
+ * billing (later) and account deletion.
+ */
 export default function ProfileScreen() {
   const { session } = useAuth();
   const displayName = useAsync(fetchDisplayName, []);
@@ -46,7 +52,7 @@ export default function ProfileScreen() {
   async function startSignOutEverywhere() {
     const ok = await confirmDestructive(
       'Sign out everywhere?',
-      'This signs you out on every phone and browser, including this one. Other devices are signed out within an hour. You can sign in again with your email.',
+      'This signs you out on every phone and browser, including this one. Other devices are signed out within an hour. You can sign in again afterwards.',
       'Sign out everywhere',
     );
     if (!ok) return;
@@ -79,6 +85,11 @@ export default function ProfileScreen() {
         <ThemedText type="defaultBold" selectable>
           {session?.user.email ?? 'Unknown email'}
         </ThemedText>
+        {isAppleRelayEmail(session?.user.email) ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            Apple’s Hide My Email address. Friends who share lists with you need to use this address.
+          </ThemedText>
+        ) : null}
       </View>
 
       <Section title="Your name">
@@ -92,6 +103,10 @@ export default function ProfileScreen() {
         ) : displayName.loading && displayName.data === undefined ? null : (
           <DisplayNameForm name={displayName.data ?? null} onSaved={() => displayName.refresh()} />
         )}
+      </Section>
+
+      <Section title="Sign-in methods">
+        <SignInMethods />
       </Section>
 
       <Section title="Appearance">
@@ -150,6 +165,61 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       </ThemedText>
       {children}
     </View>
+  );
+}
+
+/**
+ * Google, Apple and Facebook on this account (HAN-112). Same-email accounts are joined automatically; connecting here
+ * covers a different email, such as Apple's Hide My Email. On web, connecting leaves the page and comes back here.
+ */
+function SignInMethods() {
+  const toast = useToast();
+  const identities = useAsync(async () => {
+    const { data, error } = await supabase.auth.getUserIdentities();
+    if (error) throw error;
+    return linkedProviders(data.identities);
+  }, []);
+  const [busy, setBusy] = useState<SocialProvider | null>(null);
+
+  async function connect(provider: SocialProvider) {
+    setBusy(provider);
+    try {
+      const result = await continueWith(provider, 'link');
+      if (result === 'redirecting') return;
+      if (result === 'done') {
+        toast(`${PROVIDER_NAMES[provider]} connected`);
+        identities.refresh();
+      }
+    } catch (e) {
+      showAlert(`Couldn’t connect ${PROVIDER_NAMES[provider]}`, socialErrorMessage(provider, e as Error, 'connect'));
+    }
+    setBusy(null);
+  }
+
+  if (identities.error) {
+    return (
+      <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+        Couldn’t load your sign-in methods: {identities.error.message}
+      </ThemedText>
+    );
+  }
+  if (!identities.data) return null;
+  return (
+    <>
+      {SOCIAL_PROVIDERS.map((provider) =>
+        identities.data!.has(provider) ? (
+          <Row key={provider} title={PROVIDER_NAMES[provider]} subtitle="✓ Connected. You can sign in with it." status />
+        ) : (
+          <Row
+            key={provider}
+            title={busy === provider ? `Connecting ${PROVIDER_NAMES[provider]}…` : `Connect ${PROVIDER_NAMES[provider]}`}
+            subtitle={`Sign in with ${PROVIDER_NAMES[provider]} too`}
+            disabled={!!busy}
+            onPress={() => connect(provider)}
+          />
+        ),
+      )}
+    </>
   );
 }
 
@@ -251,10 +321,29 @@ type RowProps = {
   tone?: ThemeColor;
   role?: 'button' | 'link';
   hint?: string;
+  /** Information, not a control: read as one line of text, with no chevron. */
+  status?: boolean;
 };
 
-function Row({ title, subtitle, onPress, disabled, tone, role = 'button', hint }: RowProps) {
+function Row({ title, subtitle, onPress, disabled, tone, role = 'button', hint, status }: RowProps) {
   const theme = useTheme();
+  if (status) {
+    return (
+      <View
+        accessible
+        accessibilityRole="text"
+        style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+        <View style={styles.rowText}>
+          <ThemedText type="defaultBold">{title}</ThemedText>
+          {subtitle ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {subtitle}
+            </ThemedText>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
   return (
     <Pressable
       onPress={onPress}

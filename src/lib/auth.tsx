@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, use, useEffect, useState, useSyncExternalStore, type PropsWithChildren } from 'react';
 
+import { afterWebRedirect } from '@/lib/social-auth';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 
 type AuthState = { session: Session | null; loading: boolean };
@@ -21,9 +22,11 @@ function setRecovering(next: boolean) {
 // Registered at import, not in the provider: on web the client handles a reset link in the URL while it starts up,
 // before any effect runs, and would emit PASSWORD_RECOVERY to nobody.
 if (supabaseConfigured) {
-  supabase.auth.onAuthStateChange((event) => {
+  supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY') setRecovering(true);
     else if (event === 'SIGNED_OUT') setRecovering(false);
+    // Back from Apple's web sign-in (HAN-112). Deferred: the auth client must not be called inside its own callback.
+    else if (event === 'SIGNED_IN') setTimeout(() => afterWebRedirect(session), 0);
   });
 }
 

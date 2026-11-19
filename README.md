@@ -97,6 +97,10 @@ Supabase dashboard › Authentication:
    that 60 seconds on its resend button (`EMAIL_RESEND_SECONDS` in `src/lib/rate-limit.ts`) and turns any 429 from Auth
    into a plain "wait and try again" message.
 
+5. **Google, Apple and Facebook** (HAN-112): providers, Apple Services ID and key, Meta app, manual linking and the
+   Apple function secrets are in [docs/social-sign-in.md](docs/social-sign-in.md). The Apple secret key for the web
+   flow expires every 6 months (`scripts/apple-client-secret.ts` makes a new one).
+
 Feedback inserts are capped in the database: 5 per account in any 10 minutes and 20 in any 24 hours
 (`feedback_rate_limit` trigger). Over the cap, PostgREST returns HTTP 429 (`PT429`) and the feedback sheet keeps the
 draft and says to try later.

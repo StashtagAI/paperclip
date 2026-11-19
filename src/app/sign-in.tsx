@@ -4,12 +4,15 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
+import { SocialSignIn } from '@/components/social-sign-in';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { announce } from '@/lib/announce';
 import { MIN_PASSWORD_LENGTH, RESEND_COOLDOWN_SECONDS, resetSentMessage } from '@/lib/password-reset';
 import { retryAfterSeconds, sendLinkErrorMessage, signInErrorMessage, waitPhrase } from '@/lib/rate-limit';
+import { socialErrorMessage, type SocialProvider } from '@/lib/sign-in-providers';
+import { continueWith } from '@/lib/social-auth';
 import { supabase } from '@/lib/supabase';
 
 type Mode = 'password' | 'link' | 'reset';
@@ -21,6 +24,7 @@ type Mode = 'password' | 'link' | 'reset';
  * Supabase Auth rate-limits emails and attempts (HAN-38); the resend buttons count down its per-address window.
  * Forgot password (HAN-70): the same two ways of proving the inbox is yours — the reset link or its code — have to
  * happen before the password can change; then the root layout shows /reset-password.
+ * Or Google, Apple or Facebook (HAN-112): an account with the same verified email is the same account.
  */
 export default function SignIn() {
   const [mode, setMode] = useState<Mode>('password');
@@ -32,6 +36,7 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
+  const [socialBusy, setSocialBusy] = useState<SocialProvider | null>(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -147,6 +152,19 @@ export default function SignIn() {
     if (error) fail(signInErrorMessage(error));
   }
 
+  async function signInWith(provider: SocialProvider) {
+    setSocialBusy(provider);
+    setError(null);
+    setNotice(null);
+    try {
+      // 'done': the auth listener swaps the stack to the app. 'redirecting' (web): the page is leaving for the provider.
+      if ((await continueWith(provider)) === 'redirecting') return;
+    } catch (e) {
+      fail(socialErrorMessage(provider, e as Error));
+    }
+    setSocialBusy(null);
+  }
+
   function switchMode(next: Mode) {
     setMode(next);
     setSentTo(null);
@@ -214,6 +232,11 @@ export default function SignIn() {
           <Button title="Forgot password?" variant="secondary" onPress={() => switchMode('reset')} />
           <Button title="Create account" variant="secondary" onPress={signUp} disabled={busy} />
           <Button title="Email me a sign-in link instead" variant="secondary" onPress={() => switchMode('link')} />
+          <SocialSignIn busy={socialBusy} disabled={busy} onPress={signInWith} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Already have an account? Use the same email and you’ll land in it. If you hide your email with Apple, sign
+            in with your email first, then connect Apple in Profile.
+          </ThemedText>
         </>
       ) : mode === 'reset' ? (
         sentTo ? (
@@ -275,6 +298,11 @@ export default function SignIn() {
           {emailField}
           <Button title="Email me a sign-in link" onPress={sendLink} loading={busy} />
           <Button title="Sign in with a password instead" variant="secondary" onPress={() => switchMode('password')} />
+          <SocialSignIn busy={socialBusy} disabled={busy} onPress={signInWith} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Already have an account? Use the same email and you’ll land in it. If you hide your email with Apple, sign
+            in with your email first, then connect Apple in Profile.
+          </ThemedText>
         </>
       )}
 
