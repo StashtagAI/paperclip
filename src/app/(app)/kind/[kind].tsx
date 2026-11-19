@@ -26,21 +26,22 @@ const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'type', label: 'By type' },
   { value: 'place', label: 'By place' },
 ];
-const groupByKey = (kind: Kind) => `kind-group-by:${kind}`;
+// v2: By place became the default, so choices saved under the old key (often just 'type') are ignored.
+const groupByKey = (kind: Kind) => `kind-group-by-v2:${kind}`;
 // Only kinds whose lists are tied to a place get the switch; Recipes and Do always group by type.
 const PLACE_KINDS: readonly Kind[] = ['eats', 'travel'];
 
 /**
  * One top-level kind: its categories, each with its lists (e.g. Eats > Restaurants > Denver), or flipped to show
- * each place with its lists (Winter Park > Bakeries, Coffee shops) (HAN-76). The choice is remembered per kind, and
- * only offered for Eats and Travel.
+ * each place with its lists (Winter Park > Bakeries, Coffee shops) (HAN-76). By place is the default; the choice is
+ * remembered per kind, and only offered for Eats and Travel.
  */
 export default function KindScreen() {
   const params = useLocalSearchParams<{ kind: string }>();
   const kind = (KINDS as readonly string[]).includes(params.kind) ? (params.kind as Kind) : null;
   const categories = useAsync(() => (kind ? fetchKind(kind) : Promise.resolve([])), [kind]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [savedGroupBy, setGroupBy] = useState<GroupBy>('type');
+  const [savedGroupBy, setGroupBy] = useState<GroupBy>('place');
   const canGroupByPlace = kind !== null && PLACE_KINDS.includes(kind);
   const groupBy = canGroupByPlace ? savedGroupBy : 'type';
   const typeSections = groupBy === 'type' ? categories.data : undefined;
@@ -52,7 +53,7 @@ export default function KindScreen() {
   useEffect(() => {
     if (!kind) return;
     AsyncStorage.getItem(groupByKey(kind))
-      .then((saved) => saved === 'place' && setGroupBy('place'))
+      .then((saved) => saved === 'type' && setGroupBy('type'))
       .catch(() => {});
   }, [kind]);
   const chooseGroupBy = (value: GroupBy) => {
