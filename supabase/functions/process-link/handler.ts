@@ -11,7 +11,8 @@ import { cachedSearch, type SearchCache, searchFromEnv, stubSearch } from "./sea
 import { cachedLookup, lookupFromEnv, type PlaceCache, stubLookup } from "./lookup.ts";
 import { claimBlock, errorCode, UNCLAIMABLE } from "./errors.ts";
 import { findByName, splitNew } from "./merge.ts";
-import { book, costDetail, limitsFromEnv, type Meter, meteredFetch, newMeter } from "./quota.ts";
+import { videoReader, type VideoReader, type VideoRef } from "./video.ts";
+import { book, bookVideo, costDetail, limitsFromEnv, type Meter, meteredFetch, newMeter } from "./quota.ts";
 
 const CACHE_DAYS = 30;
 const cacheCutoff = () => new Date(Date.now() - CACHE_DAYS * 86_400_000).toISOString();
@@ -144,15 +145,38 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
 
   let captured = sent;
   let fetched: Record<string, unknown> | null = null;
+  let video: VideoRef | undefined;
   if (fetching) {
     const f = await fetchCaption(postUrl, env, paidFetch);
     book(meter, f.cost_usd);
-    const detail = { platform: platformOf(postUrl), cost_usd: f.cost_usd, ...(f.ok ? { via: f.via, caption_chars: f.caption.length } : { reason: f.reason, tried: f.tried }) };
+    video = f.video;
+    const detail = { platform: platformOf(postUrl), cost_usd: f.cost_usd, ...(f.ok ? { via: f.via, caption_chars: f.caption.length } : { reason: f.reason, tried: f.tried }), has_video: !!f.video };
     await event("fetch_caption", f.ok, f.ms, detail);
     console.log(`[process-link] fetch_caption ${JSON.stringify({ ok: f.ok, ms: f.ms, ...detail })}`);
-    if (!f.ok) return await needsCapture(f.reason, { ms: f.ms, cost_usd: f.cost_usd, tried: f.tried });
-    fetched = { via: f.via, ms: f.ms, cost_usd: f.cost_usd };
-    captured = { caption: f.caption };
+    if (!f.ok && !(f.reason === "empty_caption" && f.video)) return await needsCapture(f.reason, { ms: f.ms, cost_usd: f.cost_usd, tried: f.tried });
+    fetched = { via: f.ok ? f.via : "apify_instagram", ms: f.ms, cost_usd: f.cost_usd };
+    captured = f.ok ? { caption: f.caption } : {};
+  }
+
+  // HAN-88: read the video when the caption is empty or names nothing. Transcript first (cheap); the video model
+  // (also reads on-screen text) only if the transcript gave no items. One download serves both. Plain fetch, not the
+  // metered one: these hosts are priced here and booked with bookVideo.
+  const reader: VideoReader = videoReader(video, env, fetchFn);
+  const readVideo = async (via: "transcribe" | "vision") => {
+    const before = reader.spent();
+    const v = await reader.read(via);
+    bookVideo(meter, reader.spent() - before);
+    await event(`video_${via}`, "via" in v, "via" in v ? v.ms : undefined, "via" in v
+      ? { cost_usd: v.cost_usd, transcript_chars: v.captured.transcript?.length ?? 0, ocr_chars: v.captured.ocr?.length ?? 0 }
+      : { reason: v.skipped, cost_usd: reader.spent() - before });
+    if (!("via" in v)) return false;
+    captured = { ...(captured as Record<string, unknown> ?? {}), ...v.captured };
+    fetched = { ...fetched, video: via, video_cost_usd: reader.spent() };
+    return true;
+  };
+  if (fetching && !(captured as { caption?: string }).caption) await readVideo("transcribe");
+  if (fetching && !Object.keys(captured ?? {}).length && !(await readVideo("vision"))) {
+    return await needsCapture("empty_caption", { ms: 0, cost_usd: meter.usd, tried: ["apify_instagram"] });
   }
 
   // Keyed by normalized "name + list scope"; stores the resolved place incl. place id.
@@ -179,10 +203,18 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
   const sBase = searchFromEnv(env, paidFetch);
   const base = lookupFromEnv(env, paidFetch);
   try {
-    const r = await processCaptured(link.url, captured, { apiKey: env("ANTHROPIC_API_KEY")!, fetchFn: paidFetch, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`), event: sink });
+    const pdeps = { apiKey: env("ANTHROPIC_API_KEY")!, fetchFn: paidFetch, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`), event: sink };
+    let r = await processCaptured(link.url, captured, pdeps);
+    // Caption (or transcript) named nothing: try the next, dearer video stage once, then re-extract.
+    while (fetching && r.ok && "unsorted" in r && video) {
+      const hasTranscript = !!(captured as { transcript?: string })?.transcript;
+      const hasOcr = !!(captured as { ocr?: string })?.ocr;
+      if (hasOcr || !(await readVideo(hasTranscript ? "vision" : "transcribe"))) break;
+      r = await processCaptured(link.url, captured, pdeps);
+    }
     if (!r.ok) return await fail(errorCode(r.error).code);
     // A fetched caption that names nothing (only hashtags, "recipe in bio"…): let the user add what the video says.
-    if (fetched && "unsorted" in r) return await needsCapture("no_items", fetched, (captured as { caption: string }).caption);
+    if (fetched && "unsorted" in r) return await needsCapture("no_items", fetched, (captured as { caption?: string }).caption);
     if (fetched) r.raw_content = { ...r.raw_content, caption_source: "fetched", fetch: fetched };
     if ("unsorted" in r) {
       // Unsorted bucket: done + no items + raw_content.unsorted, no empty category/list created.
