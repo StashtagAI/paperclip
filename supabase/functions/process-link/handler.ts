@@ -2,7 +2,7 @@
 // With captured text (from the capture screen) it extracts from that. Without, it first fetches the post's caption
 // (fetch-caption.ts, HAN-18); if that fails or yields no items the link goes back to "pending" with
 // error "needs_capture" and the app opens the capture screen.
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { processCaptured } from "./pipeline.ts";
 import { buildContent } from "./retrieval.ts";
 import { fetchCaption } from "./fetch-caption.ts";

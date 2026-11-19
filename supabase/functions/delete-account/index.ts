@@ -2,7 +2,7 @@
 // Permanently deletes the caller's account, as described in legal/data-deletion.md: every row they own, their storage
 // objects, then the auth user. Uses the service role, which never leaves the server. Safe to retry: each step only
 // deletes what is left.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "@supabase/supabase-js";
 
 declare const Deno: { env: { get(k: string): string | undefined }; serve(h: (r: Request) => Promise<Response>): void };
 
