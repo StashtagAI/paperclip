@@ -38,9 +38,12 @@ Supabase project: `qzaijqrkriuhlqbwmyto`. Supabase callback URL for every provid
    `https://qzaijqrkriuhlqbwmyto.supabase.co/auth/v1/callback`.
 3. **Keys › +**: name "StashtagAI Sign in with Apple", tick **Sign in with Apple**, configure with primary App ID
    `ai.stashtag.app`. Download `AuthKey_<KEY_ID>.p8` (only downloadable once) and note the **Key ID** and your **Team ID**.
-4. **Services › Sign in with Apple for Email Communication** › Configure: add the domain and the From address of the
+4. *Only once we send auth emails from our own domain through custom SMTP; skip it until then.*
+   **Services › Sign in with Apple for Email Communication** › Configure: add the domain and the From address of the
    auth emails (Supabase › Authentication › Emails › SMTP settings) so Apple forwards our emails to "Hide My Email"
-   users. The domain must pass SPF.
+   users. The domain must pass SPF. Sign in with Apple works without this step. Without it, the only thing Hide My Email
+   users miss is auth email (magic links, "identity linked" notices). Supabase's built-in sender only delivers to
+   project team members anyway, and the app sends no other email.
 5. Make the 6-month client secret on your laptop (the key stays there):
    `node --experimental-strip-types scripts/apple-client-secret.ts <TEAM_ID> <KEY_ID> path/to/AuthKey_<KEY_ID>.p8`
    **It expires after 6 months**; set a reminder to rerun it and paste the new value, or web/Android Apple sign-in stops.
