@@ -28,6 +28,9 @@ npm install
 cp .env.example .env.local   # then fill in the anon key
 ```
 
+Agent task worktrees use `scripts/worktree.sh` instead of `npm install`, so they share one install per lockfile; see
+`docs/worktrees.md`, which also covers done-task cleanup and DB backup retention.
+
 ### Environment variables
 
 | Name | Value |
