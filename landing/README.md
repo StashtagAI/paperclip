@@ -16,7 +16,7 @@ Android visitors and submits the waitlist form inline, and the page works the sa
 
 | File | What |
 | --- | --- |
-| `site.config.json` | **The only place to edit** the canonical domain, contact email, store links and waitlist function URL |
+| `site.config.json` | **The only place to edit** the canonical domain, contact email, store links and waitlist function URL. `contactEmail` also fills the `[PRIVACY EMAIL]` / `[CONTACT EMAIL]` placeholders in `../legal/*.md`, and `npm run check` fails if one is left |
 | `src/content.mjs` | All copy: hero, how it works, features, FAQ. The page, JSON-LD and `llms.txt` are generated from it |
 | `src/styles.css`, `src/platform.js` | Inlined into each page at build time, with CSP hashes computed by the build |
 | `build.mjs` | Writes `dist/`: home page, `/privacy/`, `/terms/`, `/data-deletion/`, `/support/` (from `../legal/*.md`), `404.html`, `robots.txt`, `sitemap.xml`, `llms.txt`, `llms-full.txt`, and while the waitlist is open `/waitlist/thanks/` and `/waitlist/try-again/` (noindex, not in the sitemap) |

@@ -297,6 +297,14 @@ const home = `      <section class="hero" aria-labelledby="hero-title">
 
 const legalSlugs = Object.fromEntries(content.legalPages.map((p) => [p.file, p.slug]));
 
+// ../legal leaves the address as [PRIVACY EMAIL] / [CONTACT EMAIL] (HAN-107); the site fills in config.contactEmail.
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.contactEmail ?? '')) throw new Error('contactEmail must be an email address');
+const readLegal = (file) =>
+  readFileSync(join(legalDir, file), 'utf8').replace(
+    /\[(PRIVACY|CONTACT) EMAIL\]/g,
+    `[${config.contactEmail}](mailto:${config.contactEmail})`,
+  );
+
 function inline(text) {
   return esc(text)
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, href) => {
@@ -349,7 +357,7 @@ function markdown(md) {
 }
 
 function legalPage({ file, slug, label }) {
-  const md = readFileSync(join(legalDir, file), 'utf8');
+  const md = readLegal(file);
   const html = markdown(md);
   const firstPara = md
     .split('\n')
@@ -438,7 +446,7 @@ ${content.legalPages.map((p) => `- [${p.label}](${abs(`${p.slug}/`)})`).join('\n
 
 const llmsFull = `${llms}
 ${content.legalPages
-  .map((p) => `---\n\nSource: ${abs(`${p.slug}/`)}\n\n${readFileSync(join(legalDir, p.file), 'utf8').trim()}\n`)
+  .map((p) => `---\n\nSource: ${abs(`${p.slug}/`)}\n\n${readLegal(p.file).trim()}\n`)
   .join('\n')}`;
 
 // ---------------------------------------------------------------------------------------------------------------

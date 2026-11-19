@@ -85,6 +85,13 @@ check(!waitlistOn || /coming soon\. Join the launch waitlist at https:\/\/\S+#wa
 check(!waitlistOn || content.faq.some(({ a }) => /waitlist/.test(a)), 'FAQ: no answer mentions the waitlist');
 check(!waitlistOn || /waitlist/i.test(read('privacy/index.html')), 'privacy: does not mention the launch waitlist');
 
+// No unfilled email placeholder from ../legal reaches the site (HAN-107): the waitlist removal route must be real.
+for (const path of readdirSync(join(root, 'dist'), { recursive: true }).filter((f) => /\.(html|txt|xml)$/.test(f))) {
+  const tokens = decode(read(path)).match(/\[[A-Z ]*EMAIL\]/g);
+  check(!tokens, `${path}: unfilled placeholder ${[...new Set(tokens ?? [])].join(', ')}`);
+}
+check(read('privacy/index.html').includes(`href="mailto:${config.contactEmail}"`), 'privacy: no mailto link to contactEmail');
+
 // robots.txt allows the AI crawlers by name and points at the sitemap.
 const robots = read('robots.txt');
 for (const bot of ['GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'Claude-SearchBot', 'Claude-User',
