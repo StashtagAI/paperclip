@@ -66,14 +66,21 @@ Deploy the backend (from the repo root, after the PR merges, following the migra
 
 ```bash
 supabase db push                                        # adds waitlist_signups, waitlist_attempts, waitlist_signup()
+supabase secrets set WAITLIST_IP_SALT="$(openssl rand -hex 32)"   # required: the function refuses signups without it
 supabase functions deploy waitlist --no-verify-jwt      # a plain HTML form can't send a JWT
-supabase secrets set WAITLIST_IP_SALT="$(openssl rand -hex 32)"   # optional; defaults to the service-role key
-# Only if the site is not at https://stashtag.ai/ (redirect target and the one Origin it accepts):
+# Only if the site is not at https://stashtag.ai/ (redirect target; its origin is always allowed):
 supabase secrets set WAITLIST_SITE_URL=https://stashtag.ai/
+# Only to change which other pages may post (exact origins, comma-separated; replaces the default list):
+supabase secrets set WAITLIST_ALLOWED_ORIGINS=https://stashtag.ai,https://www.stashtag.ai
 ```
 
-The function refuses POSTs whose `Origin` is not `WAITLIST_SITE_URL`'s, so a preview deployment on another domain
-can show the form but not submit it.
+Allowed `Origin`s (HAN-106): `WAITLIST_SITE_URL`'s, `https://stashtag.ai` and `https://www.stashtag.ai` (or
+`WAITLIST_ALLOWED_ORIGINS`), and this project's Cloudflare Pages previews, `https://<8-hex hash>.stashtag-landing.pages.dev`
+(not branch aliases, and never any other `*.pages.dev`). Everything else gets 403, including `Origin: null`; a request
+with no `Origin` at all (curl) is let through and still rate-limited. The per-IP limit uses only the client-IP header
+the Supabase gateway sets (`CLIENT_IP_HEADER` in `handler.ts`), and a request without it is refused, not pooled. Over
+300 tries an hour from all IPs, `waitlist_signup()` answers `busy` and the function logs
+`waitlist: global hourly cap reached`.
 
 **Export the list** (service role or the dashboard SQL editor; never from the site):
 

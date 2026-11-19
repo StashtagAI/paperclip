@@ -62,6 +62,15 @@ select public.waitlist_signup('d@example.com', null, null, '{}', 'ip-4');
 reset role;
 select is((select count(*)::int from public.waitlist_attempts where ip_hash = 'ip-old'), 0, 'attempts older than 24 hours are deleted');
 
+-- Global cap (HAN-106): 300 tries from all IPs in an hour, whatever the IP.
+insert into public.waitlist_attempts (ip_hash, created_at)
+  select 'flood-' || i, now() - interval '30 minutes' from generate_series(1, 300) i;
+set local role service_role;
+select is(public.waitlist_signup('e@example.com', null, null, '{}', 'ip-5'), 'busy', 'a fresh IP is refused once the hour is full');
+reset role;
+select is((select count(*)::int from public.waitlist_signups where email = 'e@example.com'), 0, 'busy signup not stored');
+select is((select count(*)::int from public.waitlist_attempts where ip_hash = 'ip-5'), 0, 'busy try not counted against the IP');
+
 -- Clients: anon and a signed-in user get nothing.
 insert into auth.users (id, email) values ('00000000-0000-4000-8000-00000000000a', 'a@example.com');
 set local role anon;

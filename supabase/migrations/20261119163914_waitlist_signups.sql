@@ -28,8 +28,11 @@ create index waitlist_attempts_created_idx on public.waitlist_attempts (created_
 alter table public.waitlist_attempts enable row level security;
 revoke all on public.waitlist_attempts from anon, authenticated;
 
--- Returns 'ok' (new or already on the list: the caller can't tell which) or 'rate_limited'.
+-- Returns 'ok' (new or already on the list: the caller can't tell which), 'rate_limited', or 'busy'.
 -- Generous for a person, tight for a script: 5 tries per IP in 10 minutes and 20 in 24 hours.
+-- 'busy' (HAN-106): more than 300 tries from all IPs in the last hour. Per-IP limits don't stop a script rotating
+-- through many IPs; this caps how much junk it can add, and the function logs it so someone notices. A real launch
+-- spike is unlikely to reach 300 an hour, and the cap lifts on its own as the hour rolls over.
 create function public.waitlist_signup(
   p_email text, p_platform text, p_source text, p_utm jsonb, p_ip_hash text
 ) returns text
@@ -42,6 +45,10 @@ begin
       where a.ip_hash = p_ip_hash and a.created_at > now() - interval '10 minutes') >= 5
      or (select count(*) from public.waitlist_attempts a where a.ip_hash = p_ip_hash) >= 20 then
     return 'rate_limited';
+  end if;
+  -- Not serialised across IPs, so parallel calls can overshoot a little; it's a ceiling on junk, not an exact count.
+  if (select count(*) from public.waitlist_attempts a where a.created_at > now() - interval '1 hour') >= 300 then
+    return 'busy';
   end if;
   insert into public.waitlist_attempts (ip_hash) values (p_ip_hash);
   -- A repeat signup keeps the first row as it was.
