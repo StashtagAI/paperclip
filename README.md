@@ -7,15 +7,17 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 
 | Path | What |
 | --- | --- |
-| `src/app/` | Routes: `sign-in`, `auth/callback`, `(app)/index` (Home), `(app)/stash` (Stash a link sheet), `(app)/share` (share-sheet landing), `(app)/capture/[linkId]` (screenshots / recording / caption), `(app)/card/[linkId]` (live status + review), `(app)/kind/[kind]` (Kind › Category › List), `(app)/list/[listId]` (items) |
+| `src/app/` | Routes: `sign-in`, `auth/callback`, `(app)/index` (Home), `(app)/stash` (Stash a link sheet), `(app)/share` (share-sheet landing), `(app)/capture/[linkId]` (screenshots / recording / caption), `(app)/card/[linkId]` (live status + review), `(app)/kind/[kind]` (Kind › Category › List), `(app)/list/[listId]` (items), `(app)/profile` (appearance, feedback, support, billing, delete account) with its `(app)/feedback` and `(app)/delete-account` sheets |
 | `src/lib/capture/`, `modules/media-extract/` | On-device OCR, frame sampling, audio extraction and whisper transcription; see `docs/capture.md` |
 | `src/lib/link-filter.ts` | Instagram/TikTok URL allowlist; re-exports `supabase/functions/_shared/link-filter.ts`, which `process-link` also uses (unit-tested in `src/lib/__tests__`) |
 | `src/lib/supabase.ts`, `src/lib/auth.tsx` | Supabase client and session context (email magic link / one-time code) |
-| `src/constants/theme.ts`, `palette.ts` | Light/dark design tokens and per-kind `KindColors` (fill, `onColor`, chip); read via `useTheme()` / `useKindColors()`. Contrast is unit-tested |
+| `src/constants/theme.ts`, `palette.ts` | Light/dark design tokens and per-kind `KindColors` (fill, `onColor`, chip); read via `useTheme()` / `useKindColors()`. Contrast is unit-tested. The user's System/Light/Dark choice is saved on device by `ColorSchemeProvider` (`src/hooks/use-color-scheme.tsx`) |
 | `src/constants/brand.ts` | The pin mark (logo concept B). `npm run icons` regenerates every icon/splash PNG in `assets/images` from it |
 | `src/constants/features.ts` | Feature flags (`shared` stashes: Premium, off) |
 | `supabase/migrations/` | Database schema and row-level security |
 | `supabase/functions/process-link/` | Extraction edge function (owned by Extraction, HAN-6) |
+| `supabase/functions/delete-account/` | Deletes the caller's rows, storage objects and auth user with the service role (HAN-34, matches `legal/data-deletion.md`). Deploy with `supabase functions deploy delete-account` |
+| `supabase/functions/place-details/` | Fills in the Google rating and opening hours for restaurants on an Eats list when it opens, refreshed weekly; uses `GOOGLE_PLACES_API_KEY` and counts toward process-link's daily spend caps (HAN-83). Deploy with `supabase functions deploy place-details` |
 
 ## Setup
 
@@ -49,9 +51,29 @@ supabase db push            # applies supabase/migrations/*.sql
 ```
 
 Schema: `links` (url, platform, status `pending|processing|done|failed`, raw_content, tags, error) →
-`categories` (kind `eats|trips|recipes|do`, name) › `lists` (name = scope such as "Denver", tags) › `items`
+`categories` (kind `eats|travel|recipes|do`, name) › `lists` (name = scope such as "Denver", tags) › `items`
 (name, description, address, lat/lng, source `link_id`). RLS limits every table to the signed-in user's rows; clients may
 only insert links as `pending` and cannot update them; `process-link` uses the service role.
+
+Migrations (HAN-54): `main` is the source of truth and matches production's `supabase_migrations.schema_migrations`.
+Supabase keys each migration by its 14-digit version, so every file needs its own version: two branches that both use
+`20261113180000` clash, and one of them is skipped. Name new files with the current UTC time
+(`supabase migration new <name>`), and rebase onto `main` before merging. If you apply a migration to production with the
+MCP `apply_migration` tool or the dashboard, it gets a new version, so rename the file to match
+(`select version, name from supabase_migrations.schema_migrations order by version`). Check before `db push` with
+`supabase migration list`: local and remote columns must match row for row.
+
+Security tests (HAN-46, both run in CI):
+
+```bash
+# RLS: every table, user A against user B's rows and anon. Needs an EMPTY Supabase Postgres, never a real project.
+docker run -d --name rls-test -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:55432:5432 public.ecr.aws/supabase/postgres:17.11.0.011
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/postgres scripts/test-db.sh
+# process-link: other users' link_id, and the prompt-injection fixtures in injection-fixtures.ts
+node --experimental-strip-types supabase/functions/process-link/security.test.ts
+```
+
+A new table fails `supabase/tests/database/rls.test.sql` until it has RLS and tests of its own.
 
 ### Auth
 
@@ -103,6 +125,8 @@ npx eas-cli@latest update --channel preview --environment preview --message "...
 `runtimeVersion` uses the `fingerprint` policy, so an update only reaches builds with the same
 native code. After adding or upgrading a native module, or changing plugins in `app.json`, make a
 new build. `npx expo-updates fingerprint:generate` prints the current fingerprint to compare.
+The fingerprint also hashes `.gitignore`: editing it changes the runtime version just like a native
+change, so an update published afterwards silently skips the current TestFlight build.
 
 ### Releasing to the App Store
 
@@ -130,6 +154,9 @@ The workflow can't prompt for an Apple login, so it relies on (both already in p
 
 Static web build: `npm run build:web` (outputs `dist/`, a single-page app).
 
+Shared lists (HAN-50) open at `/s/<token>`, so the web host must serve `index.html` for unknown paths (SPA fallback).
+Set `EXPO_PUBLIC_WEB_URL` to that host so links shared from a phone open for friends without the app.
+
 Share sheet, OCR and transcription use native modules (`expo-share-intent`, `expo-text-extractor`, `whisper.rn`, the
 local `modules/media-extract`), so they need a development build. They don't work in Expo Go. Flow and package choices:
 [`docs/capture.md`](docs/capture.md).
@@ -141,6 +168,9 @@ npm run typecheck
 npm run lint
 npm test
 ```
+
+Database checks for shared lists run against a scratch Postgres with every migration applied (for example the
+`public.ecr.aws/supabase/postgres` image): `psql -v ON_ERROR_STOP=1 -f supabase/tests/list_shares_test.sql`.
 
 Screenshots for the design brief live in `docs/design/`. App Store listing artwork (product page header, search result
 image) lives in `docs/store/`; it is uploaded in App Store Connect and is not bundled into the app. The board keeps the

@@ -1,5 +1,7 @@
-export const KINDS = ["eats", "trips", "recipes", "do"] as const;
+export const KINDS = ["eats", "travel", "recipes", "do", "shop", "watch"] as const;
 export type Kind = typeof KINDS[number];
+/** Kinds whose items can be places: they get a Places lookup and an address search. Not recipes, products or media. */
+export const PLACE_KINDS: readonly Kind[] = ["eats", "travel", "do"];
 
 export interface Item {
   name: string;
@@ -18,11 +20,16 @@ export const SOURCES = ["capture", "linked_site", "search", "places_lookup"] as 
 export type Source = typeof SOURCES[number];
 export interface Extraction {
   kind: Kind;
+  /** second-best kind when the post could reasonably be filed under either (e.g. packing cubes: travel or shop); the app lets the user choose */
+  alt_kind?: Kind;
   category: string;
   list_scope: string | null;
   tags: string[];
   items: Item[];
 }
+
+/** Per-run item cap: each item can cost a Places lookup and a web search. */
+export const MAX_ITEMS = 20;
 
 const str = (v: unknown, max: number) =>
   typeof v === "string" && v.trim() && v.length <= max ? v.trim() : null;
@@ -40,7 +47,7 @@ export function validateExtraction(raw: unknown): Extraction {
     : [];
   if (!Array.isArray(o.items)) throw new Error("items not an array");
   const items: Item[] = [];
-  for (const it of o.items.slice(0, 50)) {
+  for (const it of o.items.slice(0, MAX_ITEMS)) {
     if (!it || typeof it !== "object") continue;
     const i = it as Record<string, unknown>;
     const name = str(i.name, 200);
@@ -70,5 +77,7 @@ export function validateExtraction(raw: unknown): Extraction {
     }
     items.push(item);
   }
-  return { kind: o.kind as Kind, category, list_scope, tags, items };
+  const out: Extraction = { kind: o.kind as Kind, category, list_scope, tags, items };
+  if (KINDS.includes(o.alt_kind as Kind) && o.alt_kind !== o.kind) out.alt_kind = o.alt_kind as Kind;
+  return out;
 }

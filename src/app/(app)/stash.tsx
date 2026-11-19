@@ -1,19 +1,21 @@
+import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, RefreshControl, StyleSheet } from 'react-native';
 
 import { Button } from '@/components/button';
+import { RowLink } from '@/components/row-link';
 import { Screen } from '@/components/screen';
+import { LinkStatusRow } from '@/components/stash-row';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
+import { usePollWhile } from '@/hooks/use-poll-while';
 import { useTheme } from '@/hooks/use-theme';
+import { signOutHere } from '@/lib/account';
 import { buildCard, fetchLink, fetchRecentLinks, submitLink } from '@/lib/data';
-import { shortUrl } from '@/lib/link-summary';
 import { checkLink } from '@/lib/link-filter';
-import { supabase } from '@/lib/supabase';
-import type { LinkRow, LinkStatus } from '@/lib/types';
 
 type Feedback = { tone: 'danger' | 'success'; text: string } | null;
 
@@ -28,10 +30,20 @@ export default function StashScreen() {
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [saving, setSaving] = useState(false);
   const links = useAsync(fetchRecentLinks, []);
+  // "Processing" rows end by themselves (filed or failed); keep them current (HAN-77).
+  usePollWhile(links.data?.some((l) => l.status === 'processing') ?? false, links.poll);
+
+  const theme = useTheme();
+
+  function fail(text: string) {
+    setFeedback({ tone: 'danger', text });
+    // accessibilityRole="alert" is only spoken on Android.
+    AccessibilityInfo.announceForAccessibility(text);
+  }
 
   async function save(value: string) {
     const result = checkLink(value);
-    if (!result.ok) return setFeedback({ tone: 'danger', text: result.message });
+    if (!result.ok) return fail(result.message);
     setSaving(true);
     try {
       const { id, outcome } = await submitLink(result);
@@ -48,12 +60,27 @@ export default function StashScreen() {
       buildCard(id).catch((e: Error) => console.warn('[process-link]', e.message));
       router.replace({ pathname: '/card/[linkId]', params: { linkId: id, sent: 'read' } });
     } catch (e) {
-      setFeedback({ tone: 'danger', text: `Couldn’t save the link: ${(e as Error).message}` });
+      fail(`Couldn’t save the link: ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
   }
   const onSubmit = () => save(input);
+
+  // One tap from "Copy link" to stashed (HAN-56): the pasted text goes in the field and is saved straight away.
+  function onPaste(text: string) {
+    if (saving) return;
+    if (!text.trim()) return fail('Nothing to paste. In Instagram or TikTok, tap Share › Copy link first.');
+    setInput(text.trim());
+    save(text);
+  }
+  async function pasteFromClipboard() {
+    try {
+      onPaste(await Clipboard.getStringAsync());
+    } catch (e) {
+      fail(`Couldn’t read the clipboard: ${(e as Error).message}`);
+    }
+  }
 
   // A link from the share sheet is saved straight away, once.
   const autoSaved = useRef(false);
@@ -69,6 +96,21 @@ export default function StashScreen() {
       edges="none"
       refreshControl={<RefreshControl refreshing={links.loading && !!links.data} onRefresh={links.refresh} />}>
       <ThemedText themeColor="textSecondary">Paste an Instagram post or reel, or a TikTok video link.</ThemedText>
+
+      {/* iOS 16+: Apple's own Paste control reads the clipboard without the "Allow Paste?" prompt. */}
+      {Clipboard.isPasteButtonAvailable ? (
+        <Clipboard.ClipboardPasteButton
+          onPress={(data) => data.type === 'text' && onPaste(data.text)}
+          acceptedContentTypes={['url', 'plain-text']}
+          backgroundColor={theme.tint}
+          foregroundColor={theme.onTint}
+          cornerStyle="medium"
+          displayMode="iconAndLabel"
+          style={styles.pasteButton}
+        />
+      ) : (
+        <Button title="Paste copied link" onPress={pasteFromClipboard} disabled={saving} />
+      )}
 
       <TextField
         value={input}
@@ -93,7 +135,7 @@ export default function StashScreen() {
         </ThemedText>
       ) : null}
 
-      <ThemedText type="smallBold" style={styles.sectionTitle}>
+      <ThemedText type="smallBold" style={styles.sectionTitle} accessibilityRole="header">
         Recent links
       </ThemedText>
       {links.error ? (
@@ -105,56 +147,19 @@ export default function StashScreen() {
           Nothing saved yet.
         </ThemedText>
       ) : (
-        links.data?.map((link) => <LinkRowView key={link.id} link={link} />)
+        links.data?.map((link) => <LinkStatusRow key={link.id} link={link} />)
       )}
+      {/* Recent links stops at 20; every stash stays reachable from here (HAN-89). */}
+      {links.data?.length ? <RowLink href="/stashes" title="All stashes" subtitle="Every link you’ve stashed, and the ones not sorted" /> : null}
 
-      <Button title="Sign out" variant="secondary" onPress={() => supabase.auth.signOut()} style={styles.signOut} />
+      <Button title="Sign out" variant="secondary" onPress={signOutHere} style={styles.signOut} />
     </Screen>
   );
 }
 
-const STATUS_LABEL: Record<LinkStatus, string> = {
-  pending: 'Needs text',
-  processing: 'Processing',
-  done: 'Filed',
-  failed: 'Failed',
-};
-
-function LinkRowView({ link }: { link: LinkRow }) {
-  const theme = useTheme();
-  const color = link.status === 'failed' ? theme.danger : link.status === 'done' ? theme.success : theme.textSecondary;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: link.id } })}
-      style={[styles.linkRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      <View style={styles.linkText}>
-        <ThemedText type="small" numberOfLines={1}>
-          {shortUrl(link.url)}
-        </ThemedText>
-        {link.status === 'failed' && link.error ? (
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-            {link.error}
-          </ThemedText>
-        ) : null}
-      </View>
-      <ThemedText type="smallBold" style={{ color }}>
-        {STATUS_LABEL[link.status]}
-      </ThemedText>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
+  // UIPasteControl needs an explicit size; 48pt clears the touch-target minimum.
+  pasteButton: { height: 48, alignSelf: 'stretch' },
   sectionTitle: { marginTop: Spacing.three },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-    padding: Spacing.three,
-    borderRadius: Radius.row,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-  },
-  linkText: { flex: 1 },
   signOut: { marginTop: Spacing.four },
 });

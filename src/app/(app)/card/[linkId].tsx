@@ -1,23 +1,52 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, ActivityIndicator, Animated, type HostInstance, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { ProgressSteps } from '@/components/progress-steps';
 import { Screen } from '@/components/screen';
+import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
+import { useReduceMotion } from '@/hooks/use-reduce-motion';
 import { useTheme } from '@/hooks/use-theme';
-import { deleteItem, deleteLink, fetchLink, fetchLinkItems, rateLink, subscribeToLink } from '@/lib/data';
-import type { FieldSource, LinkDetail, LinkItem, LinkStatus, RawContent } from '@/lib/types';
-import { KIND_LABELS } from '@/lib/types';
+import { announce } from '@/lib/announce';
+import {
+  buildCard,
+  chooseLinkKind,
+  deleteItem,
+  deleteLink,
+  dismissLink,
+  fetchLink,
+  fileLink,
+  fetchLinkItems,
+  rateLink,
+  subscribeToLink,
+} from '@/lib/data';
+import { type KindChoice, kindChoice } from '@/lib/kind-choice';
+import {
+  FAILED_TITLE,
+  failureReason,
+  isNotSorted,
+  NOT_SORTED_REASON,
+  NOT_SORTED_TITLE,
+  NOT_STARTED,
+  retryAction,
+  START_TIMEOUT_MS,
+} from '@/lib/link-outcome';
+import { suggestedItemName } from '@/lib/link-summary';
+import type { FieldSource, Kind, LinkDetail, LinkItem, LinkStatus, RawContent } from '@/lib/types';
+import { KIND_LABELS, KINDS, PLATFORM_LABELS } from '@/lib/types';
 import { confirmDestructive } from '@/lib/confirm';
+import { currentStep, stepAnnouncement, type StepKey } from '@/lib/progress';
 
 const STATUS_COPY: Record<LinkStatus, string> = {
   pending: 'Waiting for what the post says',
-  processing: 'Reading the text and building your card…',
+  processing: 'Building your card…',
   done: 'Filed',
-  failed: 'Couldn’t build this card',
+  failed: FAILED_TITLE,
 };
 
 /** Fields the model took from the text: a fetched caption (HAN-18) or text captured on the phone. */
@@ -31,21 +60,14 @@ const SOURCE_COPY: Record<FieldSource, string> = {
   search: 'from web search',
 };
 
-const ERROR_COPY: Record<string, string> = {
-  no_captured_text: 'No text reached the server. Add a screenshot or paste the caption.',
-  no_items_found: 'No places, recipes or things to do were named in the text.',
-  timeout: 'This took too long and was stopped.',
-  url_not_allowed: 'Only Instagram and TikTok links are supported.',
-};
-
 /**
  * Review (HAN-11 step 4): live status while process-link runs, then the card with each field's source so wrong items
  * can be removed. Status updates arrive over Supabase Realtime.
  */
 export default function CardScreen() {
   // `sent` = we just came from Build card ("1") or Stash it ("read"), so a still-"pending" row means the request is on
-  // its way.
-  const { linkId, sent } = useLocalSearchParams<{ linkId: string; sent?: string }>();
+  // its way. `retry` = Try again on Home: send it again as soon as the card opens.
+  const { linkId, sent, retry: retryParam } = useLocalSearchParams<{ linkId: string; sent?: string; retry?: string }>();
   const load = useAsync(() => Promise.all([fetchLink(linkId), fetchLinkItems(linkId)]), [linkId]);
   const { refresh } = load;
   useEffect(() => subscribeToLink(linkId, refresh), [linkId, refresh]);
@@ -55,8 +77,90 @@ export default function CardScreen() {
   const first = items?.[0];
   // After Stash it, "needs_capture" is the reply; after Build card it's the row's old state until the claim lands.
   const needsCapture = sent === 'read' && link?.status === 'pending' && link.error === 'needs_capture';
-  const sending = !!sent && link?.status === 'pending' && !needsCapture;
-  const reading = (sent === 'read' && sending) || (link?.status === 'processing' && !!raw?.reading);
+  // A run this screen started with Try again (HAN-77); the row reads "failed" until process-link claims it.
+  const [retrying, setRetrying] = useState(false);
+  // NOT_STARTED once the request is given up on (the row never left "pending", or Try again couldn't reach the server).
+  const [localError, setLocalError] = useState<string | null>(null);
+  const sending = retrying || (!!sent && link?.status === 'pending' && !needsCapture && !localError);
+  const step =
+    link && retrying && (link.status === 'pending' || link.status === 'failed')
+      ? 'reading'
+      : link
+        ? currentStep(link, sending, sent)
+        : null;
+  const failure = localError ?? (link?.status === 'failed' && !retrying ? (link.error ?? '') : null);
+  const outcome = link ? outcomeCopy(link, items ?? [], failure) : null;
+  const tryAgain = link && failure != null ? retryAction(link.status, failure, sent) : null;
+  const choice = link?.status === 'done' ? kindChoice(raw, first?.list.category.kind) : null;
+  // Done with nothing filed (HAN-89): offer Choose a category and Dismiss.
+  const notSorted = !!link && !!items && isNotSorted(link.status, items.length, raw?.already_listed?.length ?? 0);
+  // What the user chose in KindChoicePanel or FilePanel, shown (and focused) where the question was once it goes away.
+  const [chosen, setChosen] = useState<string | null>(null);
+
+  // Pending rows are never swept on the server, so a request that never arrived would show "Reading the post" forever.
+  // Same for Try again: until process-link claims the row it still reads "failed" (or "pending").
+  const awaitingClaim =
+    !localError &&
+    (retrying
+      ? link?.status === 'pending' || link?.status === 'failed'
+      : !!sent && link?.status === 'pending' && !needsCapture);
+  useEffect(() => {
+    if (!awaitingClaim) return;
+    const timer = setTimeout(() => {
+      setRetrying(false);
+      setLocalError(NOT_STARTED);
+    }, START_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [awaitingClaim]);
+  // The request got through after all.
+  const status = link?.status;
+  const [seenStatus, setSeenStatus] = useState(status);
+  if (status !== seenStatus) {
+    setSeenStatus(status);
+    if (status === 'processing' || status === 'done') setLocalError(null);
+  }
+
+  async function retry() {
+    if (tryAgain === 'capture') return router.replace({ pathname: '/capture/[linkId]', params: { linkId } });
+    setLocalError(null);
+    setRetrying(true);
+    // "read": if the caption can't be read this time either, the needs_capture reply moves on to the capture screen.
+    router.setParams({ sent: 'read', retry: undefined });
+    try {
+      await buildCard(linkId);
+      // The server answered (maybe after the timeout above), so the row now says how it went.
+      setLocalError(null);
+    } catch (e) {
+      console.warn('[process-link]', (e as Error).message);
+      setLocalError(NOT_STARTED);
+    } finally {
+      setRetrying(false);
+      refresh();
+    }
+  }
+
+  const autoRetried = useRef(false);
+  useEffect(() => {
+    if (retryParam && tryAgain && !autoRetried.current) {
+      autoRetried.current = true;
+      retry();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryParam, tryAgain]);
+
+  // Read out each step, then how it ended, but only for a card built while the screen was open (HAN-42).
+  const [justFinished, setJustFinished] = useState(false);
+  const watched = useRef(false);
+  useEffect(() => {
+    if (step) {
+      watched.current = true;
+      announce(stepAnnouncement(step));
+    } else if (outcome && watched.current) {
+      watched.current = false;
+      setJustFinished(true);
+      announce(outcome);
+    }
+  }, [step, outcome]);
 
   // Safety net if a Realtime update is missed: re-read every 5 s while the card is still being built.
   const waiting = sending || link?.status === 'processing';
@@ -76,18 +180,34 @@ export default function CardScreen() {
       edges="none"
       footer={
         link?.status === 'done' ? (
+          <View style={styles.footer}>
+            <Button
+              title={first ? `Open ${first.list.category.name} › ${first.list.name}` : 'Done'}
+              size="large"
+              onPress={() =>
+                first
+                  ? router.replace({ pathname: '/list/[listId]', params: { listId: first.list.id } })
+                  : router.dismissTo('/')
+              }
+            />
+            {/* Several posts in a row (HAN-64). Back to Stash if we came from its Recent links, else open it here. */}
+            <Button
+              title="Stash another link"
+              variant="secondary"
+              size="large"
+              onPress={() => router.dismissTo('/stash')}
+            />
+          </View>
+        ) : tryAgain ? (
           <Button
-            title={first ? `Open ${first.list.category.name} › ${first.list.name}` : 'Done'}
+            title={tryAgain === 'rerun' ? 'Try again' : 'Add what the post says'}
+            accessibilityHint={tryAgain === 'rerun' ? 'Reads the post again and builds the card' : undefined}
             size="large"
-            onPress={() =>
-              first
-                ? router.replace({ pathname: '/list/[listId]', params: { listId: first.list.id } })
-                : router.dismissTo('/')
-            }
+            onPress={retry}
           />
-        ) : link?.status === 'failed' || (link?.status === 'pending' && !sending) ? (
+        ) : link?.status === 'pending' && !sending && failure == null ? (
           <Button
-            title={link.status === 'failed' ? 'Try again' : 'Add what the post says'}
+            title="Add what the post says"
             size="large"
             onPress={() => router.replace({ pathname: '/capture/[linkId]', params: { linkId } })}
           />
@@ -95,19 +215,45 @@ export default function CardScreen() {
       }>
       <Stack.Screen options={{ title: 'Your card' }} />
       {load.error ? <ThemedText themeColor="danger">{load.error.message}</ThemedText> : null}
-      {!link ? <ActivityIndicator /> : <StatusBanner link={link} sending={sending} reading={reading} />}
+      {!link ? (
+        <ActivityIndicator />
+      ) : (
+        <StatusBanner
+          link={link}
+          step={step}
+          outcome={outcome}
+          failure={failure}
+          notSorted={notSorted}
+          celebrate={justFinished && link.status === 'done'}
+        />
+      )}
 
       {first ? (
         <ThemedText type="sectionTitle">
           {KIND_LABELS[first.list.category.kind]} › {first.list.category.name} › {first.list.name}
         </ThemedText>
       ) : null}
-      {link?.status === 'done' && items?.length === 0 && !raw?.already_listed?.length ? (
-        <ThemedText themeColor="textSecondary">
-          {raw?.unsorted
-            ? 'Nothing in the text could be sorted into a list. The text is kept with the link.'
-            : 'No items were added.'}
-        </ThemedText>
+      {choice ? (
+        <KindChoicePanel
+          linkId={linkId}
+          choice={choice}
+          path={`${first!.list.category.name} › ${first!.list.name}`}
+          onChosen={(message) => {
+            setChosen(message);
+            refresh();
+          }}
+        />
+      ) : chosen ? (
+        <ChosenNote key={chosen} message={chosen} />
+      ) : null}
+      {notSorted && link ? (
+        <FilePanel
+          link={link}
+          onDone={(message) => {
+            setChosen(message);
+            refresh();
+          }}
+        />
       ) : null}
       {items?.map((item) => (
         <ReviewItem key={item.id} item={item} raw={raw} onRemoved={refresh} />
@@ -123,22 +269,332 @@ export default function CardScreen() {
   );
 }
 
-function StatusBanner({ link, sending, reading }: { link: LinkDetail; sending: boolean; reading: boolean }) {
+/**
+ * "Filed 3 items in Brunch › Lisbon": the banner headline once a card is done or failed, also read out. `failure` is the
+ * error code when the card is shown as failed (by the server, or because the request never got there), else null.
+ */
+function outcomeCopy(link: LinkDetail, items: LinkItem[], failure: string | null): string | null {
+  if (failure != null) return `${STATUS_COPY.failed}. ${failureReason(failure)}`;
+  if (link.status !== 'done') return null;
+  const first = items[0];
+  if (!first) {
+    return isNotSorted(link.status, 0, link.raw_content?.already_listed?.length ?? 0)
+      ? `${NOT_SORTED_TITLE}. ${NOT_SORTED_REASON}.`
+      : STATUS_COPY.done;
+  }
+  const n = items.length === 1 ? '1 item' : `${items.length} items`;
+  return `Filed ${n} in ${first.list.category.name} › ${first.list.name}`;
+}
+
+/**
+ * While the card is being built: "Step 2 of 4: …" and the steps. Afterwards: how it ended. The headline and reason sit
+ * in one polite live region that stays mounted from the first step to the outcome, so TalkBack and web screen readers
+ * hear each change; VoiceOver gets the same words from `announce`.
+ */
+function StatusBanner({
+  link,
+  step,
+  outcome,
+  failure,
+  notSorted,
+  celebrate,
+}: {
+  link: LinkDetail;
+  step: StepKey | null;
+  outcome: string | null;
+  failure: string | null;
+  notSorted: boolean;
+  celebrate: boolean;
+}) {
   const theme = useTheme();
-  const color = link.status === 'failed' ? theme.danger : link.status === 'done' ? theme.success : theme.textSecondary;
+  const failed = failure != null;
+  const unsorted = !step && !failed && notSorted;
+  const color = failed ? theme.danger : unsorted ? theme.text : link.status === 'done' ? theme.success : theme.textSecondary;
+  const headline = step
+    ? stepAnnouncement(step)
+    : failed
+      ? STATUS_COPY.failed
+      : unsorted
+        ? NOT_SORTED_TITLE
+        : (outcome ?? STATUS_COPY[link.status]);
   return (
-    <View style={[styles.banner, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      {link.status === 'processing' || sending ? <ActivityIndicator /> : null}
-      <View style={styles.flex}>
-        <ThemedText type="defaultBold" style={{ color }} accessibilityLiveRegion="polite">
-          {reading ? 'Reading the post…' : sending ? 'Sending the text…' : STATUS_COPY[link.status]}
+    <View
+      style={[
+        styles.banner,
+        step && styles.steps,
+        { backgroundColor: theme.backgroundElement, borderColor: failed ? theme.danger : theme.border },
+      ]}>
+      {!step && link.status === 'done' && !unsorted ? <DoneMark color={theme.success} pop={celebrate} /> : null}
+      {unsorted ? <NotSortedMark color={theme.textSecondary} /> : null}
+      {!step && failed ? <FailedMark color={theme.danger} /> : null}
+      <View style={step ? undefined : styles.flex} accessibilityLiveRegion="polite">
+        <ThemedText type={step ? 'smallBold' : 'defaultBold'} style={{ color }}>
+          {headline}
         </ThemedText>
-        {link.status === 'failed' && link.error ? (
+        {!step && (failed || unsorted) ? (
           <ThemedText type="small" themeColor="textSecondary">
-            {ERROR_COPY[link.error] ?? link.error}
+            {failed ? failureReason(failure) : `${NOT_SORTED_REASON}. The text is kept with the link.`}
           </ThemedText>
         ) : null}
       </View>
+      {step ? <ProgressSteps current={step} /> : null}
+      {/* The run happens on the server, so the card keeps building on other screens (HAN-82). */}
+      {step ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Feel free to leave this page while the post processes. Just don’t close the app.
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
+/** The failed mark next to the headline. Decorative: the headline already says it failed, so colour isn't the signal. */
+function FailedMark({ color }: { color: string }) {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <SymbolView
+        name={{ ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' }}
+        tintColor={color}
+        size={28}
+        weight="semibold"
+      />
+    </View>
+  );
+}
+
+/** Not sorted (HAN-89): an inbox tray, not the green check. Decorative; the headline says "Not sorted". */
+function NotSortedMark({ color }: { color: string }) {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <SymbolView name={{ ios: 'tray', android: 'inbox', web: 'inbox' }} tintColor={color} size={28} weight="semibold" />
+    </View>
+  );
+}
+
+/** The done check. Springs in when the card finished while you watched, unless Reduce Motion is on. Decorative. */
+function DoneMark({ color, pop }: { color: string; pop: boolean }) {
+  const reduceMotion = useReduceMotion();
+  const scale = useState(() => new Animated.Value(pop && !reduceMotion ? 0.4 : 1))[0];
+  useEffect(() => {
+    if (!pop || reduceMotion) return scale.setValue(1);
+    const anim = Animated.spring(scale, { toValue: 1, friction: 4, tension: 120, useNativeDriver: Platform.OS !== 'web' });
+    anim.start();
+    return () => anim.stop();
+  }, [pop, reduceMotion, scale]);
+  return (
+    <Animated.View
+      style={{ transform: [{ scale }] }}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants">
+      <SymbolView
+        name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }}
+        tintColor={color}
+        size={28}
+        weight="semibold"
+      />
+    </Animated.View>
+  );
+}
+
+/**
+ * "Travel or Shop?" (HAN-87): process-link filed the post under one kind but it fits another about as well. Keep it or
+ * move this post's items to the same category and list under the other kind. Leaving without choosing keeps it where
+ * it is, and the question stays on the card. Inline rather than a sheet, so there's no focus trap to manage.
+ */
+function KindChoicePanel({
+  linkId,
+  choice,
+  path,
+  onChosen,
+}: {
+  linkId: string;
+  choice: KindChoice;
+  path: string;
+  onChosen: (message: string) => void;
+}) {
+  const theme = useTheme();
+  const [busy, setBusy] = useState<Kind | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const current = KIND_LABELS[choice.current];
+  const alt = KIND_LABELS[choice.alt];
+
+  async function choose(kind: Kind) {
+    setBusy(kind);
+    setError(null);
+    try {
+      await chooseLinkKind(linkId, kind);
+      const message = kind === choice.current ? `Kept in ${current} › ${path}` : `Moved to ${alt} › ${path}`;
+      announce(message);
+      onChosen(message);
+    } catch (e) {
+      const message = `Couldn’t ${kind === choice.current ? 'save that' : `move it to ${alt}`}: ${(e as Error).message}`;
+      setError(message);
+      announce(message);
+      setBusy(null);
+    }
+  }
+
+  return (
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <ThemedText type="defaultBold" accessibilityRole="header">
+        {current} or {alt}?
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        This post could go in either. It’s in {current} for now.
+      </ThemedText>
+      <Button
+        title={`Keep in ${current}`}
+        variant="secondary"
+        onPress={() => choose(choice.current)}
+        loading={busy === choice.current}
+        disabled={!!busy}
+      />
+      <Button
+        title={`Move to ${alt}`}
+        variant="secondary"
+        onPress={() => choose(choice.alt)}
+        loading={busy === choice.alt}
+        disabled={!!busy}
+      />
+      {error ? (
+        <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+          {error}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * "Choose a category" for a stash where nothing was filed (HAN-89): the user names the item (the caption's first line is
+ * suggested) and picks a kind; it's filed as one item in "Saved posts › Instagram" under that kind. "Dismiss" takes it
+ * off Home instead; it stays in All stashes and can still be filed here. Inline rather than a sheet, so there's no focus
+ * trap to manage.
+ */
+function FilePanel({ link, onDone }: { link: LinkDetail; onDone: (message: string) => void }) {
+  const theme = useTheme();
+  const platform = PLATFORM_LABELS[link.platform];
+  const [name, setName] = useState(() => suggestedItemName(link.raw_content?.caption, platform));
+  const [busy, setBusy] = useState<Kind | 'dismiss' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const blank = !name.trim();
+
+  async function file(kind: Kind) {
+    setBusy(kind);
+    setError(null);
+    try {
+      await fileLink(link.id, kind, name);
+      const message = `Filed in ${KIND_LABELS[kind]} › Saved posts › ${platform}`;
+      announce(message);
+      onDone(message);
+    } catch (e) {
+      fail(`Couldn’t file it in ${KIND_LABELS[kind]}: ${(e as Error).message}`);
+    }
+  }
+
+  async function dismiss() {
+    setBusy('dismiss');
+    setError(null);
+    try {
+      await dismissLink(link.id);
+      const message = 'Dismissed. It’s off Home and still under All stashes. You can file it here any time.';
+      announce(message);
+      onDone(message);
+    } catch (e) {
+      fail(`Couldn’t dismiss: ${(e as Error).message}`);
+    }
+    setBusy(null);
+  }
+
+  function fail(message: string) {
+    setError(message);
+    announce(message);
+    setBusy(null);
+  }
+
+  return (
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <ThemedText type="defaultBold" accessibilityRole="header">
+        Choose a category
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Pick where this post goes. It’s saved as one item, with the caption as its description.
+      </ThemedText>
+      <View style={styles.field}>
+        <ThemedText type="smallBold" themeColor="textSecondary">
+          Name
+        </ThemedText>
+        <TextField
+          value={name}
+          onChangeText={(text) => {
+            setName(text);
+            setError(null);
+          }}
+          maxLength={200}
+          returnKeyType="done"
+          accessibilityLabel="Name"
+          invalid={blank}
+        />
+        {blank ? (
+          <ThemedText type="small" themeColor="danger">
+            Add a name to file it.
+          </ThemedText>
+        ) : null}
+      </View>
+      <View style={styles.kinds}>
+        {KINDS.map((kind) => (
+          <Button
+            key={kind}
+            title={KIND_LABELS[kind]}
+            accessibilityLabel={`File in ${KIND_LABELS[kind]}`}
+            variant="secondary"
+            onPress={() => file(kind)}
+            loading={busy === kind}
+            disabled={!!busy || blank}
+            style={styles.kind}
+          />
+        ))}
+      </View>
+      {error ? (
+        <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+          {error}
+        </ThemedText>
+      ) : null}
+      {link.dismissed_at ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Dismissed from Home. It’s still under All stashes.
+        </ThemedText>
+      ) : (
+        <Button
+          title="Dismiss"
+          accessibilityHint="Takes it off Home. It stays under All stashes."
+          variant="secondary"
+          onPress={dismiss}
+          loading={busy === 'dismiss'}
+          disabled={!!busy}
+        />
+      )}
+    </View>
+  );
+}
+
+/**
+ * Where the post ended up after KindChoicePanel or FilePanel. The button that was pressed is gone, so screen reader and keyboard
+ * focus move here instead of jumping to the top of the screen.
+ */
+function ChosenNote({ message }: { message: string }) {
+  const ref = useRef<HostInstance>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (Platform.OS === 'web') (node as unknown as HTMLElement).focus?.();
+    else AccessibilityInfo.sendAccessibilityEvent(node, 'focus');
+  }, []);
+  return (
+    <View ref={ref} accessible tabIndex={-1} accessibilityLiveRegion="polite">
+      <ThemedText type="smallBold" themeColor="textSecondary">
+        {message}
+      </ThemedText>
     </View>
   );
 }
@@ -269,9 +725,13 @@ const styles = StyleSheet.create({
     borderRadius: Radius.row,
     borderWidth: StyleSheet.hairlineWidth * 2,
   },
+  steps: { flexDirection: 'column', alignItems: 'stretch' },
   card: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.two },
   field: { gap: 2 },
+  kinds: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  kind: { flexGrow: 1, flexBasis: 130, paddingHorizontal: Spacing.three },
   feedback: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   flex: { flex: 1 },
+  footer: { gap: Spacing.two },
   delete: { marginTop: Spacing.four, gap: Spacing.two },
 });
