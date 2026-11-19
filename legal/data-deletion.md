@@ -1,7 +1,7 @@
 # StashtagAI Data Deletion Policy (Right to Deletion)
 
 **Effective date:** November 7, 2026
-**Last updated:** November 13, 2026
+**Last updated:** November 19, 2026
 
 You have the right to ask [COMPANY LEGAL NAME] ("StashtagAI", "we", "us") to delete the personal information we hold about you. This page explains how to make a request, what gets deleted, and how long it takes. It supplements our [Privacy Policy](./privacy-policy.md).
 
@@ -14,6 +14,8 @@ You have the right to ask [COMPANY LEGAL NAME] ("StashtagAI", "we", "us") to del
 4. Type **DELETE** and tap **Delete my account**.
 
 Your account is deleted straight away and you are signed out.
+
+If you only want to sign out of your other phones and browsers, use **Sign out everywhere** on the same screen instead. That keeps your account and data.
 
 **Option B: by email**
 Send an email from the address linked to your account to **[PRIVACY EMAIL]** with the subject line **"Delete my account"**. If you no longer have access to that address, tell us, and we will work with you to verify your identity another way.
@@ -30,20 +32,21 @@ To protect your account, we verify that a request comes from the account holder 
 ## 3. What we delete
 
 When your account is deleted, we permanently delete:
-- your account and login information (email address and authentication records);
+- your account and login information (email address, password, and authentication records) and your profile name;
 - every link you submitted;
 - the post content we retrieved for those links (captions, author names, transcripts, and other text);
-- your categories, lists, items, tags, notes, ratings, and photos, and any share links you made for your lists;
+- your categories, lists, items, tags, notes, ratings, "done" marks, and photos;
+- any share links you made for your lists, the people you added to them, and your access to lists others shared with you;
 - any feedback you sent us, in the app, on a saved post, or as a report about an item;
 - any files stored for your account, including photos you added; and
-- processing records tied to your account.
+- processing records and usage counts tied to your account, and the web search results we saved for your items.
 
 ## 4. Timeline
 
 - **In the app:** deleted from live systems immediately.
 - **By email or through an agent:** deleted from live systems within **30 days** of a verified request, and usually much sooner.
 - **Backups:** removed as backups are overwritten on their regular schedule, within **90 days**. Until then, backups are kept secure and are not used for any other purpose.
-- **Service providers:** we instruct our processors (such as Supabase) to delete the data as well. The content we send to our AI provider for extraction is processed under commercial terms that do not allow it to be used for model training, and it is kept only for the provider's limited retention period.
+- **Service providers:** we instruct our processors (such as Supabase) to delete the data as well. The post content we send to our AI providers (Anthropic, OpenAI, and Google) is processed under business terms that do not allow it to be used for model training, and it is kept only for each provider's limited retention period.
 
 The app confirms on screen when an in-app deletion is complete. For requests made by email, we will confirm by email once your deletion is complete.
 
@@ -54,7 +57,12 @@ We may keep limited information when the law requires it or allows it, for examp
 - to detect and prevent fraud, abuse, or security incidents; or
 - to establish, exercise, or defend legal claims.
 
-Anything we keep is limited to what is necessary, is not used for any other purpose, and is deleted once it is no longer needed. We may also keep aggregated or de-identified data that can no longer identify you.
+Anything we keep is limited to what is necessary, is not used for any other purpose, and is deleted once it is no longer needed. We may also keep aggregated or de-identified data that can no longer identify you, such as the shared cache of place details we looked up from Google Maps, which records no information about who asked for them.
+
+Deleting your account does not delete:
+- **copies other people made of lists you shared.** If someone copied a shared list into their own account, that copy belongs to them;
+- **your launch waitlist sign-up**, if you joined the waitlist on our Website. It is kept separately from your account. To be removed, see "Leaving the launch waitlist" in our [Privacy Policy](./privacy-policy.md); or
+- **data stored only on your device**, such as your app lock setting, nudge settings, and the downloaded speech-recognition model. Uninstall the app, or clear your browser's site data, to remove it.
 
 ## 6. Deletion is permanent
 
@@ -62,7 +70,7 @@ Account deletion cannot be undone. Once deleted, your lists and saved links cann
 
 ## 7. Third-party platforms
 
-Deleting your StashtagAI account does not delete anything on Instagram, TikTok, Apple, Google, or any other third-party service. To delete data held by those services, contact them directly. If you signed in with Apple or Google, you can also revoke StashtagAI's access in that provider's account settings.
+Deleting your StashtagAI account does not delete anything on Instagram, TikTok, Apple, Google, or any other third-party service. To delete data held by those services, contact them directly. If you turned on location or notifications for StashtagAI, you can also turn them off in your device settings.
 
 ## 8. No discrimination
 

@@ -8,28 +8,37 @@ This Privacy Policy explains how [COMPANY LEGAL NAME] ("StashtagAI", "we", "us",
 ## 1. Information we collect
 
 **Information you provide**
-- **Account information:** your email address and authentication details when you sign up or log in. If you sign in with a third-party provider (such as Apple or Google), we receive the basic profile information that provider shares, such as your name and email.
-- **Links you submit:** URLs of Instagram and TikTok posts you save.
-- **Your lists and content:** the categories, lists, items, tags, and notes stored in your account.
+- **Account information:** your email address, and your password if you choose to set one. You can also sign in with a link or code we email to you.
+- **Profile:** the name you choose to show on your profile, if you set one.
+- **Links you submit:** URLs of Instagram and TikTok posts you save, including links you share to StashtagAI from another app.
+- **Text you capture:** if we can't read a post ourselves, you can paste its caption or pick screenshots or a screen recording of it. Your phone (or, on the web, your browser) reads the text and transcribes any speech, and only that text is sent to us. The screenshots, recordings, and audio stay on your device.
+- **Your lists and content:** the categories, lists, items, tags, notes, ratings, and "done" marks in your account, and the photos you add to items along with their descriptions.
+- **Sharing:** when you share a list, the email addresses of the StashtagAI users you share it with.
+- **Feedback and reports:** feedback you send in the app (with your app version and platform), thumbs up or down on a saved post and the reason you give, and reports that an item is wrong, with any note you add.
 - **Communications:** messages you send us, such as support requests.
 - **Launch waitlist:** if you join the waitlist on our Website, your email address, the phone platform you choose (iPhone or Android, optional), which form you used, any campaign tags in the link that brought you to the Website (such as utm_source), and the date you signed up. To stop abuse of the form, we also keep a keyed, one-way hash of your IP address for 24 hours; we do not store the IP address itself.
 
 **Information we generate or retrieve**
-- **Post content:** for each link you submit, we retrieve publicly available content from the post, which may include the caption, the author's display name or handle, and, where available, a transcript of the audio or text read from the images or video.
-- **Extracted results:** recommendations generated from that content, such as place or business names, descriptions, addresses, location coordinates, categories, and tags.
-- **Processing records:** the status of each link (for example, processing, done, failed), error codes, and timestamps.
+- **Post content:** for each link you submit, we retrieve publicly available content from the post, which may include the caption, the author's display name or handle, and, where available, a transcript of the audio or text read from the images or video. If an Instagram post's caption doesn't name anything, we may download the post's video so that it can be transcribed and its on-screen text read. We may also visit public websites linked in the post to read details about the places or products it mentions.
+- **Extracted results:** recommendations generated from that content, such as place, business, or product names, descriptions, addresses, location coordinates, categories, tags, and recipe ingredients and steps. We also record where each detail came from.
+- **Place details:** for places, details from Google Maps such as the address, location, rating, number of ratings, and opening hours.
+- **Processing records:** the status of each link (for example, processing, done, failed), error codes, timestamps, what each step produced, and usage counts we use to apply limits.
 
 **Information collected automatically**
 - **Device and usage data:** device type, operating system, app version, IP address, and basic logs of requests and errors, used to run and secure the Service.
+
+**Information that stays on your device**
+- **Location:** if you allow it, the app uses your location to show saved places near you and, if you turn on nearby nudges, to notify you when you're close to one. Your location is compared with your saved places on your device and is not sent to us.
+- **App lock and notifications:** the Face ID (or other device unlock) setting, nudges, and the weekly digest run on your device. We don't receive your biometric data, and we don't send push notifications.
 
 We do **not** sell your personal information, and we do not use it for third-party advertising.
 
 ## 2. How we use information
 
 We use information to:
-- provide the Service: retrieve post content, extract recommendations, and organize your lists;
-- keep your account secure and prevent abuse, fraud, and misuse of the Service;
-- troubleshoot, maintain, and improve the Service, including the accuracy of extraction;
+- provide the Service: retrieve post content, extract recommendations, look up place details, organize your lists, and let you share them;
+- keep your account secure and prevent abuse, fraud, and misuse of the Service, including applying usage limits;
+- troubleshoot, maintain, and improve the Service, including the accuracy of extraction (for example, by reviewing feedback and reports together with the post content and results they relate to);
 - communicate with you about your account, support requests, and important changes;
 - if you joined the launch waitlist, email you when StashtagAI is available on the App Store or Google Play (we do not use waitlist addresses for anything else, and we do not share them for marketing); and
 - comply with legal obligations.
@@ -38,27 +47,34 @@ We use information to:
 
 ## 3. AI processing
 
-To extract recommendations, we send the retrieved post content (not your email address or other account details) to a third-party AI model provider, currently Anthropic. Under its commercial terms, the provider processes this content to return results to us. It is not permitted to use the content to train its models. We treat post content as untrusted input and check AI output against a fixed schema before saving it.
+We use third-party AI providers to read and understand posts. We send them post content, never your email address or other account details:
+- **Anthropic** extracts recommendations from the post's text and from linked websites, and may search the web to fill in details about an item, such as its name, location, and description.
+- **OpenAI** transcribes the audio of an Instagram video when the caption doesn't name anything.
+- **Google (Gemini)** reads the speech and on-screen text of that video if the transcript doesn't name anything either.
+
+These providers process the content to return results to us. Under the business terms we use them on, they are not permitted to use it to train their models. We treat post content as untrusted input and check AI output against a fixed schema before saving it.
 
 ## 4. How we share information
 
 We share information only as follows:
 - **Service providers** that process data on our behalf under contracts that require them to protect it, including:
   - Supabase: database, authentication, file storage, and server functions;
-  - Anthropic: AI extraction of post content;
-  - content retrieval and transcription providers we use to fetch public post content (for example, TikTok's oEmbed service and, if adopted, third-party retrieval or transcription services); and
-  - hosting, analytics, and crash-reporting providers we use to operate the app.
+  - Anthropic, OpenAI, and Google (Gemini): AI processing of post content (see Section 3);
+  - Apify and TikTok's oEmbed service: retrieving public post content (they receive the post's link, not information about you);
+  - Google Maps Platform: looking up places and their details (it receives the item's name and the city or address, not your location); and
+  - Cloudflare and our other hosting and network providers, which deliver the Service and Website.
+- **Services your device contacts directly:** when you view a map, your device loads map images from OpenStreetMap. When you open directions or an original post, Apple Maps, Google Maps, Instagram, or TikTok opens. The first time you transcribe a screen recording, your device downloads a speech-recognition model from Hugging Face. The app also checks Expo's servers for app updates. These services receive your IP address and basic device information when this happens, under their own privacy policies.
+- **People you share lists with:** when you share a list, the people you add see the list and its items (names, descriptions, addresses, locations, tags, and links to the original posts), but not your notes, ratings, photos, or email address. They also see the name you set on your profile, so they know who shared it, and they can copy the list into their own account. When you add someone by email, the app tells you whether that address belongs to a StashtagAI account.
 - **Legal and safety:** when required by law or legal process, or when needed to protect the rights, property, or safety of StashtagAI, our users, or others.
 - **Business transfers:** in connection with a merger, acquisition, or sale of assets. In that case, this Policy will continue to apply to your information, or we will notify you of any changes.
-- **With your direction:** for example, if you choose to share a list, the people you share it with see that list and the name you set on your profile, so they know who shared it.
 
 ## 5. Data retention
 
-We keep your account information and content for as long as your account is active. When you delete a link, list, or your account, we delete the associated data as described in our [Data Deletion Policy](./data-deletion.md). We keep launch waitlist entries until we have sent the launch email, and delete them within 90 days after that, or sooner if you ask us to remove you. Server logs are kept for a limited period (generally no more than 90 days) unless we need them longer for security or legal reasons. Backups are overwritten on a rolling schedule.
+We keep your account information and content, including your feedback and reports, for as long as your account is active. When you delete a link, list, or your account, we delete the associated data as described in our [Data Deletion Policy](./data-deletion.md). Place details we look up are kept in a shared cache that contains no information about who asked for them. We keep launch waitlist entries until we have sent the launch email, and delete them within 90 days after that, or sooner if you ask us to remove you. Server logs are kept for a limited period (generally no more than 90 days) unless we need them longer for security or legal reasons. Backups are overwritten on a rolling schedule.
 
 ## 6. Security
 
-We use reasonable technical and organizational measures to protect your information, including encryption in transit (HTTPS), access controls that separate each user's data, and restricting the Service to fetching only approved Instagram and TikTok addresses. No system is completely secure, and we cannot guarantee absolute security.
+We use reasonable technical and organizational measures to protect your information, including encryption in transit (HTTPS), access controls that separate each user's data, private storage for your photos, shared lists that open only for the people you add, and strict limits on which addresses our servers will fetch. No system is completely secure, and we cannot guarantee absolute security.
 
 ## 7. Your rights and choices
 
@@ -70,11 +86,13 @@ Depending on where you live, you may have the right to:
 - **data portability**; and
 - **withdraw consent** where processing is based on consent.
 
+**Choices in the app:** you can turn location access, nearby nudges, and notifications on or off in the app or in your device settings at any time. You can stop sharing a list, sign out of all your devices, and delete your account from your profile.
+
 **Leaving the launch waitlist:** email [PRIVACY EMAIL] from the address you signed up with (or tell us that address) and ask to be removed. We delete it from the list within 30 days, and usually much sooner. Every waitlist email we send also explains how to be removed.
 
 To use these rights, email [PRIVACY EMAIL]. We may need to verify your identity before acting on a request. We will respond within the time required by law (for example, 30 days under the GDPR and 45 days under California law). We will not discriminate against you for exercising your rights.
 
-**California residents:** in the past 12 months, we have collected the categories of information described in Section 1 (identifiers, internet or network activity, and content you provide) for the purposes in Section 2. We do not sell or "share" personal information for cross-context behavioral advertising, as those terms are defined under the CCPA/CPRA.
+**California residents:** in the past 12 months, we have collected the categories of information described in Section 1 (identifiers, internet or network activity, and content you provide, including photos) for the purposes in Section 2. We do not sell or "share" personal information for cross-context behavioral advertising, as those terms are defined under the CCPA/CPRA.
 
 **EEA/UK residents:** you also have the right to lodge a complaint with your local data protection authority.
 
@@ -88,7 +106,7 @@ The Service is not directed to children under 13 (or the minimum age required in
 
 ## 10. Third-party content and links
 
-The Service displays content from, and links to, third-party platforms such as Instagram and TikTok. Their own privacy policies govern how they handle your information when you visit them.
+The Service displays content from, and links to, third-party platforms and websites such as Instagram, TikTok, Google Maps, and Apple Maps. Their own privacy policies govern how they handle your information when you visit them.
 
 ## 11. Changes to this Policy
 
