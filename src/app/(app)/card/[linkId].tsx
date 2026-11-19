@@ -1,7 +1,7 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, Animated, type HostInstance, Platform, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Animated, type HostInstance, Linking, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { ProgressSteps } from '@/components/progress-steps';
@@ -253,6 +253,14 @@ export default function CardScreen() {
             setChosen(message);
             refresh();
           }}
+        />
+      ) : null}
+      {link?.url ? (
+        <Button
+          title={`Open original post on ${PLATFORM_LABELS[link.platform]}`}
+          accessibilityHint={`Opens ${hostOf(link.url)} outside the app`}
+          variant="secondary"
+          onPress={() => Linking.openURL(link.url)}
         />
       ) : null}
       {items?.map((item) => (
