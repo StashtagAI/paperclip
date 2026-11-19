@@ -30,6 +30,12 @@ assert.equal(v.items[0].lat, undefined);
 assert.equal(v.items[1].lat, 39.7);
 assert.deepEqual(v.tags, ["brunch"]);
 assert.throws(() => validateExtraction({ kind: "food", category: "x", items: [] }));
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "shop", category: "x", items: [] }).alt_kind, "shop");
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "travel", category: "x", items: [] }).alt_kind, undefined);
+assert.equal(validateExtraction({ kind: "travel", alt_kind: "bogus", category: "x", items: [] }).alt_kind, undefined);
+
+// Linked-site DNS check: the default resolver is Deno.resolveDns, stubbed here to a public address.
+(globalThis as Record<string, unknown>).Deno = { resolveDns: async () => ["93.184.216.34"] };
 
 // ---- captured-text pipeline on FIXTURE text (synthetic: not real posts, no accuracy claim) ----
 import { findUrls, parseJsonLd, readLinkedSites, safePublicUrl } from "./linked.ts";
@@ -125,6 +131,15 @@ const r4 = await processCaptured("https://www.tiktok.com/@a/video/1", { transcri
 });
 assert.ok(r4.ok && r4.extraction.items[0].sources?.address === "places_lookup");
 
+// 4a) shop and watch items are products and media, not places: no Places lookup (HAN-84)
+let shopLookups = 0;
+const r4s = await processCaptured("https://www.tiktok.com/@a/video/1", { transcript: "Santal 33" }, {
+  ...key, lookup: { name: "t", findPlace: () => { shopLookups++; return Promise.resolve(null); } },
+  fetchFn: mkFetch({}, { kind: "shop", category: "Fragrances", list_scope: null, tags: [], items: [{ name: "Santal 33", description: "" }] }),
+});
+assert.ok(r4s.ok && r4s.extraction.kind === "shop");
+assert.equal(shopLookups, 0);
+
 // 4b) Google provider: field mask, key only in header, name-match guard, env fallback to stub
 const calls: { url: string; init?: RequestInit }[] = [];
 const gf = ((u: string, init?: RequestInit) => {
@@ -192,6 +207,8 @@ const sf = ((u: string, init?: RequestInit) => {
 const rec = { name: "Shakshuka", description: "" };
 assert.deepEqual(gaps(rec, "recipes"), ["ingredients", "steps"]);
 assert.deepEqual(gaps({ ...rec, address: "1 Main" }, "eats"), []);
+assert.deepEqual(gaps(rec, "shop"), []);
+assert.deepEqual(gaps(rec, "watch"), []);
 const so = await claudeSearch("K", sf).research(rec, "recipes", "Breakfast");
 assert.equal(so.fill?.sourceUrl, "https://blog.example.com/shakshuka");
 assert.equal(so.fill?.address, undefined);
@@ -245,14 +262,14 @@ import { ground } from "./extract.ts";
 // place names that the caption only has as @handles still ground; unrelated names do not
 {
   const c = { platform: "instagram", url: IG, caption: "Check into @badruttspalace\nDinner at @carltonstmoritz" } as never;
-  const mk = (names: string[]) => ({ kind: "trips" as const, category: "Hotels", list_scope: null, tags: [], items: names.map((name) => ({ name, description: "" })) });
+  const mk = (names: string[]) => ({ kind: "travel" as const, category: "Hotels", list_scope: null, tags: [], items: names.map((name) => ({ name, description: "" })) });
   assert.deepEqual(ground(mk(["Badrutt's Palace", "Hotel Eden"]), c, []).items.map((i) => i.name), ["Badrutt's Palace"]);
 }
 
 // grounding reports the names it dropped (for process_events)
 {
   const c = { platform: "instagram", url: IG, caption: "Check into @badruttspalace" } as never;
-  const ex = { kind: "trips" as const, category: "Hotels", list_scope: null, tags: [], items: ["Badrutt's Palace", "Hotel Eden"].map((name) => ({ name, description: "" })) };
+  const ex = { kind: "travel" as const, category: "Hotels", list_scope: null, tags: [], items: ["Badrutt's Palace", "Hotel Eden"].map((name) => ({ name, description: "" })) };
   const dropped: string[] = [];
   ground(ex, c, [], dropped);
   assert.deepEqual(dropped, ["Hotel Eden"]);
@@ -317,3 +334,53 @@ assert.deepEqual(
   await assert.rejects(lookup.findPlace("Sap Sua", "Denver"), RunBudgetError);
 }
 console.log("quota ok");
+
+// ---- HAN-55 ----
+import { isPrivateIp, resolvesPublic } from "./linked.ts";
+import { claimBlock, errorCode } from "./errors.ts";
+import { MAX_ITEMS } from "./schema.ts";
+
+for (const ip of ["127.0.0.1", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "::", "fe80::1", "fd00::1", "fc00::1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a9fe:a9fe", "ff02::1", "garbage", "::7f00:1", "::a9fe:a9fe", "::ffff:0:7f00:1", "0:0:0:0:0:ffff:7f00:1"])
+  assert.equal(isPrivateIp(ip), true, ip);
+for (const ip of ["93.184.216.34", "8.8.8.8", "172.32.0.1", "2606:4700::1111", "2001:4860:4860::8888"])
+  assert.equal(isPrivateIp(ip), false, ip);
+
+// a public-looking name that resolves inward is rejected, also when only one of several answers is private
+const u = new URL("https://sneaky.example.com/");
+assert.equal(await resolvesPublic(u, async () => ["169.254.169.254"]), false);
+assert.equal(await resolvesPublic(u, async () => ["93.184.216.34", "fd00::1"]), false);
+assert.equal(await resolvesPublic(u, async () => []), false);
+assert.equal(await resolvesPublic(u, async () => { throw new Error("nxdomain"); }), false);
+assert.equal(await resolvesPublic(u, async () => ["93.184.216.34"]), true);
+{
+  const hits: string[] = [];
+  const spy = (async (x: string | URL | Request) => { hits.push(String(x)); return html(recipeHtml); }) as unknown as typeof fetch;
+  assert.deepEqual(await readLinkedSites("https://sneaky.example.com/r", spy, async () => ["10.0.0.5"]), []);
+  assert.deepEqual(hits, []); // never fetched
+  // every redirect hop is resolved again: the first hop is public, the second name points at the metadata range
+  const hop = (async (x: string | URL | Request) => {
+    hits.push(String(x));
+    return String(x).includes("first.") ? new Response(null, { status: 302, headers: { location: "https://second.example.com/" } }) : html(recipeHtml);
+  }) as unknown as typeof fetch;
+  const res = async (h: string) => (h.startsWith("second.") ? ["169.254.169.254"] : ["93.184.216.34"]);
+  assert.deepEqual(await readLinkedSites("https://first.example.com/", hop, res), []);
+  assert.deepEqual(hits, ["https://first.example.com/"]);
+  assert.equal((await readLinkedSites("https://ok.example.com/", spy, async () => ["93.184.216.34"])).length, 1);
+}
+
+// a done link can't be re-run; neither can one in flight
+assert.equal(claimBlock("done"), "already_done");
+assert.equal(claimBlock("processing"), "already_processing");
+for (const s of ["pending", "failed"]) assert.equal(claimBlock(s), null);
+
+// links.error only ever gets a code
+assert.deepEqual(errorCode(new Error("anthropic_529")).code, "anthropic_529");
+assert.equal(errorCode({ message: 'duplicate key value violates unique constraint "items_list_id_name_key"' }).code, "internal_error");
+assert.equal(errorCode(new Error("bad kind: <script>")).code, "internal_error");
+assert.equal(errorCode("x".repeat(100)).code, "internal_error");
+assert.match(errorCode({ message: "relation \"x\" does not exist" }).detail, /does not exist/);
+
+// caps
+assert.equal(validateExtraction({ kind: "eats", category: "c", items: Array.from({ length: 60 }, (_, i) => ({ name: `n${i}` })) }).items.length, MAX_ITEMS);
+assert.equal(buildContent("https://www.instagram.com/reel/a/", { caption: "x".repeat(60_000) })!.caption!.length, 8_000);
+console.log("HAN-55 ok");

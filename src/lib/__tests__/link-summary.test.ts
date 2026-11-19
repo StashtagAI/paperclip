@@ -1,4 +1,4 @@
-import { captionSnippet, needsTextReason, shortUrl } from '../link-summary';
+import { captionSnippet, needsTextReason, shortUrl, suggestedItemName } from '../link-summary';
 
 describe('shortUrl', () => {
   it.each([
@@ -34,5 +34,22 @@ describe('needsTextReason', () => {
     expect(needsTextReason('not_available')).toMatch(/private/);
     expect(needsTextReason('apify_500')).toBe('Couldn’t read it');
     expect(needsTextReason(null)).toBe('Couldn’t read it');
+  });
+});
+
+describe('suggestedItemName', () => {
+  it('takes the first line without hashtags or links', () => {
+    expect(suggestedItemName('Festive chocolate treat! ✨\n#chocolate #treats', 'Instagram')).toBe('Festive chocolate treat! ✨');
+    expect(suggestedItemName('#fashionhack Save this dress idea #dresshack', 'Instagram')).toBe('Save this dress idea');
+  });
+
+  it('falls back to the platform when nothing is left', () => {
+    expect(suggestedItemName('https://www.instagram.com/reel/DA7K/?x=1', 'Instagram')).toBe('Instagram post');
+    expect(suggestedItemName('#a #b\n\n', 'TikTok')).toBe('TikTok post');
+    expect(suggestedItemName(null, 'Instagram')).toBe('Instagram post');
+  });
+
+  it('cuts a long line', () => {
+    expect(suggestedItemName('x'.repeat(300), 'Instagram')).toHaveLength(120);
   });
 });

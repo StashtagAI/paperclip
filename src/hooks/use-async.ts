@@ -11,18 +11,24 @@ export function useAsync<T>(load: () => Promise<T>, deps: readonly unknown[]) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const run = useCallback(load, deps);
 
-  const refresh = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true }));
-    try {
-      setState({ data: await run(), error: undefined, loading: false });
-    } catch (e) {
-      setState((s) => ({ ...s, error: toError(e), loading: false }));
-    }
-  }, [run]);
+  const fetch = useCallback(
+    async (quiet: boolean) => {
+      if (!quiet) setState((s) => ({ ...s, loading: true }));
+      try {
+        setState({ data: await run(), error: undefined, loading: false });
+      } catch (e) {
+        setState((s) => ({ ...s, error: toError(e), loading: false }));
+      }
+    },
+    [run],
+  );
+  const refresh = useCallback(() => fetch(false), [fetch]);
+  /** Re-reads without `loading`, so a pull-to-refresh spinner doesn't flash on each poll. */
+  const poll = useCallback(() => fetch(true), [fetch]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  return { ...state, refresh };
+  return { ...state, refresh, poll };
 }

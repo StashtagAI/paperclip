@@ -10,7 +10,7 @@ export interface Expect {
   forbid_names?: string[];
   min_recall?: number;
 }
-export interface Post { id: string; url: string; captured: Record<string, string>; expect: Expect }
+export interface Post { id: string; /** hand-written caption, not a real post; skips the verbatim-copy check */ synthetic?: boolean; url: string; captured: Record<string, string>; expect: Expect }
 
 export interface PostScore {
   id: string;

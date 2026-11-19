@@ -7,3 +7,15 @@
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
 }
+
+/* First paint on web, before the bundle runs: follow the phone's appearance so night use never flashes
+   white (HAN-78). ColorSchemeProvider then applies the user's own pick. Mist / Night from theme.ts. */
+:root {
+  color-scheme: light dark;
+  background-color: #f4f9ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    background-color: #0a1420;
+  }
+}

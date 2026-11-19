@@ -1,9 +1,45 @@
 import type { Session } from '@supabase/supabase-js';
-import { createContext, use, useEffect, useState, type PropsWithChildren } from 'react';
+import { createContext, use, useEffect, useState, useSyncExternalStore, type PropsWithChildren } from 'react';
 
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 
 type AuthState = { session: Session | null; loading: boolean };
+
+/**
+ * True between proving inbox ownership for a password reset (reset link or code) and saving the new password. That
+ * session can't open the app yet; the root layout shows only /reset-password (HAN-70).
+ */
+let recovering = false;
+const recoveryListeners = new Set<() => void>();
+
+function setRecovering(next: boolean) {
+  if (recovering === next) return;
+  recovering = next;
+  recoveryListeners.forEach((listener) => listener());
+}
+
+// Registered at import, not in the provider: on web the client handles a reset link in the URL while it starts up,
+// before any effect runs, and would emit PASSWORD_RECOVERY to nobody.
+if (supabaseConfigured) {
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY') setRecovering(true);
+    else if (event === 'SIGNED_OUT') setRecovering(false);
+  });
+}
+
+/** Call once the new password is saved, to let the session into the app. */
+export function endRecovery() {
+  setRecovering(false);
+}
+
+function subscribeRecovery(listener: () => void) {
+  recoveryListeners.add(listener);
+  return () => recoveryListeners.delete(listener);
+}
+
+export function useRecovering() {
+  return useSyncExternalStore(subscribeRecovery, () => recovering);
+}
 
 const AuthContext = createContext<AuthState>({ session: null, loading: true });
 
