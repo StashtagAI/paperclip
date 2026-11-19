@@ -52,7 +52,7 @@ We use third-party AI providers to read and understand posts. We send them post 
 - **OpenAI** transcribes the audio of an Instagram video when the caption doesn't name anything.
 - **Google (Gemini)** reads the speech and on-screen text of that video if the transcript doesn't name anything either.
 
-These providers process the content to return results to us. Under the business terms we use them on, they are not permitted to use it to train their models. We treat post content as untrusted input and check AI output against a fixed schema before saving it.
+These providers process the content to return results to us. Under the business terms we use Anthropic and OpenAI on, they are not permitted to use it to train their models. Google may use what we send to Gemini, which is only the public post's video, to improve and train its products and models, and people at Google may review it for that purpose. We never send Google your email address, account details, notes, photos, or lists. We treat post content as untrusted input and check AI output against a fixed schema before saving it.
 
 ## 4. How we share information
 

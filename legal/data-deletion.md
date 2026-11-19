@@ -46,7 +46,7 @@ When your account is deleted, we permanently delete:
 - **In the app:** deleted from live systems immediately.
 - **By email or through an agent:** deleted from live systems within **30 days** of a verified request, and usually much sooner.
 - **Backups:** removed as backups are overwritten on their regular schedule, within **90 days**. Until then, backups are kept secure and are not used for any other purpose.
-- **Service providers:** we instruct our processors (such as Supabase) to delete the data as well. The post content we send to our AI providers (Anthropic, OpenAI, and Google) is processed under business terms that do not allow it to be used for model training, and it is kept only for each provider's limited retention period.
+- **Service providers:** we instruct our processors (such as Supabase) to delete the data as well. The post content we send to Anthropic and OpenAI is processed under business terms that do not allow it to be used for model training, and it is kept only for each provider's limited retention period. Google may keep the post videos we send to Gemini and use them to improve its products and models, and we cannot have them deleted from Google's systems. We never send Google your account details, notes, photos, or lists, so what Google holds is public post videos and is not linked to your StashtagAI account.
 
 The app confirms on screen when an in-app deletion is complete. For requests made by email, we will confirm by email once your deletion is complete.
 
