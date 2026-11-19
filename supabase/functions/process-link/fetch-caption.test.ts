@@ -75,6 +75,8 @@ for (const [reply, reason] of [
   [j([]), "not_available"],
   [j([{ caption: "   " }]), "empty_caption"],
   [j({ error: { type: "actor-is-not-rented" } }, 403), "apify_403"],
+  [j({ error: { type: "run-failed", message: "Actor run did not succeed (run ID: x, status: TIMED-OUT)." } }, 400), "timeout"],
+  [j({ error: { type: "invalid-input", message: "Input is not valid" } }, 400), "apify_400"],
 ] as const) {
   const m = mock([[/api\.apify\.com/, () => reply.clone()]]);
   const r = await fetchCaption(IG, env({ APIFY_TOKEN: "t" }), m.fn);
