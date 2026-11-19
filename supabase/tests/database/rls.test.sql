@@ -55,16 +55,31 @@ insert into public.feedback (id, user_id, message) values
 insert into public.place_lookups (query_key, name, address) values ('cafe|city', 'Cafe', '1 Main St');
 insert into public.search_lookups (query_key, fill) values ('cafe|city', '{}');
 
--- Every table is covered here. A new table fails this until it has RLS and a block below.
+-- Every table is covered here. A new table fails this until it has RLS and a block below
+-- (list_shares, list_share_recipients, share_recipient_lookups and profiles are covered in
+-- supabase/tests/list_shares_test.sql).
 select is(
   array(select c.relname::text from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' order by 1),
-  array['categories', 'feedback', 'item_photos', 'items', 'link_feedback', 'links', 'lists', 'place_lookups', 'process_events', 'search_lookups'],
+  array['categories', 'feedback', 'item_photos', 'items', 'link_feedback', 'links', 'list_share_recipients', 'list_shares',
+    'lists', 'place_lookups', 'process_events', 'profiles', 'search_lookups', 'share_recipient_lookups'],
   'public tables are the ones these tests cover'
 );
 select is(
   array(select c.relname::text from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and not c.relrowsecurity),
   array[]::text[],
   'every public table has row level security on'
+);
+-- HAN-66: the server-only caches have no client grants at all, not just no policies.
+select is(
+  array(
+    select t || ' ' || r || ' ' || p
+    from unnest(array['public.place_lookups', 'public.search_lookups']) t,
+      unnest(array['anon', 'authenticated']) r,
+      unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) p
+    where has_table_privilege(r, t, p)
+  ),
+  array[]::text[],
+  'place_lookups and search_lookups: no table privileges for anon or authenticated'
 );
 
 -- ---------- reads: A sees only A's rows ----------
@@ -78,8 +93,8 @@ select is((select array_agg(id) from public.link_feedback), array['00000000-0000
 select throws_ok($$select * from public.feedback$$, '42501', null, 'feedback: no client reads, not even own');
 select is((select array_agg(alt) from public.item_photos), array['A photo'], 'item_photos: A sees only own');
 select is((select array_agg(name) from storage.objects where bucket_id = 'item-photos'), array['00000000-0000-4000-8000-00000000000a/00000000-0000-4000-8000-0000000004a0/a.jpg'], 'item-photos bucket: A sees only own files');
-select is((select count(*)::int from public.place_lookups), 0, 'place_lookups: no client reads');
-select is((select count(*)::int from public.search_lookups), 0, 'search_lookups: no client reads');
+select throws_ok($$select * from public.place_lookups$$, '42501', null, 'place_lookups: no client reads');
+select throws_ok($$select * from public.search_lookups$$, '42501', null, 'search_lookups: no client reads');
 select is((select count(*)::int from public.items where link_id = '00000000-0000-4000-8000-0000000001b0'), 0, 'items: filtering by B''s link_id finds nothing');
 
 -- ---------- inserts: A cannot write as B or attach to B's rows ----------

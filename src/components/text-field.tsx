@@ -10,7 +10,7 @@ export function TextField({ style, invalid, ...rest }: TextInputProps & { invali
       placeholderTextColor={theme.textSecondary}
       style={[
         styles.input,
-        { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: invalid ? theme.danger : theme.border },
+        { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: invalid ? theme.danger : theme.inputBorder },
         style,
       ]}
       {...rest}

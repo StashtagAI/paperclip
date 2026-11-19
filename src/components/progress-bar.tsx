@@ -12,7 +12,7 @@ export function ProgressBar({ done, total, label }: { done: number; total: numbe
   const theme = useTheme();
   const fraction = total > 0 ? Math.min(done / total, 1) : 0;
   const bar = (
-    <View style={[styles.track, { backgroundColor: theme.border }]}>
+    <View style={[styles.track, { backgroundColor: theme.progressTrack }]}>
       <View style={[styles.fill, { width: `${fraction * 100}%`, backgroundColor: theme.success }]} />
     </View>
   );

@@ -1,4 +1,4 @@
-import { Colors, KindColors, Palette } from '@/constants/theme';
+import { Colors, HighContrastColors, KindColors, Palette, themeColors } from '@/constants/theme';
 import { KINDS } from '@/lib/types';
 
 // WCAG 2.x relative luminance and contrast ratio.
@@ -27,15 +27,18 @@ describe('brief values', () => {
       night: '#0A1420', surface: '#122233', cobalt: '#4C9BFF', mint: '#3DE0A6',
       aqua: '#5CEBEA', indigo: '#8C8DFF', cloud: '#EAF3FF',
     });
+    // Shop and Watch & read (HAN-84) aren't in the brief; contrast is checked below with the rest.
+    expect(KindColors.light.shop.color).toBe(Palette.light.coral);
+    expect(KindColors.light.watch.color).toBe(Palette.light.berry);
     expect(KindColors.light.eats.color).toBe(Palette.light.mint);
-    expect(KindColors.light.trips.color).toBe(Palette.light.cobalt);
+    expect(KindColors.light.travel.color).toBe(Palette.light.cobalt);
     expect(KindColors.light.recipes.color).toBe(Palette.light.aqua);
     expect(KindColors.light.do.color).toBe(Palette.light.indigo);
   });
 
   it('never puts white text on Mint or Aqua', () => {
     for (const scheme of schemes) {
-      for (const kind of ['eats', 'recipes'] as const) {
+      for (const kind of ['eats', 'recipes', 'shop'] as const) {
         expect(KindColors[scheme][kind].onColor).not.toBe('#FFFFFF');
       }
     }
@@ -44,8 +47,12 @@ describe('brief values', () => {
   });
 });
 
-describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
-  const c = Colors[scheme];
+const modes = schemes.flatMap((scheme) => [
+  { name: scheme, scheme, c: themeColors(scheme, false) },
+  { name: `${scheme} + Increase Contrast`, scheme, c: themeColors(scheme, true) },
+]);
+
+describe.each(modes)('$name contrast (AA, 4.5:1)', ({ scheme, c }) => {
 
   it.each(KINDS)('%s: onColor on tile and onChip on chip', (kind) => {
     const k = KindColors[scheme][kind];
@@ -74,6 +81,13 @@ describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
     }
   });
 
+  // The failed mark on the card banner and the Home failed-row thumbnail (HAN-77).
+  it('danger icons on cards and the selected card (3:1)', () => {
+    for (const bg of [c.backgroundElement, c.backgroundSelected]) {
+      expect(contrast(c.danger, bg)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it('primary button label on tint', () => {
     expect(contrast(c.onTint, c.tint)).toBeGreaterThanOrEqual(AA);
   });
@@ -85,7 +99,7 @@ describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
       expect(contrast(c.success, bg)).toBeGreaterThanOrEqual(3);
       expect(contrast(c.textSecondary, bg)).toBeGreaterThanOrEqual(3);
     }
-    expect(contrast(c.success, c.border)).toBeGreaterThanOrEqual(3);
+    expect(contrast(c.success, c.progressTrack)).toBeGreaterThanOrEqual(3);
   });
 
   it('destructive button label on danger', () => {
@@ -106,5 +120,38 @@ describe.each(schemes)('%s contrast (AA, 4.5:1)', (scheme) => {
       expect(contrast(c.success, bg)).toBeGreaterThanOrEqual(AA);
       for (const icon of [c.tint, c.success, c.textSecondary]) expect(contrast(icon, bg)).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  // Text fields have no fill against the page, so their outline is what identifies them (WCAG 1.4.11, HAN-78).
+  it('text field outline on background and cards (3:1)', () => {
+    for (const bg of [c.background, c.backgroundElement]) {
+      expect(contrast(c.inputBorder, bg)).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
+// Increase Contrast / High contrast text / prefers-contrast: more (HAN-78).
+describe.each(schemes)('%s + Increase Contrast (AAA, 7:1)', (scheme) => {
+  const c = themeColors(scheme, true);
+
+  it('only overrides existing tokens', () => {
+    for (const key of Object.keys(HighContrastColors[scheme])) expect(Colors[scheme]).toHaveProperty(key);
+  });
+
+  it('text, muted text, links and status colours on background and cards', () => {
+    for (const bg of [c.background, c.backgroundElement]) {
+      for (const fg of [c.text, c.textSecondary, c.link, c.danger, c.success]) {
+        expect(contrast(fg, bg)).toBeGreaterThanOrEqual(7);
+      }
+    }
+  });
+
+  it('card and option outlines on background and cards (3:1)', () => {
+    for (const bg of [c.background, c.backgroundElement]) expect(contrast(c.border, bg)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('button labels on their fills', () => {
+    expect(contrast(c.onTint, c.tint)).toBeGreaterThanOrEqual(7);
+    expect(contrast(c.onDanger, c.danger)).toBeGreaterThanOrEqual(7);
   });
 });

@@ -6,12 +6,14 @@ import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { useAuth } from '@/lib/auth';
+import { useAuth, useRecovering } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 /** Magic-link landing route: stashtag://auth/callback?code=… (native) or /auth/callback?code=… (web). */
 export default function AuthCallback() {
   const { session } = useAuth();
+  // A password-reset link lands here too (HAN-70).
+  const recovering = useRecovering();
   const params = useLocalSearchParams<{ code?: string; error_description?: string }>();
   const [error, setError] = useState<string | null>(params.error_description ?? null);
 
@@ -23,7 +25,7 @@ export default function AuthCallback() {
     });
   }, [params.code, session]);
 
-  if (session) return <Redirect href="/" />;
+  if (session) return <Redirect href={recovering ? '/reset-password' : '/'} />;
 
   return (
     <ThemedView style={styles.container}>

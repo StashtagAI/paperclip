@@ -33,6 +33,10 @@ export const Colors = {
     success: '#0A7A55',
     /** Check mark drawn on a `success` fill (HAN-41). */
     onSuccess: L.white,
+    /** Done progress track (HAN-41): stays light under Increase Contrast, where `border` darkens, so the fill keeps ≥ 3:1. */
+    progressTrack: '#D5E3F5',
+    /** Text field outlines: the field's only edge against the page, so ≥ 3:1 (WCAG 1.4.11), unlike `border`. */
+    inputBorder: '#69788F',
   },
   dark: {
     text: D.cloud,
@@ -51,11 +55,42 @@ export const Colors = {
     onDanger: D.night,
     success: D.mint,
     onSuccess: D.night,
+    progressTrack: '#1F3550',
+    inputBorder: '#6A84A3',
   },
 } as const;
 
 export type ColorScheme = keyof typeof Colors;
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+export type ThemeColors = Record<ThemeColor, string>;
+
+/**
+ * Overrides for Increase Contrast (iOS), High contrast text (Android) and `prefers-contrast: more` (web)
+ * (HAN-78): muted text, links and status colours reach 7:1 (AAA), and card and input outlines reach 3:1.
+ */
+export const HighContrastColors: Record<ColorScheme, Partial<ThemeColors>> = {
+  light: {
+    textSecondary: '#3A4A60',
+    border: '#69788F',
+    tint: '#0F4FB0',
+    link: '#0F4FB0',
+    danger: '#9E1C22',
+    success: '#065C40',
+    inputBorder: '#69788F',
+  },
+  dark: {
+    textSecondary: '#C2D0E2',
+    border: '#6A84A3',
+    tint: '#A6CDFF',
+    link: '#A6CDFF',
+    danger: '#FFA3A3',
+    inputBorder: '#6A84A3',
+  },
+};
+
+export function themeColors(scheme: ColorScheme, highContrast: boolean): ThemeColors {
+  return highContrast ? { ...Colors[scheme], ...HighContrastColors[scheme] } : Colors[scheme];
+}
 
 export type KindColor = {
   /** Tile and thumbnail fill. */
@@ -70,21 +105,26 @@ export type KindColor = {
 /**
  * One colour per kind of save, with the text colour that is allowed on it.
  * Contrast rule from the brief: Ink on Mint and Aqua, never white (white on Mint is 2.25:1);
- * white is allowed on Cobalt (4.6:1) and Indigo (5.0:1). In dark mode the kind colours are
- * lighter and white fails on all four, so everything uses Night.
+ * white is allowed on Cobalt (4.6:1) and Indigo (5.0:1). Shop and Watch & read (HAN-84) follow the
+ * same rule: Ink on Coral (white is 2.3:1), white on Berry (5.1:1). In dark mode the kind colours are
+ * lighter and white fails on all of them, so everything uses Night.
  */
 export const KindColors: Record<ColorScheme, Record<Kind, KindColor>> = {
   light: {
     eats: { color: L.mint, onColor: L.ink, chip: '#D1F3E8', onChip: '#0A6E4F' },
-    trips: { color: L.cobalt, onColor: L.white, chip: '#D2E2FB', onChip: '#1A4FB5' },
+    travel: { color: L.cobalt, onColor: L.white, chip: '#D2E2FB', onChip: '#1A4FB5' },
     recipes: { color: L.aqua, onColor: L.ink, chip: '#D8F7F7', onChip: '#0B6563' },
     do: { color: L.indigo, onColor: L.white, chip: '#DEDEFC', onChip: '#3E3FC2' },
+    shop: { color: L.coral, onColor: L.ink, chip: '#FFE3D6', onChip: '#A83F12' },
+    watch: { color: L.berry, onColor: L.white, chip: '#FADBEA', onChip: '#9C2160' },
   },
   dark: {
     eats: { color: D.mint, onColor: D.night, chip: '#194045', onChip: D.mint },
-    trips: { color: D.cobalt, onColor: D.night, chip: '#1B3554', onChip: '#7DB7FF' },
+    travel: { color: D.cobalt, onColor: D.night, chip: '#1B3554', onChip: '#7DB7FF' },
     recipes: { color: D.aqua, onColor: D.night, chip: '#1E4250', onChip: D.aqua },
     do: { color: D.indigo, onColor: D.night, chip: '#263354', onChip: '#ABACFF' },
+    shop: { color: D.coral, onColor: D.night, chip: '#3D2A26', onChip: D.coral },
+    watch: { color: D.berry, onColor: D.night, chip: '#3A2238', onChip: D.berry },
   },
 };
 

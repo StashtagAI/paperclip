@@ -1,13 +1,15 @@
 import { buildContent } from "./retrieval.ts";
-import { readLinkedSites } from "./linked.ts";
+import { readLinkedSites, type ResolveFn } from "./linked.ts";
 import { extract } from "./extract.ts";
 import { type LookupProvider, stubLookup } from "./lookup.ts";
 import { type SearchProvider, stubSearch } from "./search.ts";
-import type { Extraction } from "./schema.ts";
+import { type Extraction, PLACE_KINDS } from "./schema.ts";
 
 export interface Deps {
   apiKey: string;
   fetchFn?: typeof fetch;
+  /** DNS resolver for linked sites (tests); defaults to Deno.resolveDns */
+  resolveFn?: ResolveFn;
   lookup?: LookupProvider;
   search?: SearchProvider;
   /** count-only cost logging */
@@ -32,7 +34,7 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
     ocr_chars: content.ocr?.length ?? 0,
   });
   const t0 = Date.now();
-  const linked = await readLinkedSites(text, d.fetchFn);
+  const linked = await readLinkedSites(text, d.fetchFn, d.resolveFn);
   d.event?.("linked_sites", true, Date.now() - t0, { read: linked.length, urls: linked.map((l) => l.url) });
   const ex = await extract(content, linked, d.apiKey, d.fetchFn, d.event);
   if (!ex.items.length) {
@@ -54,7 +56,7 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
   const lookup = d.lookup ?? stubLookup;
   const t1 = Date.now();
   for (const it of ex.items) {
-    if (ex.kind === "recipes") continue;
+    if (!PLACE_KINDS.includes(ex.kind)) continue;
     try {
       if (it.address) {
         // address stated in the text or linked data: geocode it, never replace it

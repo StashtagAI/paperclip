@@ -12,16 +12,23 @@ export function RowLink({
   title,
   subtitle,
   progress,
+  accessibilityLabel,
 }: {
   href: Href;
   title: string;
   subtitle?: string;
   /** Draws a done bar under the subtitle; the subtitle must say the same in words (HAN-41). */
   progress?: { done: number; total: number };
+  /** Defaults to the title and subtitle as shown. */
+  accessibilityLabel?: string;
 }) {
   const theme = useTheme();
   return (
-    <Pressable onPress={() => router.push(href)} accessibilityRole="button" style={({ pressed }) => pressed && styles.pressed}>
+    <Pressable
+      onPress={() => router.push(href)}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={({ pressed }) => pressed && styles.pressed}>
       <View style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
         <View style={styles.text}>
           <ThemedText type="defaultBold">{title}</ThemedText>
