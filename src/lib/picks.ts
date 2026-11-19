@@ -144,7 +144,7 @@ export function weekPicks(items: PickItem[], now: Date, exclude: ReadonlySet<str
   const cutoff = now.getTime() - OLD_SAVE_DAYS * DAY_MS;
   const candidates = shuffled(
     items
-      .filter((item) => (item.list.category.kind === 'do' || item.list.category.kind === 'trips') && !exclude.has(item.id))
+      .filter((item) => (item.list.category.kind === 'do' || item.list.category.kind === 'travel') && !exclude.has(item.id))
       .map((item) => ({ item, old: new Date(item.created_at).getTime() < cutoff })),
     weekKey(now),
   ).sort((a, b) => Number(b.old) - Number(a.old));

@@ -1,24 +1,51 @@
+import * as Clipboard from 'expo-clipboard';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View, type ScrollViewInstance } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, View, type ScrollViewInstance } from 'react-native';
 
+import { Button } from '@/components/button';
+import { CheckRow } from '@/components/check-row';
 import { DeleteButton } from '@/components/delete-button';
 import { DirectionsSheet } from '@/components/directions-sheet';
+import { DisplayNameForm } from '@/components/display-name-form';
+import { PlaceFacts } from '@/components/google-place-info';
 import { PlaceMap } from '@/components/place-map';
 import { RenameForm } from '@/components/rename-form';
 import { Screen } from '@/components/screen';
+import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ratingLabel } from '@/components/star-rating';
 import { TagChip } from '@/components/tag-chip';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
-import { deleteList, fetchList, NAME_LIMITS, renameCategory, renameList } from '@/lib/data';
+import { announce } from '@/lib/announce';
+import { confirmDestructive } from '@/lib/confirm';
+import {
+  addShareRecipient,
+  deleteList,
+  fetchDisplayName,
+  fetchList,
+  fetchListShare,
+  fetchShareRecipients,
+  NAME_LIMITS,
+  refreshPlaceDetails,
+  removeShareRecipient,
+  renameCategory,
+  renameList,
+  shareList,
+  stopSharingList,
+} from '@/lib/data';
 import { hasCoords } from '@/lib/geo';
+import { openShareSheet, shareMessage, shareUrl } from '@/lib/share';
+import { recipesLabel } from '@/lib/shopping-list';
+import { toggleRecipe, useShoppingSelection } from '@/lib/shopping-selection';
+import { filterByTag, tagCounts } from '@/lib/tag-filter';
 import type { ItemRow, Kind } from '@/lib/types';
 
 /** Kinds whose items are places: their lists get a map and directions (HAN-24). */
-const PLACE_KINDS: readonly Kind[] = ['eats', 'trips'];
+const PLACE_KINDS: readonly Kind[] = ['eats', 'travel'];
 
 /** Level 3: the items in one list, e.g. Restaurants > Denver. */
 export default function ListScreen() {
@@ -26,7 +53,14 @@ export default function ListScreen() {
   const list = useAsync(() => fetchList(listId), [listId]);
   const data = list.data;
   const places = !!data && PLACE_KINDS.includes(data.category.kind);
-  const pins = places ? data.items.flatMap((i) => (hasCoords(i) ? [{ id: i.id, name: i.name, lat: i.lat, lng: i.lng }] : [])) : [];
+  const recipes = data?.category.kind === 'recipes';
+  const picked = useShoppingSelection().ids;
+  // Tapping a #tag narrows the list and its map to the items from posts with that tag (HAN-79).
+  const [tag, setTag] = useState<string | null>(null);
+  const tags = data ? tagCounts(data.tags, data.items) : [];
+  const activeTag = tags.some((t) => t.tag === tag) ? tag : null;
+  const shown = data ? filterByTag(data.items, activeTag) : [];
+  const pins = places ? shown.flatMap((i) => (hasCoords(i) ? [{ id: i.id, name: i.name, lat: i.lat, lng: i.lng }] : [])) : [];
 
   const scrollRef = useRef<ScrollViewInstance>(null);
   const rowY = useRef(new Map<string, number>());
@@ -45,12 +79,77 @@ export default function ListScreen() {
     select(item);
   };
 
+  const pickTag = (next: string | null) => {
+    if (!data) return;
+    const { items, category } = data;
+    setTag(next);
+    setSelectedId(null);
+    setSheetItem(null);
+    announce(
+      next
+        ? tagStatus(filterByTag(items, next).length, items.length, category.kind, next)
+        : `Showing all ${items.length} ${itemNoun(category.kind, items.length)}.`,
+    );
+  };
+
   const [editing, setEditing] = useState(false);
   const theme = useTheme();
+  // The share and who it's for (HAN-68). A share with nobody on it opens only for the owner.
+  const share = useAsync(async () => {
+    const [token, name] = await Promise.all([fetchListShare(listId), fetchDisplayName()]);
+    return { token, name, recipients: token ? await fetchShareRecipients(token) : [] };
+  }, [listId]);
+  const token = share.data?.token ?? null;
+  const recipients = share.data?.recipients ?? [];
+  const ownerName = share.data?.name ?? null;
+  const [shareOpen, setShareOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareNote, setShareNote] = useState<{ text: string; error?: boolean } | null>(null);
+
+  const note = (text: string, error = false) => {
+    setShareNote({ text, error });
+    // The note is a live region on Android and web; iOS needs an explicit announcement.
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text);
+  };
+
+  async function sendLink() {
+    if (!token || !data) return;
+    setSharing(true);
+    setShareNote(null);
+    try {
+      const title = `${data.category.name} › ${data.name}`;
+      const outcome = await openShareSheet(shareMessage(data.category.name, data.name, shareUrl(token)), title);
+      if (outcome === 'copied') note('Link copied. Paste it into a message to the people you added.');
+      else if (outcome === 'shared') note('Link sent.');
+    } catch (e) {
+      note(`Couldn’t share: ${(e as Error).message}`, true);
+    } finally {
+      setSharing(false);
+      share.refresh();
+    }
+  }
+
+  const showShare = !!data && !editing && !!share.data && (recipients.length > 0 || !(token || shareOpen));
+  // Picked recipes can come from several lists (HAN-74), so the button shows on every recipe list.
+  const showShopping = !!data && !editing && recipes && picked.length > 0;
 
   // Pick up a stash deleted from its card.
   const firstFocus = useRef(true);
   const { refresh } = list;
+
+  // Google ratings and hours for restaurants (HAN-83): fetched in the background once the list is open, at most once
+  // a week per item, and shown quietly when they arrive.
+  const eats = data?.category.kind === 'eats';
+  useEffect(() => {
+    if (!eats) return;
+    let live = true;
+    refreshPlaceDetails(listId).then((updated) => {
+      if (live && updated) refresh();
+    });
+    return () => {
+      live = false;
+    };
+  }, [eats, listId, refresh]);
   useFocusEffect(
     useCallback(() => {
       if (firstFocus.current) firstFocus.current = false;
@@ -59,7 +158,43 @@ export default function ListScreen() {
   );
 
   return (
-    <Screen edges="none" scrollRef={scrollRef}>
+    <Screen
+      edges="none"
+      scrollRef={scrollRef}
+      footer={
+        showShopping || showShare ? (
+          <View style={styles.footer}>
+            {showShopping ? (
+              <Button
+                title={`Shopping list · ${recipesLabel(picked.length)}`}
+                size="large"
+                onPress={() => router.push('/shopping-list')}
+                accessibilityHint="Opens the ingredients for the recipes you picked"
+              />
+            ) : null}
+            {showShare ? (
+              <Button
+                title={recipients.length ? 'Send link' : 'Share list'}
+                size="large"
+                variant={showShopping ? 'secondary' : 'primary'}
+                loading={sharing}
+                onPress={recipients.length ? sendLink : () => setShareOpen(true)}
+                accessibilityHint={
+                  recipients.length ? 'Opens the share sheet with a link to the list' : 'Choose who can open this list'
+                }
+                icon={(color) => (
+                  <SymbolView
+                    name={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }}
+                    tintColor={color}
+                    size={20}
+                    weight="semibold"
+                  />
+                )}
+              />
+            ) : null}
+          </View>
+        ) : null
+      }>
       <Stack.Screen
         options={{
           title: data ? `${data.category.name} › ${data.name}` : '',
@@ -107,15 +242,38 @@ export default function ListScreen() {
           />
         </>
       ) : null}
+      {shareNote ? (
+        <ThemedText
+          type="small"
+          themeColor={shareNote.error ? 'danger' : 'textSecondary'}
+          accessibilityLiveRegion="polite"
+          accessibilityRole={shareNote.error ? 'alert' : undefined}>
+          {shareNote.text}
+        </ThemedText>
+      ) : null}
+      {data && !editing && (token || shareOpen) ? (
+        <SharedPanel
+          listId={listId}
+          token={token}
+          recipients={recipients}
+          ownerName={ownerName}
+          onChanged={share.refresh}
+          onClose={() => setShareOpen(false)}
+          onNote={note}
+        />
+      ) : null}
       {pins.length ? <PlaceMap pins={pins} selectedId={selectedId} onPinPress={selectPin} /> : null}
-      {data?.tags.length ? <Tags kind={data.category.kind} tags={data.tags} /> : null}
+      {data && tags.length ? (
+        <Tags kind={data.category.kind} tags={tags} active={activeTag} total={data.items.length} onPick={pickTag} />
+      ) : null}
       {data?.items.length === 0 ? <ThemedText themeColor="textSecondary">No items in this list yet.</ThemedText> : null}
-      {data?.items.map((item) => (
+      {shown.map((item) => (
         <ItemCard
           key={item.id}
           item={item}
-          selected={item.id === selectedId}
+          selected={item.id === selectedId || (recipes && picked.includes(item.id))}
           onPress={places ? () => select(item) : undefined}
+          recipe={recipes ? { picked: picked.includes(item.id), count: picked.length } : undefined}
           onLayoutY={(y) => rowY.current.set(item.id, y)}
         />
       ))}
@@ -124,12 +282,34 @@ export default function ListScreen() {
   );
 }
 
+/** What a list holds, for the tag filter's status line: "3 places", "1 recipe". */
+function itemNoun(kind: Kind, n: number): string {
+  const noun = PLACE_KINDS.includes(kind) ? 'place' : kind === 'recipes' ? 'recipe' : 'item';
+  return n === 1 ? noun : `${noun}s`;
+}
+
+const tagStatus = (count: number, total: number, kind: Kind, tag: string) =>
+  `Showing ${count} of ${total} ${itemNoun(kind, total)} tagged #${tag}.`;
+
 const itemsLabel = (n: number) => (n === 1 ? ' and its 1 item' : n ? ` and all ${n} items in it` : '');
 
-type ItemCardProps = { item: ItemRow; selected: boolean; onPress?: () => void; onLayoutY: (y: number) => void };
+type ItemCardProps = {
+  item: ItemRow;
+  selected: boolean;
+  onPress?: () => void;
+  onLayoutY: (y: number) => void;
+  /** Recipe cards (HAN-74): whether it's on the shopping list, and how many recipes are. */
+  recipe?: { picked: boolean; count: number };
+};
 
-function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
+function ItemCard({ item, selected, onPress, onLayoutY, recipe }: ItemCardProps) {
   const theme = useTheme();
+  const toggle = () => {
+    if (!recipe) return;
+    toggleRecipe(item.id);
+    const count = recipe.picked ? recipe.count - 1 : recipe.count + 1;
+    announce(`${recipe.picked ? 'Removed from' : 'Added to'} shopping list. ${recipesLabel(count)}.`);
+  };
   // The card is a plain View so VoiceOver can reach the links below; on iOS an accessible Pressable would swallow them.
   return (
     <View
@@ -157,6 +337,7 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
           </ThemedText>
         ) : null}
       </Pressable>
+      <PlaceFacts item={item} />
       {item.rating ? (
         <ThemedText type="small" style={{ color: theme.link }} accessibilityLabel={`Your rating: ${ratingLabel(item.rating)}`}>
           {'★'.repeat(item.rating)}
@@ -169,6 +350,18 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
         </ThemedText>
       ) : null}
       <View style={styles.links}>
+        {recipe ? (
+          <Pressable
+            onPress={() => router.push({ pathname: '/recipe/[itemId]', params: { itemId: item.id } })}
+            accessibilityRole="button"
+            accessibilityLabel={`Recipe for ${item.name}`}
+            accessibilityHint="Ingredients and steps"
+            style={styles.link}>
+            <ThemedText type="small" style={{ color: theme.link }}>
+              Recipe ›
+            </ThemedText>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={() => router.push({ pathname: '/item/[itemId]', params: { itemId: item.id } })}
           accessibilityRole="button"
@@ -190,16 +383,229 @@ function ItemCard({ item, selected, onPress, onLayoutY }: ItemCardProps) {
           </Pressable>
         ) : null}
       </View>
+      {recipe ? (
+        <CheckRow checked={recipe.picked} onPress={toggle} accessibilityLabel={`Add ${item.name} to shopping list`}>
+          <ThemedText type="smallBold">{recipe.picked ? 'On shopping list' : 'Shopping list'}</ThemedText>
+        </CheckRow>
+      ) : null}
     </View>
   );
 }
 
-function Tags({ kind, tags }: { kind: Kind; tags: string[] }) {
+type SharedPanelProps = {
+  listId: string;
+  /** Null until the first person is added. */
+  token: string | null;
+  recipients: string[];
+  /** The owner's display name; friends see it instead of their email. Null until they set one. */
+  ownerName: string | null;
+  onChanged: () => Promise<void>;
+  onClose: () => void;
+  onNote: (text: string, error?: boolean) => void;
+};
+
+/**
+ * Who the list is shared with (HAN-68): add a friend by the email of their Stashtag account, remove them, copy the
+ * link, or stop sharing. The link opens only for the people listed here.
+ */
+function SharedPanel({ listId, token, recipients, ownerName, onChanged, onClose, onNote }: SharedPanelProps) {
+  const theme = useTheme();
+  const [email, setEmail] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [stopping, setStopping] = useState(false);
+
+  async function add() {
+    if (!email.trim() || !ownerName) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      const added = await addShareRecipient(token ?? (await shareList(listId)), email);
+      setEmail('');
+      await onChanged();
+      onNote(`Added ${added}. Send them the link; it opens when they sign in with that email.`);
+    } catch (e) {
+      const message = (e as Error).message;
+      setAddError(message);
+      if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(message);
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function remove(who: string) {
+    if (!token) return;
+    setRemoving(who);
+    try {
+      await removeShareRecipient(token, who);
+      await onChanged();
+      onNote(`Removed ${who}. The link no longer opens for them.`);
+    } catch (e) {
+      onNote(`Couldn’t remove ${who}: ${(e as Error).message}`, true);
+    } finally {
+      setRemoving(null);
+    }
+  }
+
+  async function stop() {
+    const ok = await confirmDestructive(
+      'Stop sharing this list?',
+      'The link stops working for everyone you shared it with. Lists friends already added stay in their stash.',
+      'Stop sharing',
+    );
+    if (!ok) return;
+    setStopping(true);
+    try {
+      await stopSharingList(listId);
+      await onChanged();
+      onClose();
+      onNote('Stopped sharing. The link no longer works.');
+    } catch (e) {
+      onNote(`Couldn’t stop sharing: ${(e as Error).message}`, true);
+    } finally {
+      setStopping(false);
+    }
+  }
+
   return (
-    <View style={styles.tags}>
-      {tags.map((tag) => (
-        <TagChip key={tag} kind={kind} tag={tag.replace(/^#+/, '')} />
-      ))}
+    <View style={[styles.shared, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      <ThemedText type="defaultBold" accessibilityRole="header">
+        Share with
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Add the email your friend uses for Stashtag. The link opens only for the people listed here, once they sign in.
+        Your other lists stay private.
+      </ThemedText>
+      {ownerName ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          They see it as shared by {ownerName}. You can change your name in Profile.
+        </ThemedText>
+      ) : (
+        <>
+          <ThemedText type="smallBold">First, your name</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Friends see this name on the list, not your email.
+          </ThemedText>
+          <DisplayNameForm name={null} onSaved={() => onChanged()} />
+        </>
+      )}
+      <TextField
+        value={email}
+        onChangeText={(text) => {
+          setEmail(text);
+          setAddError(null);
+        }}
+        onSubmitEditing={add}
+        placeholder="friend@example.com"
+        accessibilityLabel="Friend’s email"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="email"
+        textContentType="emailAddress"
+        returnKeyType="done"
+        maxLength={254}
+        invalid={!!addError}
+        editable={!adding && !!ownerName}
+      />
+      {addError ? (
+        <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
+          {addError}
+        </ThemedText>
+      ) : null}
+      <Button
+        title="Add"
+        loading={adding}
+        disabled={!email.trim() || !ownerName}
+        accessibilityHint={ownerName ? undefined : 'Save your name first'}
+        onPress={add}
+      />
+      {recipients.length ? (
+        <View accessibilityRole="list" accessibilityLabel="Shared with" style={styles.recipients}>
+          {recipients.map((who) => (
+            <View key={who} style={styles.recipient}>
+              <ThemedText type="small" style={styles.recipientEmail}>
+                {who}
+              </ThemedText>
+              <Button
+                title="Remove"
+                variant="secondary"
+                accessibilityLabel={`Remove ${who}`}
+                loading={removing === who}
+                onPress={() => remove(who)}
+              />
+            </View>
+          ))}
+        </View>
+      ) : (
+        <ThemedText type="small" themeColor="textSecondary">
+          Not shared with anyone yet.
+        </ThemedText>
+      )}
+      <View style={styles.sharedActions}>
+        {token && recipients.length ? (
+          <Button
+            title="Copy link"
+            variant="secondary"
+            style={styles.sharedAction}
+            onPress={async () => {
+              await Clipboard.setStringAsync(shareUrl(token));
+              onNote('Link copied.');
+            }}
+          />
+        ) : null}
+        {token ? (
+          <Button title="Stop sharing" variant="secondary" style={styles.sharedAction} loading={stopping} onPress={stop} />
+        ) : (
+          <Button title="Cancel" variant="secondary" style={styles.sharedAction} onPress={onClose} />
+        )}
+      </View>
+    </View>
+  );
+}
+
+type TagsProps = {
+  kind: Kind;
+  tags: { tag: string; count: number }[];
+  active: string | null;
+  total: number;
+  onPick: (tag: string | null) => void;
+};
+
+/** The list's #tags as toggles (HAN-79): one at a time; tapping the picked one, or Show all, clears it. */
+function Tags({ kind, tags, active, total, onPick }: TagsProps) {
+  const theme = useTheme();
+  const activeCount = tags.find((t) => t.tag === active)?.count ?? 0;
+  return (
+    <View style={styles.tagFilter}>
+      <View style={styles.tags} accessibilityRole="toolbar" accessibilityLabel="Filter by tag">
+        {tags.map(({ tag, count }) => (
+          <TagChip
+            key={tag}
+            kind={kind}
+            tag={tag}
+            selected={tag === active}
+            onPress={() => onPick(tag === active ? null : tag)}
+            accessibilityLabel={`#${tag}, ${count} ${itemNoun(kind, count)}`}
+            accessibilityHint={
+              tag === active ? 'Shows everything in the list again' : `Shows only ${itemNoun(kind, 2)} tagged ${tag}`
+            }
+          />
+        ))}
+      </View>
+      {active ? (
+        <View style={styles.tagStatus}>
+          <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite" style={styles.grow}>
+            {tagStatus(activeCount, total, kind, active)}
+          </ThemedText>
+          <Pressable onPress={() => onPick(null)} accessibilityRole="button" style={styles.link}>
+            <ThemedText type="smallBold" style={{ color: theme.link }}>
+              Show all
+            </ThemedText>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -208,6 +614,20 @@ const styles = StyleSheet.create({
   card: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.one },
   main: { gap: Spacing.one },
   links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.four },
+  footer: { gap: Spacing.two },
   link: { minHeight: 44, justifyContent: 'center' },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  tagFilter: { gap: Spacing.one },
+  // Rows sit 16 apart so each chip's 44pt hit area doesn't overlap the next row's.
+  tags: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.two, rowGap: Spacing.three },
+  // The status and Show all side by side; Show all wraps below at large text sizes.
+  tagStatus: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: Spacing.three },
+  grow: { flexShrink: 1 },
+  shared: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.two },
+  // Side by side when they fit; stacked at large text sizes.
+  sharedActions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  sharedAction: { flexGrow: 1 },
+  recipients: { gap: Spacing.two },
+  // Email and its Remove button side by side; the button wraps below at large text sizes.
+  recipient: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two },
+  recipientEmail: { flexGrow: 1, flexShrink: 1, minWidth: 160 },
 });

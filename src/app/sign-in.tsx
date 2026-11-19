@@ -1,29 +1,26 @@
 import * as Linking from 'expo-linking';
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
-import {
-  EMAIL_RESEND_SECONDS,
-  retryAfterSeconds,
-  secondsLeft,
-  sendLinkErrorMessage,
-  signInErrorMessage,
-  waitPhrase,
-} from '@/lib/rate-limit';
+import { announce } from '@/lib/announce';
+import { MIN_PASSWORD_LENGTH, RESEND_COOLDOWN_SECONDS, resetSentMessage } from '@/lib/password-reset';
+import { retryAfterSeconds, sendLinkErrorMessage, signInErrorMessage, waitPhrase } from '@/lib/rate-limit';
 import { supabase } from '@/lib/supabase';
 
-type Mode = 'password' | 'link';
+type Mode = 'password' | 'link' | 'reset';
 
 /**
  * Email + password sign-in (the default while testing), with passwordless as an alternative.
  * Passwordless: Supabase emails a magic link (opens /auth/callback) and, if the email template
  * includes {{ .Token }}, a 6-digit code that can be typed here instead.
- * Supabase Auth rate-limits emails and attempts (HAN-38); the resend button counts down its per-address window.
+ * Supabase Auth rate-limits emails and attempts (HAN-38); the resend buttons count down its per-address window.
+ * Forgot password (HAN-70): the same two ways of proving the inbox is yours — the reset link or its code — have to
+ * happen before the password can change; then the root layout shows /reset-password.
  */
 export default function SignIn() {
   const [mode, setMode] = useState<Mode>('password');
@@ -34,39 +31,23 @@ export default function SignIn() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // When another sign-in email may be requested for `address` (Date.now() ms).
-  const [resend, setResend] = useState<{ address: string; until: number } | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-
-  const typed = sentTo ?? email.trim().toLowerCase();
-  const wait = resend && resend.address === typed ? secondsLeft(resend.until, now) : 0;
+  const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
-    if (!resend) return;
-    const timer = setInterval(() => {
-      const t = Date.now();
-      setNow(t);
-      if (t >= resend.until) clearInterval(timer);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [resend]);
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
-  function startWait(address: string, seconds: number) {
-    const t = Date.now();
-    setNow(t);
-    setResend({ address, until: t + seconds * 1000 });
+  function fail(message: string) {
+    setError(message);
+    announce(message);
   }
-
-  // iOS has no live regions, so announce what changed; Android/web use the live regions below.
-  useEffect(() => {
-    const message = error ?? notice;
-    if (message && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(message);
-  }, [error, notice]);
 
   function validEmail() {
     const address = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(address)) {
-      setError('Enter a valid email address.');
+      fail('Enter a valid email address.');
       return null;
     }
     return address;
@@ -80,14 +61,14 @@ export default function SignIn() {
     setNotice(null);
     const { error } = await supabase.auth.signInWithPassword({ email: address, password });
     setBusy(false);
-    if (error) setError(signInErrorMessage(error));
+    if (error) fail(signInErrorMessage(error));
     // On success the auth listener swaps the stack to the app.
   }
 
   async function signUp() {
     const address = validEmail();
     if (!address) return;
-    if (password.length < 6) return setError('Use a password of at least 6 characters.');
+    if (password.length < MIN_PASSWORD_LENGTH) return fail(`Use a password of at least ${MIN_PASSWORD_LENGTH} characters.`);
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -97,17 +78,20 @@ export default function SignIn() {
       options: { emailRedirectTo: Linking.createURL('auth/callback') },
     });
     setBusy(false);
-    if (error) return setError(signInErrorMessage(error));
+    if (error) return fail(signInErrorMessage(error));
     // No session means the project still requires email confirmation.
-    if (!data.session) setNotice(`Account created. Confirm it from the email sent to ${address}, then sign in.`);
+    if (!data.session) {
+      const message = `Account created. Confirm it from the email sent to ${address}, then sign in.`;
+      setNotice(message);
+      announce(message);
+    }
   }
 
   async function sendLink() {
-    const address = sentTo ?? validEmail();
-    if (!address || wait > 0) return;
+    const address = validEmail();
+    if (!address) return;
     setBusy(true);
     setError(null);
-    setNotice(null);
     const { error } = await supabase.auth.signInWithOtp({
       email: address,
       options: { emailRedirectTo: Linking.createURL('auth/callback') },
@@ -115,44 +99,90 @@ export default function SignIn() {
     setBusy(false);
     if (error) {
       const retry = retryAfterSeconds(error);
-      if (retry) startWait(address, retry);
-      return setError(sendLinkErrorMessage(error));
+      if (retry) setCooldown(retry);
+      return fail(sendLinkErrorMessage(error));
     }
-    startWait(address, EMAIL_RESEND_SECONDS);
-    if (sentTo) setNotice(`A new sign-in email was sent to ${address}.`);
-    else {
+    setCooldown(RESEND_COOLDOWN_SECONDS);
+    if (sentTo) {
+      const message = `A new sign-in email was sent to ${address}.`;
+      setNotice(message);
+      announce(message);
+    } else {
       setSentTo(address);
-      if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(`Sign-in email sent to ${address}.`);
+      announce(`Sign-in link sent to ${address}`);
     }
+  }
+
+  /** Emails a reset link and code. Nothing about the account changes until one of them is used. */
+  async function sendReset(address = validEmail()) {
+    if (!address) return;
+    setBusy(true);
+    setError(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(address, {
+      redirectTo: Linking.createURL('auth/callback'),
+    });
+    setBusy(false);
+    if (error) {
+      const retry = retryAfterSeconds(error);
+      if (retry) setCooldown(retry);
+      return fail(signInErrorMessage(error));
+    }
+    setSentTo(address);
+    setCode('');
+    setCooldown(RESEND_COOLDOWN_SECONDS);
+    announce(resetSentMessage(address));
   }
 
   async function verifyCode() {
     if (!sentTo) return;
     setBusy(true);
     setError(null);
-    const { error } = await supabase.auth.verifyOtp({ email: sentTo, token: code.trim(), type: 'email' });
+    // A recovery code signs in with PASSWORD_RECOVERY, which keeps the app closed until a new password is saved.
+    const { error } = await supabase.auth.verifyOtp({
+      email: sentTo,
+      token: code.trim(),
+      type: mode === 'reset' ? 'recovery' : 'email',
+    });
     setBusy(false);
-    if (error) setError(signInErrorMessage(error));
+    if (error) fail(signInErrorMessage(error));
   }
 
   function switchMode(next: Mode) {
     setMode(next);
     setSentTo(null);
+    setCode('');
     setError(null);
     setNotice(null);
   }
+
+  const codeField = (
+    <TextField
+      value={code}
+      onChangeText={setCode}
+      placeholder="123456"
+      accessibilityLabel="Code from the email"
+      keyboardType="number-pad"
+      textContentType="oneTimeCode"
+      autoComplete="one-time-code"
+      maxLength={10}
+      autoFocus
+      onSubmitEditing={verifyCode}
+      invalid={!!error}
+    />
+  );
 
   const emailField = (
     <TextField
       value={email}
       onChangeText={setEmail}
       placeholder="you@example.com"
+      accessibilityLabel="Email"
       keyboardType="email-address"
       textContentType="emailAddress"
       autoComplete="email"
       autoCapitalize="none"
       autoCorrect={false}
-      onSubmitEditing={mode === 'link' ? sendLink : undefined}
+      onSubmitEditing={mode === 'link' ? sendLink : mode === 'reset' ? () => sendReset() : undefined}
       invalid={!!error}
     />
   );
@@ -171,6 +201,7 @@ export default function SignIn() {
             value={password}
             onChangeText={setPassword}
             placeholder="Password"
+            accessibilityLabel="Password"
             secureTextEntry
             textContentType="password"
             autoComplete="password"
@@ -180,30 +211,54 @@ export default function SignIn() {
             invalid={!!error}
           />
           <Button title="Sign in" onPress={signInWithPassword} loading={busy} disabled={!password} />
+          <Button title="Forgot password?" variant="secondary" onPress={() => switchMode('reset')} />
           <Button title="Create account" variant="secondary" onPress={signUp} disabled={busy} />
           <Button title="Email me a sign-in link instead" variant="secondary" onPress={() => switchMode('link')} />
         </>
+      ) : mode === 'reset' ? (
+        sentTo ? (
+          <>
+            <ThemedText type="smallBold" accessibilityRole="header">
+              Reset your password
+            </ThemedText>
+            <ThemedText>{resetSentMessage(sentTo)}</ThemedText>
+            {codeField}
+            <Button title="Continue" onPress={verifyCode} loading={busy} disabled={code.trim().length < 6} />
+            <Button
+              title={cooldown > 0 ? `Send again in ${cooldown}s` : 'Send again'}
+              accessibilityLabel={cooldown > 0 ? `Send again, available in ${cooldown} seconds` : 'Send again'}
+              variant="secondary"
+              onPress={() => sendReset(sentTo)}
+              disabled={busy || cooldown > 0}
+            />
+            <Button title="Back to sign in" variant="secondary" onPress={() => switchMode('password')} />
+          </>
+        ) : (
+          <>
+            <ThemedText type="smallBold" accessibilityRole="header">
+              Reset your password
+            </ThemedText>
+            <ThemedText themeColor="textSecondary">
+              We’ll email you a link and a code. Your password only changes after you use one of them.
+            </ThemedText>
+            {emailField}
+            <Button title="Email me a reset link" onPress={() => sendReset()} loading={busy} />
+            <Button title="Back to sign in" variant="secondary" onPress={() => switchMode('password')} />
+          </>
+        )
       ) : sentTo ? (
         <>
           <ThemedText>
             Check {sentTo} for a sign-in link. Or enter the code from the email:
           </ThemedText>
-          <TextField
-            value={code}
-            onChangeText={setCode}
-            placeholder="123456"
-            keyboardType="number-pad"
-            textContentType="oneTimeCode"
-            autoComplete="one-time-code"
-            maxLength={10}
-            onSubmitEditing={verifyCode}
-          />
+          {codeField}
           <Button title="Sign in with code" onPress={verifyCode} loading={busy} disabled={code.trim().length < 6} />
           <Button
-            title={wait > 0 ? `Resend email in ${waitPhrase(wait)}` : 'Resend email'}
+            title={cooldown > 0 ? `Resend email in ${cooldown}s` : 'Resend email'}
+            accessibilityLabel={cooldown > 0 ? `Resend email, available in ${waitPhrase(cooldown)}` : 'Resend email'}
             variant="secondary"
             onPress={sendLink}
-            disabled={busy || wait > 0}
+            disabled={busy || cooldown > 0}
           />
           <Button
             title="Use a different email"
@@ -218,24 +273,21 @@ export default function SignIn() {
       ) : (
         <>
           {emailField}
-          <Button
-            title={wait > 0 ? `Email me a sign-in link (in ${waitPhrase(wait)})` : 'Email me a sign-in link'}
-            onPress={sendLink}
-            loading={busy}
-            disabled={wait > 0}
-          />
+          <Button title="Email me a sign-in link" onPress={sendLink} loading={busy} />
           <Button title="Sign in with a password instead" variant="secondary" onPress={() => switchMode('password')} />
         </>
       )}
 
-      <View accessibilityLiveRegion="polite" aria-live="polite">
-        {notice ? <ThemedText type="small">{notice}</ThemedText> : null}
-        {error ? (
-          <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
-            {error}
-          </ThemedText>
-        ) : null}
-      </View>
+      {notice ? (
+        <ThemedText type="small" accessibilityLiveRegion="polite">
+          {notice}
+        </ThemedText>
+      ) : null}
+      {error ? (
+        <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="assertive">
+          {error}
+        </ThemedText>
+      ) : null}
     </Screen>
   );
 }
