@@ -31,6 +31,10 @@ export const Colors = {
     /** Text on a `danger` fill, e.g. the Delete account button. */
     onDanger: L.white,
     success: '#0A7A55',
+    /** Check mark drawn on a `success` fill (HAN-41). */
+    onSuccess: L.white,
+    /** Done progress track (HAN-41): stays light under Increase Contrast, where `border` darkens, so the fill keeps ≥ 3:1. */
+    progressTrack: '#D5E3F5',
     /** Text field outlines: the field's only edge against the page, so ≥ 3:1 (WCAG 1.4.11), unlike `border`. */
     inputBorder: '#69788F',
   },
@@ -50,6 +54,8 @@ export const Colors = {
     // White on the light red is 2.8:1, so dark mode uses Night, like onTint.
     onDanger: D.night,
     success: D.mint,
+    onSuccess: D.night,
+    progressTrack: '#1F3550',
     inputBorder: '#6A84A3',
   },
 } as const;
