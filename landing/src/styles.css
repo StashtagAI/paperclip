@@ -167,8 +167,15 @@ p {
 
 .hero-grid {
   display: grid;
+  /* minmax(0, 1fr), not the implicit auto track: at 200% text the unbroken h1
+     "StashtagAI" set the column's min-content and the page scrolled sideways (HAN-108). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 2.5rem;
   align-items: center;
+}
+
+.hero-copy {
+  min-width: 0;
 }
 
 .hero h1 {
@@ -207,7 +214,7 @@ p {
   }
 
   .hero-grid {
-    grid-template-columns: 1.2fr 1fr;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   }
 }
 
