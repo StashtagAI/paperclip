@@ -38,7 +38,7 @@ function subscribeRecovery(listener: () => void) {
 }
 
 export function useRecovering() {
-  return useSyncExternalStore(subscribeRecovery, () => recovering);
+  return useSyncExternalStore(subscribeRecovery, () => recovering, () => false);
 }
 
 const AuthContext = createContext<AuthState>({ session: null, loading: true });
