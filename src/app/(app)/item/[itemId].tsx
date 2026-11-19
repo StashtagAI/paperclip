@@ -330,6 +330,7 @@ function PhotoImage({ uri, width, height, label }: { uri: string; width?: number
       accessible
       accessibilityRole="image"
       accessibilityLabel={label}
+      accessibilityIgnoresInvertColors
     />
   );
 }

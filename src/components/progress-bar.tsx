@@ -28,7 +28,7 @@ export function ProgressBar({ done, total, label }: { done: number; total: numbe
       accessible
       accessibilityRole="progressbar"
       accessibilityLabel="Progress"
-      accessibilityValue={{ min: 0, max: total, now: done, text: label }}
+      accessibilityValue={{ text: label }}
       style={styles.labelled}>
       <ThemedText type="small" themeColor="textSecondary">
         {label}

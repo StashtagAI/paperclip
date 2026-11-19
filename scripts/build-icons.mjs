@@ -1,5 +1,7 @@
 // Regenerates every app icon, splash and favicon PNG from the pin mark in src/constants/brand.ts.
 // Run after changing the mark or palette: `npm run icons`, then commit assets/images.
+import { Buffer } from 'node:buffer';
+
 import sharp from 'sharp';
 
 import { centredLayout, hashStrokeWidth, PIN_LAYOUT, pinSvg } from '../src/constants/brand.ts';

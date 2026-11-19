@@ -10,13 +10,17 @@ const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 /** False when the EXPO_PUBLIC_SUPABASE_* env vars are missing; the app shows setup help instead. */
 export const supabaseConfigured = Boolean(url && anonKey);
 
+// The web build is pre-rendered in Node at export time (static output, so Expo Hosting serves our security
+// headers). There is no window or localStorage there, so that render runs signed out with no stored session.
+const serverRender = Platform.OS === 'web' && typeof window === 'undefined';
+
 export const supabase = createClient(url || 'http://localhost:54321', anonKey || 'missing-anon-key', {
   auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
+    storage: serverRender ? undefined : AsyncStorage,
+    autoRefreshToken: !serverRender,
+    persistSession: !serverRender,
     // Web picks the magic-link code up from the URL; native handles it in /auth/callback.
-    detectSessionInUrl: Platform.OS === 'web',
+    detectSessionInUrl: Platform.OS === 'web' && !serverRender,
     flowType: 'pkce',
   },
 });
