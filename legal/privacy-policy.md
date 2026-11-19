@@ -1,9 +1,9 @@
 # StashtagAI Privacy Policy
 
 **Effective date:** November 7, 2026
-**Last updated:** November 7, 2026
+**Last updated:** November 19, 2026
 
-This Privacy Policy explains how [COMPANY LEGAL NAME] ("StashtagAI", "we", "us", or "our") collects, uses, shares, and protects information when you use the StashtagAI mobile and web application (the "Service").
+This Privacy Policy explains how [COMPANY LEGAL NAME] ("StashtagAI", "we", "us", or "our") collects, uses, shares, and protects information when you use the StashtagAI mobile and web application (the "Service") or visit our website, stashtag.ai (the "Website").
 
 ## 1. Information we collect
 
@@ -12,6 +12,7 @@ This Privacy Policy explains how [COMPANY LEGAL NAME] ("StashtagAI", "we", "us",
 - **Links you submit:** URLs of Instagram and TikTok posts you save.
 - **Your lists and content:** the categories, lists, items, tags, and notes stored in your account.
 - **Communications:** messages you send us, such as support requests.
+- **Launch waitlist:** if you join the waitlist on our Website, your email address, the phone platform you choose (iPhone or Android, optional), which form you used, any campaign tags in the link that brought you to the Website (such as utm_source), and the date you signed up. To stop abuse of the form, we also keep a keyed, one-way hash of your IP address for 24 hours; we do not store the IP address itself.
 
 **Information we generate or retrieve**
 - **Post content:** for each link you submit, we retrieve publicly available content from the post, which may include the caption, the author's display name or handle, and, where available, a transcript of the audio or text read from the images or video.
@@ -29,10 +30,11 @@ We use information to:
 - provide the Service: retrieve post content, extract recommendations, and organize your lists;
 - keep your account secure and prevent abuse, fraud, and misuse of the Service;
 - troubleshoot, maintain, and improve the Service, including the accuracy of extraction;
-- communicate with you about your account, support requests, and important changes; and
+- communicate with you about your account, support requests, and important changes;
+- if you joined the launch waitlist, email you when StashtagAI is available on the App Store or Google Play (we do not use waitlist addresses for anything else, and we do not share them for marketing); and
 - comply with legal obligations.
 
-**Legal bases (EEA/UK users):** we process your information to perform our contract with you (providing the Service), for our legitimate interests (security, improving the Service), with your consent where required, and to comply with legal obligations.
+**Legal bases (EEA/UK users):** we process your information to perform our contract with you (providing the Service), for our legitimate interests (security, improving the Service), with your consent where required (including the launch waitlist, which you join by choice), and to comply with legal obligations.
 
 ## 3. AI processing
 
@@ -52,7 +54,7 @@ We share information only as follows:
 
 ## 5. Data retention
 
-We keep your account information and content for as long as your account is active. When you delete a link, list, or your account, we delete the associated data as described in our [Data Deletion Policy](./data-deletion.md). Server logs are kept for a limited period (generally no more than 90 days) unless we need them longer for security or legal reasons. Backups are overwritten on a rolling schedule.
+We keep your account information and content for as long as your account is active. When you delete a link, list, or your account, we delete the associated data as described in our [Data Deletion Policy](./data-deletion.md). We keep launch waitlist entries until we have sent the launch email, and delete them within 90 days after that, or sooner if you ask us to remove you. Server logs are kept for a limited period (generally no more than 90 days) unless we need them longer for security or legal reasons. Backups are overwritten on a rolling schedule.
 
 ## 6. Security
 
@@ -67,6 +69,8 @@ Depending on where you live, you may have the right to:
 - **object to or restrict** certain processing;
 - **data portability**; and
 - **withdraw consent** where processing is based on consent.
+
+**Leaving the launch waitlist:** email [PRIVACY EMAIL] from the address you signed up with (or tell us that address) and ask to be removed. We delete it from the list within 30 days, and usually much sooner. Every waitlist email we send also explains how to be removed.
 
 To use these rights, email [PRIVACY EMAIL]. We may need to verify your identity before acting on a request. We will respond within the time required by law (for example, 30 days under the GDPR and 45 days under California law). We will not discriminate against you for exercising your rights.
 

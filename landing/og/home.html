@@ -1,0 +1,260 @@
+<!doctype html>
+<!-- Source for public/assets/home-{light,dark}.webp and home-light.png (295×640 @2x). Re-render with the
+     command in ../README.md. Tile names and subtitles are the app's KIND_LABELS / KIND_SUBTITLES
+     (src/lib/types.ts); check.mjs fails if this file or the hero alt text drifts from them. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <style>
+      :root {
+        --bg: #f4f9ff;
+        --card: #ffffff;
+        --text: #0b1b2b;
+        --muted: #52627a;
+        --border: #d5e3f5;
+        --eats: #19c48d;
+        --travel: #1f6feb;
+        --recipes: #3dd9d6;
+        --do: #5a5cf0;
+        --on-eats: #0b1b2b;
+        --on-travel: #ffffff;
+        --on-recipes: #0b1b2b;
+        --on-do: #ffffff;
+        --chip-eats: #d0f4e8;
+        --chip-eats-text: #0a6b4f;
+        --chip-travel: #d2e5fe;
+        --chip-travel-text: #1a64d6;
+        --chip-recipes: #d8f8fb;
+        --chip-recipes-text: #0b6464;
+        --fab-text: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0a1420;
+          --card: #122233;
+          --text: #eaf3ff;
+          --muted: #93a6bf;
+          --border: #1f3550;
+          --eats: #3de0a6;
+          --travel: #4c9bff;
+          --recipes: #5cebea;
+          --do: #8c8dff;
+          --on-eats: #0b1b2b;
+          --on-travel: #0b1b2b;
+          --on-recipes: #0b1b2b;
+          --on-do: #0b1b2b;
+          --chip-eats: #1a4048;
+          --chip-eats-text: #3de0a6;
+          --chip-travel: #1b3555;
+          --chip-travel-text: #4c9bff;
+          --chip-recipes: #1e4251;
+          --chip-recipes-text: #5cebea;
+          --fab-text: #0b1b2b;
+        }
+      }
+      html,
+      body {
+        margin: 0;
+        width: 295px;
+        height: 640px;
+        overflow: hidden;
+      }
+      body {
+        position: relative;
+        padding: 26px 18px 0;
+        box-sizing: border-box;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Liberation Sans', Arial, 'Helvetica Neue', sans-serif;
+      }
+      h1 {
+        margin: 0 0 16px;
+        font-size: 27px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .search {
+        height: 38px;
+        padding: 0 12px;
+        display: flex;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--card);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .tiles {
+        margin: 12px 0 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 11px 10px;
+      }
+      .tile {
+        height: 98px;
+        padding: 12px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        border-radius: 14px;
+      }
+      .tile svg {
+        width: 18px;
+        height: 18px;
+      }
+      .tile b {
+        margin-top: auto;
+        font-size: 15px;
+      }
+      .tile span {
+        margin-top: 3px;
+        font-size: 10px;
+      }
+      .eats { background: var(--eats); color: var(--on-eats); }
+      .travel { background: var(--travel); color: var(--on-travel); }
+      .recipes { background: var(--recipes); color: var(--on-recipes); }
+      .do { background: var(--do); color: var(--on-do); }
+      h2 {
+        margin: 22px 0 12px;
+        font-size: 16px;
+      }
+      .row {
+        height: 55px;
+        margin-bottom: 9px;
+        padding: 0 8px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        border: 1.5px solid var(--border);
+        border-radius: 12px;
+        background: var(--card);
+      }
+      .thumb {
+        flex: none;
+        width: 39px;
+        height: 39px;
+        display: grid;
+        place-items: center;
+        border-radius: 8px;
+        color: #0b1b2b;
+      }
+      .thumb svg {
+        width: 15px;
+        height: 15px;
+      }
+      .row div {
+        flex: 1;
+        min-width: 0;
+      }
+      .row b,
+      .row small {
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .row b {
+        font-size: 12.5px;
+      }
+      .row small {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .chip {
+        flex: none;
+        padding: 5px 9px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+      }
+      .fab {
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        bottom: 7px;
+        height: 43px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: 12px;
+        background: var(--travel);
+        color: var(--fab-text);
+        font-size: 12.5px;
+        font-weight: 700;
+      }
+      .fab::before {
+        content: '';
+        position: absolute;
+        left: -18px;
+        right: -18px;
+        bottom: 43px;
+        height: 28px;
+        background: linear-gradient(transparent, var(--bg));
+      }
+      svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute">
+      <symbol id="eats" viewBox="0 0 24 24">
+        <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" /><path d="M7 2v20" />
+        <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
+      </symbol>
+      <symbol id="travel" viewBox="0 0 24 24">
+        <path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0" />
+        <circle cx="12" cy="10" r="3" />
+      </symbol>
+      <symbol id="recipes" viewBox="0 0 24 24">
+        <path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z" /><path d="M7 21h10" /><path d="M19.5 12 22 6" />
+        <path d="M16.25 3c.27.1.8.53.75 1.36-.06.83-.93 1.2-1 2.02-.05.78.34 1.24.73 1.62" />
+        <path d="M11.25 3c.27.1.8.53.74 1.36-.05.83-.93 1.2-.98 2.02-.06.78.33 1.24.72 1.62" />
+        <path d="M6.25 3c.27.1.8.53.75 1.36-.06.83-.93 1.2-1 2.02-.05.78.34 1.24.74 1.62" />
+      </symbol>
+      <symbol id="do" viewBox="0 0 24 24">
+        <path d="M9.9 15.5a2 2 0 0 0-1.4-1.4l-6.1-1.6a.5.5 0 0 1 0-1L8.5 9.9a2 2 0 0 0 1.4-1.4l1.6-6.1a.5.5 0 0 1 1 0l1.6 6.1a2 2 0 0 0 1.4 1.4l6.1 1.6a.5.5 0 0 1 0 1l-6.1 1.6a2 2 0 0 0-1.4 1.4l-1.6 6.1a.5.5 0 0 1-1 0z" />
+      </symbol>
+    </svg>
+
+    <h1>Your stash</h1>
+    <div class="search">Search cafés, places, recipes</div>
+
+    <div class="tiles">
+      <div class="tile eats"><svg><use href="#eats" /></svg><b>Eats</b><span>Cafés and restaurants</span></div>
+      <div class="tile travel"><svg><use href="#travel" /></svg><b>Travel</b><span>Places, tips, ideas</span></div>
+      <div class="tile recipes"><svg><use href="#recipes" /></svg><b>Recipes</b><span>To cook next</span></div>
+      <div class="tile do"><svg><use href="#do" /></svg><b>Do</b><span>Things to try</span></div>
+    </div>
+
+    <h2>Recently stashed</h2>
+    <div class="row">
+      <span class="thumb eats"><svg><use href="#eats" /></svg></span>
+      <div><b>Corner café, pistachio croissants</b><small>Eats · from Instagram</small></div>
+      <span class="chip" style="background: var(--chip-eats); color: var(--chip-eats-text)">#brunch</span>
+    </div>
+    <div class="row">
+      <span class="thumb travel"><svg><use href="#travel" /></svg></span>
+      <div><b>Sunrise ridge walk</b><small>Travel · from Instagram</small></div>
+      <span class="chip" style="background: var(--chip-travel); color: var(--chip-travel-text)">#hike</span>
+    </div>
+    <div class="row">
+      <span class="thumb recipes"><svg><use href="#recipes" /></svg></span>
+      <div><b>One-pan lemon orzo</b><small>Recipes · from Instagram</small></div>
+      <span class="chip" style="background: var(--chip-recipes); color: var(--chip-recipes-text)">#weeknight</span>
+    </div>
+    <div class="row">
+      <span class="thumb do"><svg><use href="#do" /></svg></span>
+      <div><b>Pottery taster class</b><small>Do · from TikTok</small></div>
+    </div>
+
+    <div class="fab"><span aria-hidden="true">+</span> Stash a link</div>
+  </body>
+</html>

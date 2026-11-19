@@ -1,0 +1,12 @@
+{
+  "name": "stashtag-landing",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs && node check.mjs"
+  }
+}
