@@ -91,7 +91,7 @@ Supabase project: `qzaijqrkriuhlqbwmyto`. Supabase callback URL for every provid
 ### Deploy
 
 ```bash
-supabase db push                                   # apple_tokens (migration 20261119210000)
+supabase db push                                   # apple_tokens (migration 20261119222601)
 supabase functions deploy apple-token delete-account
 ```
 
