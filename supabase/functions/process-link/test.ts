@@ -93,6 +93,7 @@ if (r1.ok) {
   assert.equal(a.lat, undefined); // model coordinates are never trusted
   assert.equal(b.address, undefined); // address not in the text -> left out
   assert.equal(a.sources?.address, "capture");
+  assert.equal(a.sources?.name, "capture");
 }
 
 // 2) Recipe with linked site: ingredients/steps come from schema.org, not the model
