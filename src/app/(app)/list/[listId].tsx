@@ -11,6 +11,7 @@ import { DirectionsSheet } from '@/components/directions-sheet';
 import { DisplayNameForm } from '@/components/display-name-form';
 import { DoneCheck } from '@/components/done-check';
 import { PlaceFacts } from '@/components/google-place-info';
+import { ItemEditForm, ReportItemForm } from '@/components/item-forms';
 import { PlaceMap } from '@/components/place-map';
 import { ProgressBar } from '@/components/progress-bar';
 import { RenameForm } from '@/components/rename-form';
@@ -26,6 +27,7 @@ import { announce } from '@/lib/announce';
 import { confirmDestructive } from '@/lib/confirm';
 import {
   addShareRecipient,
+  deleteItem,
   deleteList,
   fetchDisplayName,
   fetchList,
@@ -42,6 +44,7 @@ import {
 } from '@/lib/data';
 import { doneAnnouncement, progressText } from '@/lib/done-progress';
 import { hasCoords } from '@/lib/geo';
+import { provenanceOf, type ItemSources } from '@/lib/provenance';
 import { openShareSheet, shareMessage, shareUrl } from '@/lib/share';
 import { recipesLabel } from '@/lib/shopping-list';
 import { toggleRecipe, useShoppingSelection } from '@/lib/shopping-selection';
@@ -312,6 +315,8 @@ export default function ListScreen() {
         <ItemCard
           key={item.id}
           item={item}
+          sources={item.link_id ? data?.sources[item.link_id]?.[item.name] : undefined}
+          onChanged={refresh}
           doneLabel={doneLabel}
           onToggleDone={() => {
             setToggleError(null);
@@ -341,24 +346,57 @@ const itemsLabel = (n: number) => (n === 1 ? ' and its 1 item' : n ? ` and all $
 
 type ItemCardProps = {
   item: ItemRow;
+  sources: ItemSources | undefined;
   doneLabel: string;
   onToggleDone: () => void;
   selected: boolean;
   onPress?: () => void;
   onLayoutY: (y: number) => void;
+  onChanged: () => Promise<unknown> | void;
   /** Recipe cards (HAN-74): whether it's on the shopping list, and how many recipes are. */
   recipe?: { picked: boolean; count: number };
 };
 
 /** The check sits beside the tappable body rather than inside it, so each is its own VoiceOver/TalkBack element. */
-function ItemCard({ item, doneLabel, onToggleDone, selected, onPress, onLayoutY, recipe }: ItemCardProps) {
+function ItemCard({ item, sources, doneLabel, onToggleDone, selected, onPress, onLayoutY, onChanged, recipe }: ItemCardProps) {
   const theme = useTheme();
+  // Edit, report and delete (HAN-40).
+  const [mode, setMode] = useState<'view' | 'edit' | 'report'>('view');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const provenance = provenanceOf(item, sources);
+
+  const finish = async (message: string | null) => {
+    setMode('view');
+    setNotice(message);
+    if (message) announce(message);
+    await onChanged();
+  };
+
+  async function remove() {
+    if (!(await confirmDestructive(`Delete “${item.name}”?`, 'This removes it from your list. It can’t be undone.', 'Delete'))) return;
+    setError(null);
+    try {
+      await deleteItem(item.id);
+      announce(`${item.name} deleted`);
+      await onChanged();
+    } catch (e) {
+      const message = `Couldn’t delete: ${(e as Error).message}`;
+      setError(message);
+      announce(message);
+    }
+  }
+
   const toggle = () => {
     if (!recipe) return;
     toggleRecipe(item.id);
     const count = recipe.picked ? recipe.count - 1 : recipe.count + 1;
     announce(`${recipe.picked ? 'Removed from' : 'Added to'} shopping list. ${recipesLabel(count)}.`);
   };
+  if (mode === 'edit') return <ItemEditForm item={item} onDone={(saved) => finish(saved ? 'Saved.' : null)} />;
+  if (mode === 'report')
+    return <ReportItemForm item={item} onDone={(r) => finish(r === 'sent' ? 'Report sent. Thanks.' : null)} />;
+
   // The card is a plain View so VoiceOver can reach the links below; on iOS an accessible Pressable would swallow them.
   return (
     <View
@@ -381,6 +419,11 @@ function ItemCard({ item, doneLabel, onToggleDone, selected, onPress, onLayoutY,
           accessibilityState={onPress ? { selected } : undefined}
           style={({ pressed }) => [styles.main, { opacity: pressed && onPress ? 0.8 : 1 }]}>
           <ThemedText type="defaultBold">{item.name}</ThemedText>
+          <View style={[styles.badge, { borderColor: theme.border }]} accessibilityLabel={provenance.detail}>
+            <ThemedText type="smallBold" themeColor="textSecondary">
+              {provenance.badge}
+            </ThemedText>
+          </View>
           {item.description ? <ThemedText type="small">{item.description}</ThemedText> : null}
           {item.address ? (
             <ThemedText type="small" themeColor="textSecondary" selectable>
@@ -438,6 +481,36 @@ function ItemCard({ item, doneLabel, onToggleDone, selected, onPress, onLayoutY,
           <CheckRow checked={recipe.picked} onPress={toggle} accessibilityLabel={`Add ${item.name} to shopping list`}>
             <ThemedText type="smallBold">{recipe.picked ? 'On shopping list' : 'Shopping list'}</ThemedText>
           </CheckRow>
+        ) : null}
+        <View style={styles.links}>
+          {(
+            [
+              ['Edit', () => setMode('edit')],
+              ['Wrong?', () => setMode('report')],
+              ['Delete', remove],
+            ] as const
+          ).map(([label, press]) => (
+            <Pressable
+              key={label}
+              onPress={press}
+              accessibilityRole="button"
+              accessibilityLabel={label === 'Wrong?' ? `Report ${item.name} as wrong` : `${label} ${item.name}`}
+              style={styles.action}>
+              <ThemedText type="smallBold" style={{ color: label === 'Delete' ? theme.danger : theme.link }}>
+                {label}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+        {notice ? (
+          <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
+            {notice}
+          </ThemedText>
+        ) : null}
+        {error ? (
+          <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
+            {error}
+          </ThemedText>
         ) : null}
       </View>
     </View>
@@ -675,6 +748,8 @@ const styles = StyleSheet.create({
   links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.four },
   footer: { gap: Spacing.two },
   link: { minHeight: 44, justifyContent: 'center' },
+  action: { minHeight: 48, justifyContent: 'center' },
+  badge: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: Radius.row, paddingHorizontal: Spacing.two, paddingVertical: 2 },
   tagFilter: { gap: Spacing.one },
   // Rows sit 16 apart so each chip's 44pt hit area doesn't overlap the next row's.
   tags: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.two, rowGap: Spacing.three },
