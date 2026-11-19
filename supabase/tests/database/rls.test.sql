@@ -65,7 +65,7 @@ insert into public.search_lookups (query_key, fill) values ('cafe|city', '{}');
 -- supabase/tests/list_shares_test.sql; waitlist_signups and waitlist_attempts in waitlist.test.sql).
 select is(
   array(select c.relname::text from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' order by 1),
-  array['categories', 'feedback', 'item_photos', 'item_posts', 'item_reports', 'items', 'link_feedback', 'links', 'list_share_recipients', 'list_shares',
+  array['apple_tokens', 'categories', 'feedback', 'item_photos', 'item_posts', 'item_reports', 'items', 'link_feedback', 'links', 'list_share_recipients', 'list_shares',
     'lists', 'place_lookups', 'process_events', 'profiles', 'search_lookups', 'share_recipient_lookups',
     'waitlist_attempts', 'waitlist_signups'],
   'public tables are the ones these tests cover'
@@ -86,6 +86,17 @@ select is(
   ),
   array[]::text[],
   'place_lookups and search_lookups: no table privileges for anon or authenticated'
+);
+-- HAN-112: Apple refresh tokens are server-only (apple-token and delete-account functions), even for their owner.
+select is(
+  array(
+    select r || ' ' || p
+    from unnest(array['anon', 'authenticated']) r,
+      unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) p
+    where has_table_privilege(r, 'public.apple_tokens', p)
+  ),
+  array[]::text[],
+  'apple_tokens: no table privileges for anon or authenticated'
 );
 
 -- ---------- reads: A sees only A's rows ----------

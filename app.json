@@ -23,7 +23,8 @@
       "supportsTablet": false,
       "config": {
         "usesNonExemptEncryption": false
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "ai.stashtag.app",
@@ -111,7 +112,8 @@
         {
           "faceIDPermission": "Stashtag uses Face ID to unlock the app when you turn on Face ID lock in Profile."
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,8 +1,9 @@
 // Supabase Edge Function. POST {confirm: "DELETE"} with the user's session (HAN-34).
 // Permanently deletes the caller's account, as described in legal/data-deletion.md: every row they own, their storage
-// objects, then the auth user. Uses the service role, which never leaves the server. Safe to retry: each step only
-// deletes what is left.
+// objects, then the auth user. An account that used Sign in with Apple has its Apple tokens revoked first (HAN-112).
+// Uses the service role, which never leaves the server. Safe to retry: each step only deletes what is left.
 import { createClient } from "@supabase/supabase-js";
+import { revokeStoredAppleTokens } from "../_shared/apple.ts";
 
 declare const Deno: { env: { get(k: string): string | undefined }; serve(h: (r: Request) => Promise<Response>): void };
 
@@ -18,7 +19,7 @@ const json = (b: unknown, status = 200) =>
 // Children before parents, so nothing is left behind if a foreign key's cascade ever changes.
 // Keep in step with every table that has a user_id (legal/data-deletion.md section 3).
 const TABLES = [
-  "feedback", "link_feedback", "item_reports", "process_events",
+  "apple_tokens", "feedback", "link_feedback", "item_reports", "process_events",
   "item_photos", "item_posts", "list_shares",
   "items", "lists", "categories", "links",
 ] as const;
@@ -45,6 +46,9 @@ Deno.serve(async (req) => {
     console.error("[delete-account]", step, message);
     return json({ error: `Couldn’t finish deleting your ${step}. Please try again.` }, 500);
   };
+
+  // Before apple_tokens is emptied below. Also removes Stashtag from the user's "Sign in with Apple" list.
+  await revokeStoredAppleTokens(db, (k) => Deno.env.get(k), userId);
 
   for (const table of TABLES) {
     const { error } = await db.from(table).delete().eq("user_id", userId);
