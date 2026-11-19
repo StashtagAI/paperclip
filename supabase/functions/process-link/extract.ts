@@ -28,6 +28,8 @@ export function ground(ex: Extraction, c: Content, linked: LinkedData[], dropped
     if (!n || (!inCapture && !match)) { dropped?.push(it.name); continue; }
     const g = { name: it.name, description: it.description } as typeof it;
     const sources: Record<string, "capture" | "linked_site" | "search" | "places_lookup"> = {};
+    // The name passed the check above: it is in the post's text, otherwise it matches a linked page. The badge reads this.
+    sources.name = inCapture ? "capture" : "linked_site";
     if (it.description) sources.description = "capture";
     if (it.address && capture.includes(norm(it.address))) { g.address = it.address; sources.address = "capture"; }
     if (match) {
