@@ -28,6 +28,14 @@ for (const [key, store] of [['appStore', config.appStore], ['googlePlay', config
 const abs = (path = '') => new URL(path, site).href;
 const ios = config.appStore.url ? config.appStore : null;
 const android = config.googlePlay.url ? config.googlePlay : null;
+
+// The launch waitlist (HAN-100) replaces each store button that has no listing yet. WAITLIST_ENDPOINT overrides the
+// configured edge function URL for a local test build.
+const waitlistOn = !ios || !android;
+const endpoint = waitlistOn ? new URL(process.env.WAITLIST_ENDPOINT || config.waitlist?.endpoint || 'about:blank') : null;
+if (endpoint && !(endpoint.protocol === 'https:' || /^(localhost|127\.0\.0\.1)$/.test(endpoint.hostname))) {
+  throw new Error('waitlist.endpoint must be the https URL of the waitlist edge function while a store link is empty');
+}
 const css = readFileSync(join(root, 'src', 'styles.css'), 'utf8').trim();
 const js = readFileSync(join(root, 'src', 'platform.js'), 'utf8').trim();
 const year = new Date().getFullYear();
@@ -41,20 +49,53 @@ const jsonLd = (data) => JSON.stringify(data, null, 2).replace(/</g, '\\u003c');
 // ---------------------------------------------------------------------------------------------------------------
 // Store buttons
 
-/** One store button: a link when the listing exists, otherwise a "Coming soon" label that links nowhere. */
-function storeButton(store, platform, name) {
-  const body = (small) => `<span class="store-small">${small}</span> <span class="store-name">${name}</span>`;
-  if (store) {
-    return `<li data-platform="${platform}"><a class="store" href="${esc(store.url)}">${body('Download on')}</a></li>`;
-  }
-  return `<li data-platform="${platform}"><p class="store store-soon">${body('Coming soon to')}</p></li>`;
+/** One store button, for a listing that exists. */
+const storeButton = (store, platform, name) =>
+  `<li data-platform="${platform}"><a class="store" href="${esc(store.url)}"><span class="store-small">Download on</span> <span class="store-name">${name}</span></a></li>`;
+
+/**
+ * The waitlist form. A plain POST to the edge function, which redirects to /waitlist/thanks/ or /waitlist/try-again/;
+ * platform.js submits it inline instead. `id` keeps the ids unique when a page has two forms.
+ */
+function waitlistForm(id) {
+  const w = content.waitlist;
+  const ids = { email: `${id}-email`, msg: `${id}-msg`, note: `${id}-note` };
+  // With one store live the platform is known; with neither, the visitor can say which phone (platform.js guesses).
+  const platform = !ios && !android
+    ? `<fieldset class="platforms">
+                <legend>${esc(w.platformLegend)}</legend>
+                <label><input type="radio" name="platform" value="ios"> iPhone</label>
+                <label><input type="radio" name="platform" value="android"> Android</label>
+              </fieldset>`
+    : `<input type="hidden" name="platform" value="${ios ? 'android' : 'ios'}">`;
+  const messages = ['sending', 'done', 'invalid', 'limited', 'failed'].map((k) => `data-${k}="${esc(w[k])}"`).join(' ');
+  // The hero form is the #waitlist that llms.txt points to.
+  return `<form class="waitlist"${id === 'hero' ? ' id="waitlist"' : ''} method="post" action="${esc(endpoint.href)}" ${messages}>
+            <p class="waitlist-intro">${esc(w.intro)}</p>
+            <input type="hidden" name="source" value="${id}">
+            <div class="waitlist-fields">
+              <div class="field">
+                <label for="${ids.email}">${esc(w.emailLabel)}</label>
+                <input id="${ids.email}" type="email" name="email" required maxlength="254" autocomplete="email"
+                  autocapitalize="off" spellcheck="false" aria-describedby="${ids.note} ${ids.msg}">
+              </div>
+              ${platform}
+              <div class="hp"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+              <button type="submit">${esc(w.submit)}</button>
+              <p class="waitlist-note" id="${ids.note}">${esc(w.note)} <a href="/privacy/">Privacy Policy</a></p>
+            </div>
+            <p class="waitlist-msg" id="${ids.msg}" role="status" tabindex="-1"></p>
+          </form>`;
 }
 
-const stores = (label) =>
-  `<ul class="stores" aria-label="${esc(label)}">
-          ${storeButton(ios, 'ios', 'App Store')}
-          ${storeButton(android, 'android', 'Google Play')}
-        </ul>`;
+/** Store buttons for the live listings, and the waitlist form for the rest. */
+const stores = (label, id) => {
+  const live = [ios && storeButton(ios, 'ios', 'App Store'), android && storeButton(android, 'android', 'Google Play')].filter(Boolean);
+  return [
+    live.length ? `<ul class="stores" aria-label="${esc(label)}">\n          ${live.join('\n          ')}\n        </ul>` : '',
+    waitlistOn ? waitlistForm(id) : '',
+  ].filter(Boolean).join('\n          ');
+};
 
 // ---------------------------------------------------------------------------------------------------------------
 // Structured data
@@ -116,17 +157,18 @@ const structuredData = {
 
 const OG_ALT = `${config.name}: save Instagram and TikTok posts, get organized lists such as Eats › Restaurants › Denver. Shown beside the app's home screen.`;
 
-function page({ path, title, description, main, structured = null, script = false, index = true }) {
+function page({ path, title, description, main, structured = null, script = false, form = false, index = true }) {
   const url = abs(path);
   const csp = [
     "default-src 'none'",
     "img-src 'self'",
-    // Same-origin fetches only, so in-page tools such as Lighthouse can read robots.txt and llms.txt.
-    "connect-src 'self'",
+    // Same origin, so in-page tools such as Lighthouse can read robots.txt and llms.txt, plus the waitlist function.
+    `connect-src 'self'${form && script ? ` ${endpoint.origin}` : ''}`,
     `style-src ${sha256(css)}`,
     script ? `script-src ${sha256(js)}` : "script-src 'none'",
     "base-uri 'none'",
-    "form-action 'none'",
+    // 'self' as well: the function answers a plain form post with a redirect back to this site.
+    form ? `form-action 'self' ${endpoint.origin}` : "form-action 'none'",
   ].join('; ');
   const smartBanner =
     path === '' && ios?.appId ? `\n    <meta name="apple-itunes-app" content="app-id=${esc(ios.appId)}">` : '';
@@ -201,7 +243,7 @@ const home = `      <section class="hero" aria-labelledby="hero-title">
             <h1 id="hero-title">${esc(config.name)}</h1>
             <p class="tagline">${esc(content.tagline)}</p>
             <p class="lede">${esc(content.valueProp)}</p>
-            ${stores(`Get ${config.name}`)}
+            ${stores(`Get ${config.name}`, 'hero')}
           </div>
           <picture class="hero-shot">
             <source srcset="/assets/home-dark.webp" media="(prefers-color-scheme: dark)" type="image/webp">
@@ -246,7 +288,7 @@ const home = `      <section class="hero" aria-labelledby="hero-title">
       <section class="section section-alt cta" aria-labelledby="cta-title">
         <div class="wrap">
           <h2 id="cta-title">Turn your saved posts into plans</h2>
-          ${stores(`Get ${config.name}`)}
+          ${stores(`Get ${config.name}`, 'cta')}
         </div>
       </section>`;
 
@@ -361,7 +403,8 @@ ${['', ...content.legalPages.map((p) => `${p.slug}/`)]
 </urlset>
 `;
 
-const storeLine = (store, name) => (store ? `${name}: ${store.url}` : `${name}: coming soon`);
+const storeLine = (store, name) =>
+  store ? `${name}: ${store.url}` : `${name}: coming soon. Join the launch waitlist at ${abs('#waitlist')}`;
 
 const llms = `# ${config.name}
 
@@ -412,8 +455,54 @@ const write = (path, body) => {
 
 write(
   'index.html',
-  page({ path: '', title: content.title, description: content.description, main: home, structured: structuredData, script: true }),
+  page({
+    path: '',
+    title: content.title,
+    description: content.description,
+    main: home,
+    structured: structuredData,
+    script: true,
+    form: waitlistOn,
+  }),
 );
+// Where the no-JavaScript waitlist form lands. Not indexed and not in the sitemap.
+if (waitlistOn) {
+  const w = content.waitlist;
+  write(
+    'waitlist/thanks/index.html',
+    page({
+      path: 'waitlist/thanks/',
+      title: `${w.thanksTitle} | ${config.name}`,
+      description: w.thanksText,
+      main: `      <section class="section">
+        <div class="wrap narrow">
+          <h1>${esc(w.thanksTitle)}</h1>
+          <p>${esc(w.thanksText)} To be removed, see the <a href="/privacy/">Privacy Policy</a>.</p>
+          <p><a href="/">Back to the ${esc(config.name)} home page</a></p>
+        </div>
+      </section>`,
+      index: false,
+    }),
+  );
+  write(
+    'waitlist/try-again/index.html',
+    page({
+      path: 'waitlist/try-again/',
+      title: `${w.tryAgainTitle} | ${config.name}`,
+      description: w.tryAgainText,
+      main: `      <section class="section">
+        <div class="wrap narrow">
+          <h1>${esc(w.tryAgainTitle)}</h1>
+          <p>${esc(w.tryAgainText)}</p>
+          ${waitlistForm('try-again')}
+          <p><a href="/">Back to the ${esc(config.name)} home page</a></p>
+        </div>
+      </section>`,
+      form: true,
+      index: false,
+    }),
+  );
+}
 for (const p of content.legalPages) write(`${p.slug}/index.html`, legalPage(p));
 write(
   '404.html',
@@ -438,3 +527,4 @@ write('llms-full.txt', llmsFull);
 console.log(`Built ${dist} for ${abs()}`);
 console.log(`  App Store: ${ios ? ios.url : 'coming soon'}${ios?.appId ? ` (smart banner app-id ${ios.appId})` : ''}`);
 console.log(`  Google Play: ${android ? android.url : 'coming soon'}`);
+if (waitlistOn) console.log(`  Waitlist: ${endpoint.href}`);

@@ -9,5 +9,8 @@
   "googlePlay": {
     "url": "",
     "packageId": "ai.stashtag.app"
+  },
+  "waitlist": {
+    "endpoint": "https://qzaijqrkriuhlqbwmyto.supabase.co/functions/v1/waitlist"
   }
 }

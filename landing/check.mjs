@@ -55,6 +55,36 @@ check(
 );
 check(html.includes('apple-itunes-app') === Boolean(config.appStore.appId), 'Smart app banner does not match appId');
 
+// Waitlist (HAN-100): a plain POST form in place of each missing listing, allowed by the CSP, landing on pages that
+// exist; gone once both listings are live.
+const waitlistOn = !config.appStore.url || !config.googlePlay.url;
+const forms = [...html.matchAll(/<form class="waitlist"[^>]*action="([^"]+)"[\s\S]*?<\/form>/g)];
+check(forms.length === (waitlistOn ? 2 : 0), `waitlist: ${forms.length} forms on the home page, expected ${waitlistOn ? 2 : 0}`);
+for (const [form, action] of forms) {
+  const fn = new URL(decode(action));
+  check(fn.href === (process.env.WAITLIST_ENDPOINT || config.waitlist.endpoint), 'waitlist: form action is not waitlist.endpoint');
+  check(/method="post"/.test(form), 'waitlist: form must be method="post" so it works without JavaScript');
+  check(/<label for="([^"]+)">[^<]+<\/label>\s*<input id="\1" type="email" name="email" required/.test(form),
+    'waitlist: email field needs a label, type="email" and required');
+  check(/<div class="hp"><label>[^<]+<input type="text" name="website" tabindex="-1"/.test(form), 'waitlist: honeypot missing');
+  check(!/name="(platform|email)"[^>]*\bvalue="[^"]*"[^>]*type="radio"/.test(form), 'waitlist: no platform preselected in HTML');
+  check(new RegExp(`form-action 'self' ${fn.origin}[;"]`).test(html), 'waitlist: CSP form-action does not allow the function');
+  check(html.includes(`connect-src 'self' ${fn.origin};`), 'waitlist: CSP connect-src does not allow the function');
+  const pending = [!config.appStore.url && 'ios', !config.googlePlay.url && 'android'].filter(Boolean);
+  for (const p of ['ios', 'android']) {
+    check(form.includes(`value="${p}"`) === pending.includes(p), `waitlist: platform "${p}" offered while its listing is ${pending.includes(p) ? 'missing' : 'live'}`);
+  }
+}
+for (const path of ['waitlist/thanks/index.html', 'waitlist/try-again/index.html']) {
+  check(existsSync(join(root, 'dist', path)) === waitlistOn, `${path}: ${waitlistOn ? 'missing' : 'should not be built'}`);
+  if (waitlistOn) check(read(path).includes('<meta name="robots" content="noindex">'), `${path}: should be noindex`);
+}
+check(!read('sitemap.xml').includes('waitlist/'), 'sitemap.xml: lists a waitlist page');
+check(!waitlistOn || /coming soon\. Join the launch waitlist at https:\/\/\S+#waitlist/.test(read('llms.txt')),
+  'llms.txt: missing the waitlist line');
+check(!waitlistOn || content.faq.some(({ a }) => /waitlist/.test(a)), 'FAQ: no answer mentions the waitlist');
+check(!waitlistOn || /waitlist/i.test(read('privacy/index.html')), 'privacy: does not mention the launch waitlist');
+
 // robots.txt allows the AI crawlers by name and points at the sitemap.
 const robots = read('robots.txt');
 for (const bot of ['GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'Claude-SearchBot', 'Claude-User',
@@ -130,7 +160,7 @@ for (const [name, v] of Object.entries(schemes)) {
     const r = ratio(v[fg], v[bg]);
     check(r >= 4.5, `${name}: --${fg} on --${bg} is ${r.toFixed(2)}:1, needs 4.5:1`);
   }
-  // Non-text: the dashed "Coming soon" outline and focus ring need 3:1 against the page.
+  // Non-text: the waitlist field border (--outline) and the focus ring need 3:1 against the page.
   for (const [fg, bg] of [['outline', 'bg'], ['outline', 'bg-alt'], ['focus', 'bg'], ['focus', 'bg-alt']]) {
     const r = ratio(v[fg], v[bg]);
     check(r >= 3, `${name}: --${fg} on --${bg} is ${r.toFixed(2)}:1, needs 3:1`);

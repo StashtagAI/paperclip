@@ -251,10 +251,112 @@ a.store:hover {
   font-weight: 700;
 }
 
-.store-soon {
-  background: transparent;
+/* Launch waitlist (HAN-100): stands in for a store button until that listing is live */
+
+.waitlist {
+  max-width: 30rem;
+  margin: 1.5rem 0 0;
+}
+
+.stores + .waitlist {
+  margin-top: 1rem;
+}
+
+.cta .waitlist {
+  margin-inline: auto;
+  text-align: left;
+}
+
+.waitlist-intro {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.field label,
+.platforms legend {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.waitlist input[type='email'] {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
   color: var(--text);
-  border: 2px dashed var(--outline);
+  background: var(--bg-alt);
+  border: 2px solid var(--outline);
+  border-radius: 10px;
+}
+
+/* A thicker border as well as the message, so the error doesn't rely on colour. */
+.waitlist input[aria-invalid='true'] {
+  border-width: 4px;
+}
+
+.platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.platforms legend {
+  padding: 0;
+}
+
+.platforms label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+}
+
+.platforms input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: var(--link);
+}
+
+.hp {
+  display: none;
+}
+
+.waitlist button {
+  min-height: 56px;
+  margin-top: 0.75rem;
+  padding: 0.5rem 1.5rem;
+  border: 2px solid var(--store-bg);
+  border-radius: 12px;
+  background: var(--store-bg);
+  color: var(--store-text);
+  font: inherit;
+  font-size: 1.125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.waitlist button:hover {
+  text-decoration: underline;
+}
+
+.waitlist-note {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.waitlist-msg {
+  margin: 0.75rem 0 0;
+  font-weight: 700;
+}
+
+.waitlist-msg:empty {
+  margin: 0;
 }
 
 /* Sections */

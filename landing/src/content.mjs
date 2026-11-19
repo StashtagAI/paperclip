@@ -1,6 +1,14 @@
 // Page copy. The visible page, the JSON-LD and llms.txt are all built from this file, so the FAQ that
 // search engines and LLMs quote always matches what visitors see. Plain text only: no HTML.
 
+import { readFileSync } from 'node:fs';
+
+// The waitlist copy (and its FAQ entry) depends on which store listings are live.
+const config = JSON.parse(readFileSync(new URL('../site.config.json', import.meta.url), 'utf8'));
+const missing = [!config.appStore.url && 'the App Store', !config.googlePlay.url && 'Google Play'].filter(Boolean);
+/** Store names still to launch, e.g. "the App Store and Google Play". Empty once both listings are live. */
+export const comingSoon = missing.join(' and ');
+
 export const title = 'StashtagAI: save Instagram and TikTok posts as organized lists';
 
 export const description =
@@ -87,15 +95,45 @@ export const faq = [
       'Yes. Share any list with a link, and friends who sign in to StashtagAI can see the same places and add the ' +
       'list to their own, which is handy for a trip or a night out.',
   },
+  ...(comingSoon
+    ? [
+        {
+          q: 'When can I download StashtagAI?',
+          a:
+            `StashtagAI is coming soon to ${comingSoon}. Join the launch waitlist on ${new URL(config.siteUrl).host} with your ` +
+            'email address, and we will email you when it is available. We only use the address for that.',
+        },
+      ]
+    : []),
   {
     q: 'Is StashtagAI free?',
-    a: 'StashtagAI is free to download on iPhone and Android.',
+    a: `StashtagAI ${missing.length === 2 ? 'will be' : 'is'} free to download on iPhone and Android.`,
   },
   {
     q: 'Which phones does StashtagAI work on?',
     a: 'StashtagAI is an app for iPhone (iOS) and Android phones, from the App Store and Google Play.',
   },
 ];
+
+/** The launch waitlist form, shown in place of a store button until that listing is live (HAN-100). */
+export const waitlist = {
+  intro: `Coming soon to ${comingSoon}. Join the waitlist and we will email you when StashtagAI is out.`,
+  emailLabel: 'Email address',
+  platformLegend: 'Your phone (optional)',
+  submit: 'Join the waitlist',
+  note: 'We only use your email to tell you about the launch.',
+  sending: 'Adding you to the waitlist…',
+  done: "Thanks, you're on the list. We'll email you when StashtagAI is out.",
+  invalid: 'Enter a complete email address, like name@example.com.',
+  limited: 'Too many tries from this connection. Wait a few minutes, then try again.',
+  failed: `Something went wrong and you were not added. Try again, or email ${config.contactEmail}.`,
+  thanksTitle: "You're on the list",
+  thanksText: `Thanks. We'll email you when StashtagAI is on ${comingSoon || 'the App Store and Google Play'}. That is the only thing we use your address for.`,
+  tryAgainTitle: "We couldn't add you",
+  tryAgainText:
+    'Check that the email address is complete, like name@example.com. If it is, there may have been too many tries ' +
+    'from this connection: wait a few minutes, then try again.',
+};
 
 /** Legal pages, built from the Markdown in ../legal so the store listings and the site share one copy. */
 export const legalPages = [

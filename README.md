@@ -18,6 +18,7 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 | `supabase/functions/process-link/` | Extraction edge function (owned by Extraction, HAN-6) |
 | `supabase/functions/delete-account/` | Deletes the caller's rows, storage objects and auth user with the service role (HAN-34, matches `legal/data-deletion.md`). Deploy with `supabase functions deploy delete-account` |
 | `supabase/functions/place-details/` | Fills in the Google rating and opening hours for restaurants on an Eats list when it opens, refreshed weekly; uses `GOOGLE_PLACES_API_KEY` and counts toward process-link's daily spend caps (HAN-83). Deploy with `supabase functions deploy place-details` |
+| `supabase/functions/waitlist/` | Launch waitlist signups from the landing page; the only write path to `waitlist_signups` (HAN-100, see `landing/README.md`). Deploy with `supabase functions deploy waitlist --no-verify-jwt` |
 
 ## Setup
 
