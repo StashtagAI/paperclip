@@ -13,6 +13,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { deleteCategory, fetchKind, NAME_LIMITS, renameCategory, type KindCategory } from '@/lib/data';
+import { progressText } from '@/lib/done-progress';
 import { groupByPlace } from '@/lib/places';
 import { recipesLabel } from '@/lib/shopping-list';
 import { useShoppingSelection } from '@/lib/shopping-selection';
@@ -167,7 +168,12 @@ export default function KindScreen() {
               key={list.id}
               href={{ pathname: '/list/[listId]', params: { listId: list.id } }}
               title={list.name}
-              subtitle={plural(list.itemCount, 'item')}
+              subtitle={
+                list.doneCount
+                  ? progressText(kind, list.doneCount, list.itemCount)
+                  : plural(list.itemCount, 'item')
+              }
+              progress={list.doneCount ? { done: list.doneCount, total: list.itemCount } : undefined}
             />
           ))}
         </View>

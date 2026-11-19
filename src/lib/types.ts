@@ -24,6 +24,16 @@ export const KIND_SUBTITLES: Record<Kind, string> = {
   watch: 'Shows, films, books',
 };
 
+/** What "done" means for an item of each kind, e.g. "3 of 8 tried" (HAN-41). */
+export const DONE_LABELS: Record<Kind, string> = {
+  eats: 'Tried',
+  travel: 'Visited',
+  recipes: 'Cooked',
+  do: 'Done',
+  shop: 'Bought',
+  watch: 'Watched',
+};
+
 export const PLATFORM_LABELS: Record<Platform, string> = {
   instagram: 'Instagram',
   tiktok: 'TikTok',
@@ -57,6 +67,8 @@ export type ItemRow = {
   tags: string[];
   /** Set when the user changed the item, so it no longer reads as the post's own words. */
   edited_at: string | null;
+  /** When the user marked it Visited/Tried/Cooked/Done (HAN-41); null if not yet. */
+  done_at: string | null;
   /** The user's own note and 1–5 star rating (HAN-45); process-link never writes these. */
   note: string;
   rating: number | null;

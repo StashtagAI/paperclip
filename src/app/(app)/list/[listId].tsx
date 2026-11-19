@@ -9,9 +9,11 @@ import { CheckRow } from '@/components/check-row';
 import { DeleteButton } from '@/components/delete-button';
 import { DirectionsSheet } from '@/components/directions-sheet';
 import { DisplayNameForm } from '@/components/display-name-form';
+import { DoneCheck } from '@/components/done-check';
 import { PlaceFacts } from '@/components/google-place-info';
 import { ItemEditForm, ReportItemForm } from '@/components/item-forms';
 import { PlaceMap } from '@/components/place-map';
+import { ProgressBar } from '@/components/progress-bar';
 import { RenameForm } from '@/components/rename-form';
 import { Screen } from '@/components/screen';
 import { TextField } from '@/components/text-field';
@@ -36,16 +38,18 @@ import {
   removeShareRecipient,
   renameCategory,
   renameList,
+  setItemDone,
   shareList,
   stopSharingList,
 } from '@/lib/data';
+import { doneAnnouncement, progressText } from '@/lib/done-progress';
 import { hasCoords } from '@/lib/geo';
 import { provenanceOf, type ItemSources } from '@/lib/provenance';
 import { openShareSheet, shareMessage, shareUrl } from '@/lib/share';
 import { recipesLabel } from '@/lib/shopping-list';
 import { toggleRecipe, useShoppingSelection } from '@/lib/shopping-selection';
 import { filterByTag, tagCounts } from '@/lib/tag-filter';
-import type { ItemRow, Kind } from '@/lib/types';
+import { DONE_LABELS, type ItemRow, type Kind } from '@/lib/types';
 
 /** Kinds whose items are places: their lists get a map and directions (HAN-24). */
 const PLACE_KINDS: readonly Kind[] = ['eats', 'travel'];
@@ -135,6 +139,35 @@ export default function ListScreen() {
   const showShare = !!data && !editing && !!share.data && (recipients.length > 0 || !(token || shareOpen));
   // Picked recipes can come from several lists (HAN-74), so the button shows on every recipe list.
   const showShopping = !!data && !editing && recipes && picked.length > 0;
+
+  const total = data?.items.length ?? 0;
+  const doneCount = data?.items.filter((i) => i.done_at).length ?? 0;
+  const doneLabel = data ? DONE_LABELS[data.category.kind] : '';
+
+  // Optimistic: the check flips at once, then reverts if the save fails. Either way VoiceOver/TalkBack hear the result.
+  const [toggleError, setToggleError] = useState<string | null>(null);
+  const { update } = list;
+  const setDoneAt = useCallback(
+    (id: string, doneAt: string | null) =>
+      update((d) => ({ ...d, items: d.items.map((i) => (i.id === id ? { ...i, done_at: doneAt } : i)) })),
+    [update],
+  );
+  const toggleDone = async (item: ItemRow) => {
+    if (!data) return;
+    const kind = data.category.kind;
+    const done = !item.done_at;
+    setDoneAt(item.id, done ? new Date().toISOString() : null);
+    try {
+      setDoneAt(item.id, await setItemDone(item.id, done));
+      AccessibilityInfo.announceForAccessibility(
+        doneAnnouncement(kind, item.name, done, doneCount + (done ? 1 : -1), total),
+      );
+    } catch {
+      setDoneAt(item.id, item.done_at);
+      AccessibilityInfo.announceForAccessibility(`Couldn't save. ${item.name} is unchanged.`);
+      setToggleError(`Couldn't save ${item.name}. Check your connection and try again.`);
+    }
+  };
 
   // Pick up a stash deleted from its card.
   const firstFocus = useRef(true);
@@ -269,6 +302,14 @@ export default function ListScreen() {
       {data && tags.length ? (
         <Tags kind={data.category.kind} tags={tags} active={activeTag} total={data.items.length} onPick={pickTag} />
       ) : null}
+      {data && total ? (
+        <ProgressBar done={doneCount} total={total} label={progressText(data.category.kind, doneCount, total)} />
+      ) : null}
+      {toggleError ? (
+        <ThemedText themeColor="danger" accessibilityLiveRegion="polite">
+          {toggleError}
+        </ThemedText>
+      ) : null}
       {data?.items.length === 0 ? <ThemedText themeColor="textSecondary">No items in this list yet.</ThemedText> : null}
       {shown.map((item) => (
         <ItemCard
@@ -276,6 +317,11 @@ export default function ListScreen() {
           item={item}
           sources={item.link_id ? data?.sources[item.link_id]?.[item.name] : undefined}
           onChanged={refresh}
+          doneLabel={doneLabel}
+          onToggleDone={() => {
+            setToggleError(null);
+            toggleDone(item);
+          }}
           selected={item.id === selectedId || (recipes && picked.includes(item.id))}
           onPress={places ? () => select(item) : undefined}
           recipe={recipes ? { picked: picked.includes(item.id), count: picked.length } : undefined}
@@ -301,6 +347,8 @@ const itemsLabel = (n: number) => (n === 1 ? ' and its 1 item' : n ? ` and all $
 type ItemCardProps = {
   item: ItemRow;
   sources: ItemSources | undefined;
+  doneLabel: string;
+  onToggleDone: () => void;
   selected: boolean;
   onPress?: () => void;
   onLayoutY: (y: number) => void;
@@ -309,7 +357,8 @@ type ItemCardProps = {
   recipe?: { picked: boolean; count: number };
 };
 
-function ItemCard({ item, sources, selected, onPress, onLayoutY, onChanged, recipe }: ItemCardProps) {
+/** The check sits beside the tappable body rather than inside it, so each is its own VoiceOver/TalkBack element. */
+function ItemCard({ item, sources, doneLabel, onToggleDone, selected, onPress, onLayoutY, onChanged, recipe }: ItemCardProps) {
   const theme = useTheme();
   // Edit, report and delete (HAN-40).
   const [mode, setMode] = useState<'view' | 'edit' | 'report'>('view');
@@ -359,108 +408,111 @@ function ItemCard({ item, sources, selected, onPress, onLayoutY, onChanged, reci
           borderColor: selected ? theme.tint : theme.border,
         },
       ]}>
-      <Pressable
-        onPress={onPress}
-        disabled={!onPress}
-        accessible={!!onPress}
-        accessibilityRole={onPress ? 'button' : undefined}
-        accessibilityHint={onPress ? 'Get directions' : undefined}
-        accessibilityState={onPress ? { selected } : undefined}
-        style={({ pressed }) => [styles.main, { opacity: pressed ? 0.8 : 1 }]}>
-        <ThemedText type="defaultBold">{item.name}</ThemedText>
-        <View style={[styles.badge, { borderColor: theme.border }]} accessibilityLabel={provenance.detail}>
-          <ThemedText type="smallBold" themeColor="textSecondary">
-            {provenance.badge}
-          </ThemedText>
-        </View>
-        {item.description ? <ThemedText type="small">{item.description}</ThemedText> : null}
-        {item.address ? (
-          <ThemedText type="small" themeColor="textSecondary" selectable>
-            {item.address}
-          </ThemedText>
-        ) : null}
-      </Pressable>
-      <PlaceFacts item={item} />
-      {item.rating ? (
-        <ThemedText type="small" style={{ color: theme.link }} accessibilityLabel={`Your rating: ${ratingLabel(item.rating)}`}>
-          {'★'.repeat(item.rating)}
-          {'☆'.repeat(5 - item.rating)}
-        </ThemedText>
-      ) : null}
-      {item.note ? (
-        <ThemedText type="small" numberOfLines={2} accessibilityLabel={`Your note: ${item.note}`}>
-          {item.note}
-        </ThemedText>
-      ) : null}
-      <View style={styles.links}>
-        {recipe ? (
-          <Pressable
-            onPress={() => router.push({ pathname: '/recipe/[itemId]', params: { itemId: item.id } })}
-            accessibilityRole="button"
-            accessibilityLabel={`Recipe for ${item.name}`}
-            accessibilityHint="Ingredients and steps"
-            style={styles.link}>
-            <ThemedText type="small" style={{ color: theme.link }}>
-              Recipe ›
-            </ThemedText>
-          </Pressable>
-        ) : null}
+      <DoneCheck checked={!!item.done_at} label={`${doneLabel}, ${item.name}`} onToggle={onToggleDone} />
+      <View style={styles.body}>
         <Pressable
-          onPress={() => router.push({ pathname: '/item/[itemId]', params: { itemId: item.id } })}
-          accessibilityRole="button"
-          accessibilityLabel={`Notes and photos for ${item.name}`}
-          style={styles.link}>
-          <ThemedText type="small" style={{ color: theme.link }}>
-            Notes & photos ›
-          </ThemedText>
+          onPress={onPress}
+          disabled={!onPress}
+          accessible={!!onPress}
+          accessibilityRole={onPress ? 'button' : undefined}
+          accessibilityHint={onPress ? 'Get directions' : undefined}
+          accessibilityState={onPress ? { selected } : undefined}
+          style={({ pressed }) => [styles.main, { opacity: pressed && onPress ? 0.8 : 1 }]}>
+          <ThemedText type="defaultBold">{item.name}</ThemedText>
+          <View style={[styles.badge, { borderColor: theme.border }]} accessibilityLabel={provenance.detail}>
+            <ThemedText type="smallBold" themeColor="textSecondary">
+              {provenance.badge}
+            </ThemedText>
+          </View>
+          {item.description ? <ThemedText type="small">{item.description}</ThemedText> : null}
+          {item.address ? (
+            <ThemedText type="small" themeColor="textSecondary" selectable>
+              {item.address}
+            </ThemedText>
+          ) : null}
         </Pressable>
-        {item.link_id ? (
+        <PlaceFacts item={item} />
+        {item.rating ? (
+          <ThemedText type="small" style={{ color: theme.link }} accessibilityLabel={`Your rating: ${ratingLabel(item.rating)}`}>
+            {'★'.repeat(item.rating)}
+            {'☆'.repeat(5 - item.rating)}
+          </ThemedText>
+        ) : null}
+        {item.note ? (
+          <ThemedText type="small" numberOfLines={2} accessibilityLabel={`Your note: ${item.note}`}>
+            {item.note}
+          </ThemedText>
+        ) : null}
+        <View style={styles.links}>
+          {recipe ? (
+            <Pressable
+              onPress={() => router.push({ pathname: '/recipe/[itemId]', params: { itemId: item.id } })}
+              accessibilityRole="button"
+              accessibilityLabel={`Recipe for ${item.name}`}
+              accessibilityHint="Ingredients and steps"
+              style={styles.link}>
+              <ThemedText type="small" style={{ color: theme.link }}>
+                Recipe ›
+              </ThemedText>
+            </Pressable>
+          ) : null}
           <Pressable
-            onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: item.link_id! } })}
+            onPress={() => router.push({ pathname: '/item/[itemId]', params: { itemId: item.id } })}
             accessibilityRole="button"
-            accessibilityLabel={`Source post for ${item.name}`}
+            accessibilityLabel={`Notes and photos for ${item.name}`}
             style={styles.link}>
             <ThemedText type="small" style={{ color: theme.link }}>
-              Source post ›
+              Notes & photos ›
             </ThemedText>
           </Pressable>
+          {item.link_id ? (
+            <Pressable
+              onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: item.link_id! } })}
+              accessibilityRole="button"
+              accessibilityLabel={`Source post for ${item.name}`}
+              style={styles.link}>
+              <ThemedText type="small" style={{ color: theme.link }}>
+                Source post ›
+              </ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
+        {recipe ? (
+          <CheckRow checked={recipe.picked} onPress={toggle} accessibilityLabel={`Add ${item.name} to shopping list`}>
+            <ThemedText type="smallBold">{recipe.picked ? 'On shopping list' : 'Shopping list'}</ThemedText>
+          </CheckRow>
+        ) : null}
+        <View style={styles.links}>
+          {(
+            [
+              ['Edit', () => setMode('edit')],
+              ['Wrong?', () => setMode('report')],
+              ['Delete', remove],
+            ] as const
+          ).map(([label, press]) => (
+            <Pressable
+              key={label}
+              onPress={press}
+              accessibilityRole="button"
+              accessibilityLabel={label === 'Wrong?' ? `Report ${item.name} as wrong` : `${label} ${item.name}`}
+              style={styles.action}>
+              <ThemedText type="smallBold" style={{ color: label === 'Delete' ? theme.danger : theme.link }}>
+                {label}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+        {notice ? (
+          <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
+            {notice}
+          </ThemedText>
+        ) : null}
+        {error ? (
+          <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
+            {error}
+          </ThemedText>
         ) : null}
       </View>
-      {recipe ? (
-        <CheckRow checked={recipe.picked} onPress={toggle} accessibilityLabel={`Add ${item.name} to shopping list`}>
-          <ThemedText type="smallBold">{recipe.picked ? 'On shopping list' : 'Shopping list'}</ThemedText>
-        </CheckRow>
-      ) : null}
-      <View style={styles.links}>
-        {(
-          [
-            ['Edit', () => setMode('edit')],
-            ['Wrong?', () => setMode('report')],
-            ['Delete', remove],
-          ] as const
-        ).map(([label, press]) => (
-          <Pressable
-            key={label}
-            onPress={press}
-            accessibilityRole="button"
-            accessibilityLabel={label === 'Wrong?' ? `Report ${item.name} as wrong` : `${label} ${item.name}`}
-            style={styles.action}>
-            <ThemedText type="smallBold" style={{ color: label === 'Delete' ? theme.danger : theme.link }}>
-              {label}
-            </ThemedText>
-          </Pressable>
-        ))}
-      </View>
-      {notice ? (
-        <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
-          {notice}
-        </ThemedText>
-      ) : null}
-      {error ? (
-        <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
-          {error}
-        </ThemedText>
-      ) : null}
     </View>
   );
 }
@@ -684,7 +736,14 @@ function Tags({ kind, tags, active, total, onPick }: TagsProps) {
 }
 
 const styles = StyleSheet.create({
-  card: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.one },
+  card: {
+    flexDirection: 'row',
+    padding: Spacing.three,
+    borderRadius: Radius.row,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    gap: Spacing.three,
+  },
+  body: { flex: 1, gap: Spacing.one },
   main: { gap: Spacing.one },
   links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.four },
   footer: { gap: Spacing.two },

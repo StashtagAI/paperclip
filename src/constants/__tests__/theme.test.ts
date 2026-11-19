@@ -92,6 +92,16 @@ describe.each(modes)('$name contrast (AA, 4.5:1)', ({ scheme, c }) => {
     expect(contrast(c.onTint, c.tint)).toBeGreaterThanOrEqual(AA);
   });
 
+  // HAN-41: the done check (mark on a success fill, empty ring in muted text) and the list progress bar.
+  it('done check and progress bar', () => {
+    expect(contrast(c.onSuccess, c.success)).toBeGreaterThanOrEqual(AA);
+    for (const bg of [c.background, c.backgroundElement]) {
+      expect(contrast(c.success, bg)).toBeGreaterThanOrEqual(3);
+      expect(contrast(c.textSecondary, bg)).toBeGreaterThanOrEqual(3);
+    }
+    expect(contrast(c.success, c.progressTrack)).toBeGreaterThanOrEqual(3);
+  });
+
   it('destructive button label on danger', () => {
     expect(contrast(c.onDanger, c.danger)).toBeGreaterThanOrEqual(AA);
   });

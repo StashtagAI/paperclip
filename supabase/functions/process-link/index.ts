@@ -1,5 +1,5 @@
 // Supabase Edge Function entry point. The request handling lives in handler.ts so it can be tested without Deno.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "@supabase/supabase-js";
 import { handle } from "./handler.ts";
 
 declare const Deno: { env: { get(k: string): string | undefined }; serve(h: (r: Request) => Promise<Response>): void };

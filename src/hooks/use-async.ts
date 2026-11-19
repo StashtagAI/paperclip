@@ -26,9 +26,14 @@ export function useAsync<T>(load: () => Promise<T>, deps: readonly unknown[]) {
   /** Re-reads without `loading`, so a pull-to-refresh spinner doesn't flash on each poll. */
   const poll = useCallback(() => fetch(true), [fetch]);
 
+  /** Local edit to the loaded data, e.g. an optimistic toggle; no-op before the first load. */
+  const update = useCallback((f: (data: T) => T) => {
+    setState((s) => (s.data === undefined ? s : { ...s, data: f(s.data) }));
+  }, []);
+
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  return { ...state, refresh, poll };
+  return { ...state, refresh, poll, update };
 }

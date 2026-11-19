@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { announce } from '@/lib/announce';
 import { MIN_PASSWORD_LENGTH, RESEND_COOLDOWN_SECONDS, resetSentMessage } from '@/lib/password-reset';
+import { retryAfterSeconds, sendLinkErrorMessage, signInErrorMessage, waitPhrase } from '@/lib/rate-limit';
 import { supabase } from '@/lib/supabase';
 
 type Mode = 'password' | 'link' | 'reset';
@@ -17,6 +18,7 @@ type Mode = 'password' | 'link' | 'reset';
  * Email + password sign-in (the default while testing), with passwordless as an alternative.
  * Passwordless: Supabase emails a magic link (opens /auth/callback) and, if the email template
  * includes {{ .Token }}, a 6-digit code that can be typed here instead.
+ * Supabase Auth rate-limits emails and attempts (HAN-38); the resend buttons count down its per-address window.
  * Forgot password (HAN-70): the same two ways of proving the inbox is yours — the reset link or its code — have to
  * happen before the password can change; then the root layout shows /reset-password.
  */
@@ -59,7 +61,7 @@ export default function SignIn() {
     setNotice(null);
     const { error } = await supabase.auth.signInWithPassword({ email: address, password });
     setBusy(false);
-    if (error) fail(error.message);
+    if (error) fail(signInErrorMessage(error));
     // On success the auth listener swaps the stack to the app.
   }
 
@@ -76,7 +78,7 @@ export default function SignIn() {
       options: { emailRedirectTo: Linking.createURL('auth/callback') },
     });
     setBusy(false);
-    if (error) return fail(error.message);
+    if (error) return fail(signInErrorMessage(error));
     // No session means the project still requires email confirmation.
     if (!data.session) {
       const message = `Account created. Confirm it from the email sent to ${address}, then sign in.`;
@@ -95,9 +97,20 @@ export default function SignIn() {
       options: { emailRedirectTo: Linking.createURL('auth/callback') },
     });
     setBusy(false);
-    if (error) return fail(error.message);
-    setSentTo(address);
-    announce(`Sign-in link sent to ${address}`);
+    if (error) {
+      const retry = retryAfterSeconds(error);
+      if (retry) setCooldown(retry);
+      return fail(sendLinkErrorMessage(error));
+    }
+    setCooldown(RESEND_COOLDOWN_SECONDS);
+    if (sentTo) {
+      const message = `A new sign-in email was sent to ${address}.`;
+      setNotice(message);
+      announce(message);
+    } else {
+      setSentTo(address);
+      announce(`Sign-in link sent to ${address}`);
+    }
   }
 
   /** Emails a reset link and code. Nothing about the account changes until one of them is used. */
@@ -109,7 +122,11 @@ export default function SignIn() {
       redirectTo: Linking.createURL('auth/callback'),
     });
     setBusy(false);
-    if (error) return fail(error.message);
+    if (error) {
+      const retry = retryAfterSeconds(error);
+      if (retry) setCooldown(retry);
+      return fail(signInErrorMessage(error));
+    }
     setSentTo(address);
     setCode('');
     setCooldown(RESEND_COOLDOWN_SECONDS);
@@ -127,7 +144,7 @@ export default function SignIn() {
       type: mode === 'reset' ? 'recovery' : 'email',
     });
     setBusy(false);
-    if (error) fail(error.message);
+    if (error) fail(signInErrorMessage(error));
   }
 
   function switchMode(next: Mode) {
@@ -236,7 +253,22 @@ export default function SignIn() {
           </ThemedText>
           {codeField}
           <Button title="Sign in with code" onPress={verifyCode} loading={busy} disabled={code.trim().length < 6} />
-          <Button title="Use a different email" variant="secondary" onPress={() => setSentTo(null)} />
+          <Button
+            title={cooldown > 0 ? `Resend email in ${cooldown}s` : 'Resend email'}
+            accessibilityLabel={cooldown > 0 ? `Resend email, available in ${waitPhrase(cooldown)}` : 'Resend email'}
+            variant="secondary"
+            onPress={sendLink}
+            disabled={busy || cooldown > 0}
+          />
+          <Button
+            title="Use a different email"
+            variant="secondary"
+            onPress={() => {
+              setSentTo(null);
+              setError(null);
+              setNotice(null);
+            }}
+          />
         </>
       ) : (
         <>

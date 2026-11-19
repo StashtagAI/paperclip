@@ -5,6 +5,7 @@ const list = (id: string, name: string, itemCount = 1) => ({
   id,
   category_id: 'c',
   name,
+  doneCount: 0,
   tags: [],
   itemCount,
 });
