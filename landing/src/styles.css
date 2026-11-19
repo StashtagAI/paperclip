@@ -1,0 +1,408 @@
+/* Colours are the app's tokens (src/constants/palette.ts, theme.ts); text pairs are checked by check.mjs. */
+:root {
+  --bg: #f4f9ff;
+  --bg-alt: #ffffff;
+  --text: #0b1b2b;
+  --muted: #52627a;
+  --link: #1a64d6;
+  --border: #d5e3f5;
+  --outline: #69788f;
+  --store-bg: #0b1b2b;
+  --store-text: #ffffff;
+  --eats: #19c48d;
+  --travel: #1f6feb;
+  --recipes: #3dd9d6;
+  --do: #5a5cf0;
+  --focus: #1a64d6;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a1420;
+    --bg-alt: #122233;
+    --text: #eaf3ff;
+    --muted: #93a6bf;
+    --link: #4c9bff;
+    --border: #1f3550;
+    --outline: #6a84a3;
+    --store-bg: #eaf3ff;
+    --store-text: #0a1420;
+    --eats: #3de0a6;
+    --travel: #4c9bff;
+    --recipes: #5cebea;
+    --do: #8c8dff;
+    --focus: #4c9bff;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --muted: #3a4a60;
+    --link: #0f4fb0;
+    --border: #69788f;
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root {
+    --muted: #c2d0e2;
+    --link: #a6cdff;
+    --border: #6a84a3;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: var(--link);
+  text-underline-offset: 0.15em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  margin: 0 0 0.5em;
+}
+
+h2 {
+  font-size: clamp(1.5rem, 1.2rem + 1.5vw, 2rem);
+}
+
+h3 {
+  font-size: 1.125rem;
+}
+
+p {
+  margin: 0 0 1em;
+}
+
+.wrap {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.narrow {
+  max-width: 46rem;
+}
+
+.skip {
+  position: absolute;
+  left: 1rem;
+  top: -10rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-alt);
+  color: var(--text);
+  z-index: 1;
+}
+
+.skip:focus {
+  top: 1rem;
+}
+
+/* Header */
+
+.site-header {
+  padding: 0.75rem 0;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 1.125rem;
+  text-decoration: none;
+}
+
+.brand img {
+  border-radius: 8px;
+}
+
+/* Hero */
+
+.hero {
+  padding: 1rem 0 3rem;
+}
+
+.hero-grid {
+  display: grid;
+  gap: 2.5rem;
+  align-items: center;
+}
+
+.hero h1 {
+  font-size: clamp(2.25rem, 1.6rem + 3vw, 3.5rem);
+  letter-spacing: -0.02em;
+  margin-bottom: 0.25rem;
+}
+
+.tagline {
+  font-size: clamp(1.25rem, 1.1rem + 0.8vw, 1.625rem);
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.lede {
+  font-size: 1.125rem;
+  color: var(--muted);
+  max-width: 34rem;
+}
+
+.hero-shot {
+  justify-self: center;
+}
+
+.hero-shot img {
+  display: block;
+  width: min(295px, 75vw);
+  border-radius: 28px;
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 48px -24px rgb(11 27 43 / 35%);
+}
+
+@media (min-width: 48rem) {
+  .hero {
+    padding: 2rem 0 4rem;
+  }
+
+  .hero-grid {
+    grid-template-columns: 1.2fr 1fr;
+  }
+}
+
+/* Store buttons */
+
+.stores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+}
+
+.store {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 9.5rem;
+  min-height: 56px;
+  margin: 0;
+  padding: 0.5rem 1.25rem;
+  border-radius: 12px;
+  background: var(--store-bg);
+  color: var(--store-text);
+  border: 2px solid var(--store-bg);
+  line-height: 1.25;
+  text-decoration: none;
+}
+
+a.store:hover {
+  text-decoration: underline;
+}
+
+.store-small {
+  font-size: 0.8125rem;
+}
+
+.store-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.store-soon {
+  background: transparent;
+  color: var(--text);
+  border: 2px dashed var(--outline);
+}
+
+/* Sections */
+
+.section {
+  padding: 3rem 0;
+}
+
+.section-alt {
+  background: var(--bg-alt);
+  border-block: 1px solid var(--border);
+}
+
+.steps,
+.features {
+  display: grid;
+  gap: 1.25rem;
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+}
+
+@media (min-width: 48rem) {
+  .steps {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .features {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.steps {
+  counter-reset: step;
+}
+
+.steps li {
+  counter-increment: step;
+}
+
+.steps li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-bottom: 0.75rem;
+  border-radius: 50%;
+  background: var(--store-bg);
+  color: var(--store-text);
+  font-weight: 700;
+}
+
+.steps p,
+.features p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.features li {
+  padding: 1.25rem 1.25rem 1.25rem 1.5rem;
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--accent);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.kind-eats {
+  --accent: var(--eats);
+}
+
+.kind-travel {
+  --accent: var(--travel);
+}
+
+.kind-recipes {
+  --accent: var(--recipes);
+}
+
+.kind-do {
+  --accent: var(--do);
+}
+
+/* FAQ */
+
+.faq {
+  margin: 1.5rem 0 0;
+}
+
+.faq div {
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.faq dt {
+  font-weight: 700;
+  font-size: 1.125rem;
+  margin-bottom: 0.375rem;
+}
+
+.faq dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.cta {
+  text-align: center;
+}
+
+.cta .stores {
+  justify-content: center;
+}
+
+/* Legal pages */
+
+.legal h1 {
+  font-size: clamp(1.75rem, 1.4rem + 1.5vw, 2.5rem);
+}
+
+.legal h2 {
+  font-size: 1.375rem;
+  margin-top: 2rem;
+}
+
+.legal h3 {
+  margin-top: 1.5rem;
+}
+
+/* Footer */
+
+.site-footer {
+  padding: 2rem 0 3rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.5rem;
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+
+.footer-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+}

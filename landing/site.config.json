@@ -1,0 +1,13 @@
+{
+  "siteUrl": "https://stashtag.ai/",
+  "name": "StashtagAI",
+  "contactEmail": "support@stashtag.ai",
+  "appStore": {
+    "url": "",
+    "appId": ""
+  },
+  "googlePlay": {
+    "url": "",
+    "packageId": "ai.stashtag.app"
+  }
+}
