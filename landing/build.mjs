@@ -207,7 +207,7 @@ const home = `      <section class="hero" aria-labelledby="hero-title">
             <source srcset="/assets/home-dark.webp" media="(prefers-color-scheme: dark)" type="image/webp">
             <source srcset="/assets/home-light.webp" type="image/webp">
             <img src="/assets/home-light.png" width="295" height="640" fetchpriority="high"
-              alt="The StashtagAI home screen: tiles for Eats, Trips, Recipes and Do, above a Recently stashed list of a café, a ridge walk and a recipe saved from Instagram.">
+              alt="${esc(content.heroAlt)}">
           </picture>
         </div>
       </section>

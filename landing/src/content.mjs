@@ -13,6 +13,17 @@ export const valueProp =
   'Share an Instagram or TikTok post to StashtagAI and it becomes an organized list, like Restaurants › Denver, ' +
   'with every place, recipe or idea from the post ready to use.';
 
+/** The app's category names, as in KIND_LABELS (../src/lib/types.ts); check.mjs keeps the two in step. */
+export const categories = ['Eats', 'Travel', 'Recipes', 'Do', 'Shop', 'Watch & read'];
+
+/** Names the app no longer uses. check.mjs fails if one shows up on the site. */
+export const retiredCategories = ['Trips'];
+
+/** Alt text for the hero screenshot (og/home.html). Keep the tile names in step with that file. */
+export const heroAlt =
+  'The StashtagAI home screen: tiles for Eats, Travel, Recipes and Do, above a Recently stashed list of a café, ' +
+  'a ridge walk and a recipe saved from Instagram.';
+
 export const steps = [
   {
     title: 'Share a post',

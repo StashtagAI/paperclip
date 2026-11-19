@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Checks a built dist/ (run `npm run check`): the things a copy or colour edit could quietly break.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -63,6 +63,36 @@ for (const bot of ['GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'Clau
 }
 check(robots.includes(`Sitemap: ${new URL('sitemap.xml', config.siteUrl).href}`), 'robots.txt: missing Sitemap');
 check(content.faq.every(({ q }) => read('llms.txt').includes(q)), 'llms.txt: missing FAQ questions');
+
+// Category names match the app's, so a rename there (Trips → Travel) can't leave stale copy or alt text here.
+const appTypes = join(root, '..', 'src', 'lib', 'types.ts');
+if (existsSync(appTypes)) {
+  const block = readFileSync(appTypes, 'utf8').match(/KIND_LABELS[^{]*\{([^}]*)\}/)?.[1] ?? '';
+  const appLabels = [...block.matchAll(/:\s*'([^']+)'/g)].map((m) => m[1]);
+  check(
+    appLabels.join('|') === content.categories.join('|'),
+    `content.categories (${content.categories.join(', ')}) differs from the app's KIND_LABELS (${appLabels.join(', ')})`,
+  );
+}
+const shot = readFileSync(join(root, 'og', 'home.html'), 'utf8');
+const shotNames = [
+  ...[...shot.matchAll(/class="tile [^"]*">.*?<b>([^<]+)<\/b>/g)].map((m) => m[1]),
+  ...[...shot.matchAll(/<small>([^<·]+?) · /g)].map((m) => m[1]),
+];
+check(shotNames.length > 0, 'og/home.html: found no category tiles');
+for (const name of new Set(shotNames)) {
+  check(content.categories.includes(name), `og/home.html: "${name}" is not a current category`);
+}
+const heroAlt = decode(html.match(/<picture class="hero-shot">[\s\S]*?<img [^>]*alt="([^"]*)"/)?.[1] ?? '');
+for (const name of new Set(shotNames.slice(0, 4))) {
+  check(heroAlt.includes(name), `hero alt text does not name the "${name}" tile in og/home.html`);
+}
+const sitePages = readdirSync(join(root, 'dist'), { recursive: true }).filter((f) => /\.(html|txt|xml)$/.test(f));
+for (const name of content.retiredCategories) {
+  const word = new RegExp(`\\b${name}\\b`);
+  for (const path of sitePages) check(!word.test(decode(read(path))), `${path}: uses retired category "${name}"`);
+  check(!word.test(shot), `og/home.html: uses retired category "${name}"`);
+}
 
 // Text contrast ≥ 4.5:1 in every colour scheme the stylesheet defines.
 const css = readFileSync(join(root, 'src', 'styles.css'), 'utf8');

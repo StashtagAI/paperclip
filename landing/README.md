@@ -20,9 +20,10 @@ Android visitors, and the page reads the same without it.
 | `src/content.mjs` | All copy: hero, how it works, features, FAQ. The page, JSON-LD and `llms.txt` are generated from it |
 | `src/styles.css`, `src/platform.js` | Inlined into each page at build time, with CSP hashes computed by the build |
 | `build.mjs` | Writes `dist/`: home page, `/privacy/`, `/terms/`, `/data-deletion/`, `/support/` (from `../legal/*.md`), `404.html`, `robots.txt`, `sitemap.xml`, `llms.txt`, `llms-full.txt` |
-| `check.mjs` | Fails the build if the page and the FAQ JSON-LD drift apart, a store link doesn't match the config, a page has more than one `h1`, `robots.txt` stops allowing an AI crawler, or a colour pair drops below WCAG AA contrast |
+| `check.mjs` | Fails the build if the page and the FAQ JSON-LD drift apart, a store link doesn't match the config, a page has more than one `h1`, `robots.txt` stops allowing an AI crawler, a colour pair drops below WCAG AA contrast, or a category name (copy, hero screenshot or its alt text) no longer matches the app's `KIND_LABELS` |
 | `public/` | Copied as-is: icons, OG image, hero screenshots, `_headers` |
 | `og/og.html` | Source for `public/assets/og.png` (1200×630) |
+| `og/home.html` | Source for the hero screenshots `public/assets/home-{light,dark}.webp` and `home-light.png` |
 
 ## When the store listings go live
 
@@ -91,3 +92,7 @@ harmless.
   `FAQPage` that matches the visible FAQ exactly.
 - To re-render the OG image after a copy change:
   `npx playwright screenshot --viewport-size=1200,630 "file://$PWD/og/og.html" public/assets/og.png`
+- When the app renames a category, update `categories` and `heroAlt` in `src/content.mjs`, add the old name to
+  `retiredCategories`, edit `og/home.html`, and re-render the hero screenshots: open `og/home.html` in Playwright at
+  295×640 with `deviceScaleFactor: 2`, once with `colorScheme: 'light'` and once with `'dark'`, and save as WebP
+  (quality 82), plus a palette PNG of the light one as the `<img>` fallback.
