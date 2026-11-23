@@ -1,5 +1,9 @@
 # Google, Apple and Facebook sign-in (HAN-112)
 
+> **Facebook is off for now** (board, 23 Nov 2026): the Meta app setup hit errors, so the app only offers Apple and
+> Google, plus email. The Facebook code is still here. To turn it on, finish the Facebook and Supabase steps below and
+> add `'facebook'` back to `SOCIAL_PROVIDERS` in `src/lib/sign-in-providers.ts`.
+
 ## How it works
 
 | | iPhone | Android | Web |

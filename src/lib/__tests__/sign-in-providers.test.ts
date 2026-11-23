@@ -7,8 +7,8 @@ import {
 } from '@/lib/sign-in-providers';
 
 describe('sign-in providers (HAN-112)', () => {
-  it('always offers Apple alongside Google and Facebook (App Store Review 4.8)', () => {
-    expect(SOCIAL_PROVIDERS).toEqual(['apple', 'google', 'facebook']);
+  it('always offers Apple alongside Google (App Store Review 4.8)', () => {
+    expect(SOCIAL_PROVIDERS).toEqual(['apple', 'google']);
   });
 
   it('spots Apple Hide My Email addresses', () => {

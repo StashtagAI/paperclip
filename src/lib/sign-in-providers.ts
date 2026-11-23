@@ -2,8 +2,11 @@
 
 export type SocialProvider = 'apple' | 'google' | 'facebook';
 
-/** Button order on the sign-in screen. Apple stays whenever the others are offered (App Store Review 4.8). */
-export const SOCIAL_PROVIDERS: readonly SocialProvider[] = ['apple', 'google', 'facebook'];
+/**
+ * Button order on the sign-in screen. Apple stays whenever the others are offered (App Store Review 4.8).
+ * Facebook is off until the Meta app is set up (board, 23 Nov); add it back here to turn it on.
+ */
+export const SOCIAL_PROVIDERS: readonly SocialProvider[] = ['apple', 'google'];
 
 export const PROVIDER_NAMES: Record<SocialProvider, string> = { apple: 'Apple', google: 'Google', facebook: 'Facebook' };
 
