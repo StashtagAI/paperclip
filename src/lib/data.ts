@@ -24,7 +24,7 @@ import {
   type SharedList,
 } from '@/lib/types';
 
-export type KindList = ListRow & { itemCount: number; doneCount: number };
+export type KindList = ListRow & { itemCount: number; doneCount: number; favoriteCount: number };
 export type KindCategory = CategoryRow & { lists: KindList[] };
 /** An item on its list screen, with its source post's #tags so the list can be filtered by tag (HAN-79). */
 export type ListItem = ItemRow & { link: Pick<LinkRow, 'tags'> | null };
@@ -83,7 +83,7 @@ export async function searchItems(query: string, limit = 30): Promise<StashItem[
 }
 
 /** A list as shown in search results: Eats › Restaurants › Scottsdale, with its item count. */
-export type ListMatch = Omit<KindList, 'doneCount'> & { category: CategoryRow };
+export type ListMatch = Omit<KindList, 'doneCount' | 'favoriteCount'> & { category: CategoryRow };
 
 type ListMatchRow = ListRow & { category: CategoryRow; items: { count: number }[] };
 const LIST_MATCH_COLUMNS = 'id, category_id, name, tags, category:categories!inner(id, kind, name), items(count)';
@@ -159,13 +159,15 @@ export async function fetchStashes(filter: StashFilter, page: number): Promise<I
   return data;
 }
 
-type CategoryQueryRow = CategoryRow & { lists: (ListRow & { items: { done_at: string | null }[] })[] };
+type CategoryQueryRow = CategoryRow & {
+  lists: (ListRow & { items: Pick<ItemRow, 'done_at' | 'favorited_at'>[] })[];
+};
 
-/** Categories > lists (with item and done counts) under one kind, e.g. Eats > Restaurants > Denver. */
+/** Categories > lists (with item, done and favorite counts) under one kind, e.g. Eats > Restaurants > Denver. */
 export async function fetchKind(kind: Kind): Promise<KindCategory[]> {
   const { data, error } = await supabase
     .from('categories')
-    .select('id, kind, name, lists(id, category_id, name, tags, items(done_at))')
+    .select('id, kind, name, lists(id, category_id, name, tags, items(done_at, favorited_at))')
     .eq('kind', kind)
     .order('name')
     .order('name', { referencedTable: 'lists' })
@@ -177,6 +179,7 @@ export async function fetchKind(kind: Kind): Promise<KindCategory[]> {
       ...list,
       itemCount: items.length,
       doneCount: items.filter((i) => i.done_at).length,
+      favoriteCount: items.filter((i) => i.favorited_at).length,
     })),
   }));
 }
@@ -313,6 +316,31 @@ export async function setItemDone(itemId: string, done: boolean): Promise<string
     .single<{ done_at: string | null }>();
   if (error) throw error;
   return data.done_at;
+}
+
+/** Stars an item as a favorite, or clears the star (HAN-123). Returns the stored `favorited_at`. */
+export async function setItemFavorite(itemId: string, favorite: boolean): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('items')
+    .update({ favorited_at: favorite ? new Date().toISOString() : null })
+    .eq('id', itemId)
+    .select('favorited_at')
+    .single<{ favorited_at: string | null }>();
+  if (error) throw error;
+  return data.favorited_at;
+}
+
+/** The starred items under one kind, newest star first, each with its list and category (HAN-123). */
+export async function fetchFavorites(kind: Kind): Promise<LinkItem[]> {
+  const { data, error } = await supabase
+    .from('items')
+    .select('*, list:lists!inner(id, name, category:categories!inner(kind, name))')
+    .not('favorited_at', 'is', null)
+    .eq('list.category.kind', kind)
+    .order('favorited_at', { ascending: false })
+    .returns<LinkItem[]>();
+  if (error) throw error;
+  return data;
 }
 
 /** A saved recipe with the ingredients and steps process-link read from its post (HAN-74). */

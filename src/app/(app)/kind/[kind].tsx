@@ -62,6 +62,10 @@ export default function KindScreen() {
     if (kind) AsyncStorage.setItem(groupByKey(kind), value).catch(() => {});
   };
   const picked = useShoppingSelection().ids;
+  const favoriteCount = (categories.data ?? []).reduce(
+    (n, c) => n + c.lists.reduce((m, l) => m + l.favoriteCount, 0),
+    0,
+  );
 
   // Pick up renames and deletions made on a list or card screen.
   const firstFocus = useRef(true);
@@ -110,6 +114,14 @@ export default function KindScreen() {
         <ThemedText themeColor="textSecondary">
           Nothing here yet. {KIND_SUBTITLES[kind]} you stash will be sorted into lists here.
         </ThemedText>
+      ) : null}
+      {categories.data?.length ? (
+        <RowLink
+          href={{ pathname: '/favorites/[kind]', params: { kind } }}
+          title="★ Favorites"
+          subtitle={favoriteCount ? plural(favoriteCount, 'item') : 'Tap the star on a card to add it here'}
+          accessibilityLabel={`Favorites, ${favoriteCount ? plural(favoriteCount, 'item') : 'none yet'}`}
+        />
       ) : null}
       {canGroupByPlace && categories.data?.length ? <GroupByPicker value={groupBy} onChange={chooseGroupBy} /> : null}
       {places.map((place) => (

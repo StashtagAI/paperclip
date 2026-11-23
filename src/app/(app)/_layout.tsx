@@ -60,6 +60,12 @@ export default function AppLayout() {
             headerStyle: {},
           })}
         />
+        <Stack.Screen
+          name="favorites/[kind]"
+          options={({ route }) => ({
+            title: `${kindLabel((route.params as { kind?: string } | undefined)?.kind)} favorites`.trim(),
+          })}
+        />
         <Stack.Screen name="list/[listId]" options={{ title: '' }} />
         <Stack.Screen name="share" options={{ headerShown: false }} />
         <Stack.Screen name="capture/[linkId]" options={{ title: '' }} />
