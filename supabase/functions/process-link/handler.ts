@@ -3,7 +3,8 @@
 // (fetch-caption.ts, HAN-18); if that fails or yields no items the link goes back to "pending" with
 // error "needs_capture" and the app opens the capture screen.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { processCaptured } from "./pipeline.ts";
+import { processCaptured, type Result } from "./pipeline.ts";
+import { publicRaw, SOURCE_CACHE_DAYS, type SourceCache, sourceKey } from "./source-cache.ts";
 import { buildContent, type Captured } from "./retrieval.ts";
 import { fetchCaption } from "./fetch-caption.ts";
 import { parseAllowedUrl, platformOf } from "./url.ts";
@@ -120,18 +121,39 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
     return json({ error: claimBlock(link.status) ?? "already_processing" }, 409);
   }
 
+  // HAN-129: a post someone already stashed is read once. Only for runs the server fetches itself: text the user sent
+  // is never served to anyone else. A hit spends nothing, so it skips the quota (a cost event of $0 is still booked).
+  const srcKey = sourceKey(postUrl);
+  const sourceCache: SourceCache = {
+    async get(key) {
+      const { data } = await db.from("source_extractions").select("extraction,raw_content").eq("source_key", key)
+        .gt("created_at", new Date(Date.now() - SOURCE_CACHE_DAYS * 86_400_000).toISOString()).maybeSingle();
+      return data ? { extraction: data.extraction, raw_content: data.raw_content } : null;
+    },
+    async set(key, v) {
+      await db.from("source_extractions").upsert({ source_key: key, extraction: v.extraction, raw_content: v.raw_content, created_at: new Date().toISOString() });
+    },
+  };
+  let hit = null as Awaited<ReturnType<SourceCache["get"]>>;
+  if (fetching) {
+    try { hit = await sourceCache.get(srcKey); } catch { /* a cache error is a miss */ }
+    await event("source_cache", true, undefined, { hit: !!hit, platform: platformOf(postUrl) });
+  }
+
   // Rate limit and daily caps, before any paid call. Fails closed: no quota answer, no spend.
   const limits = limitsFromEnv(env);
-  const { data: q, error: qe } = await db.rpc("claim_process_quota", {
-    p_user: link.user_id, p_link: link_id, p_per_hour: limits.perHour,
-    p_user_daily_usd: limits.userDailyUsd, p_global_daily_usd: limits.globalDailyUsd,
-  });
-  if (qe || !q) {
-    console.error(`[process-link] quota check failed: ${qe?.message}`);
-    return await fail("quota_unavailable");
+  if (!hit) {
+    const { data: q, error: qe } = await db.rpc("claim_process_quota", {
+      p_user: link.user_id, p_link: link_id, p_per_hour: limits.perHour,
+      p_user_daily_usd: limits.userDailyUsd, p_global_daily_usd: limits.globalDailyUsd,
+    });
+    if (qe || !q) {
+      console.error(`[process-link] quota check failed: ${qe?.message}`);
+      return await fail("quota_unavailable");
+    }
+    if (q.alert) await sendAlert(env, fetchFn, q.alert, link.user_id, q);
+    if (!q.allowed) return await fail(q.reason, 429);
   }
-  if (q.alert) await sendAlert(env, fetchFn, q.alert, link.user_id, q);
-  if (!q.allowed) return await fail(q.reason, 429);
   const meter = run.meter;
   run.record = () => event("cost", meter.refused === 0, undefined, costDetail(meter));
   // Paid calls go through the meter; past the run budget they are refused (search/Places skip, extraction fails).
@@ -152,7 +174,9 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
   let captured = sent;
   let fetched: Record<string, unknown> | null = null;
   let video: VideoRef | undefined;
-  if (fetching) {
+  if (hit) {
+    fetched = { via: "source_cache", ms: 0, cost_usd: 0 };
+  } else if (fetching) {
     const f = await fetchCaption(postUrl, env, paidFetch);
     book(meter, f.cost_usd);
     video = f.video;
@@ -198,8 +222,8 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
     fetched = { ...fetched, video: via, video_cost_usd: reader.spent() };
     return true;
   };
-  if (fetching && !(captured as { caption?: string }).caption) await readVideo("transcribe");
-  if (fetching && !Object.keys(captured ?? {}).length && !(await readVideo("vision"))) {
+  if (fetching && !hit && !(captured as { caption?: string }).caption) await readVideo("transcribe");
+  if (fetching && !hit && !Object.keys(captured ?? {}).length && !(await readVideo("vision"))) {
     return await needsCapture("empty_caption", { ms: 0, cost_usd: meter.usd, tried: ["apify_instagram"] });
   }
 
@@ -228,9 +252,9 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
   const base = lookupFromEnv(env, paidFetch);
   try {
     const pdeps = { apiKey: env("ANTHROPIC_API_KEY")!, fetchFn: paidFetch, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`), event: sink, deadline: t00 + 110_000 };
-    let r = await processCaptured(link.url, captured, pdeps);
+    let r: Result = hit ? { ok: true, extraction: hit.extraction, raw_content: { ...hit.raw_content } } : await processCaptured(link.url, captured, pdeps);
     // Caption (or transcript) named nothing: try the next, dearer video stage once, then re-extract.
-    while (fetching && r.ok && "unsorted" in r && video) {
+    while (fetching && !hit && r.ok && "unsorted" in r && video) {
       const hasTranscript = !!(captured as { transcript?: string })?.transcript;
       const hasOcr = !!(captured as { ocr?: string })?.ocr;
       if (hasOcr || !(await readVideo(hasTranscript ? "vision" : "transcribe"))) break;
@@ -239,6 +263,10 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
     if (!r.ok) return await fail(errorCode(r.error).code);
     // A fetched caption that names nothing (only hashtags, "recipe in bio"…): let the user add what the video says.
     if (fetched && "unsorted" in r) return await needsCapture("no_items", fetched, (captured as { caption?: string }).caption);
+    // Server-fetched text only (see source-cache.ts); a failed write never fails the run.
+    if (fetching && !hit && !("unsorted" in r)) {
+      try { await sourceCache.set(srcKey, { extraction: r.extraction, raw_content: publicRaw(r.raw_content) }); } catch { /* best-effort */ }
+    }
     if (fetched) r.raw_content = { ...r.raw_content, caption_source: "fetched", fetch: fetched };
     if ("unsorted" in r) {
       // Unsorted bucket: done + no items + raw_content.unsorted, no empty category/list created.
