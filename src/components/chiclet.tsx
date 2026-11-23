@@ -29,7 +29,8 @@ export function Chiclet({ onPress, accessibilityLabel, accessibilityHint, label,
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
-      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+      // Sideways slop is half the 4pt gap between chiclets, so neighbouring tap areas meet without overlapping.
+      hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
       style={({ pressed }) => [
         styles.chiclet,
         label ? styles.text : styles.iconOnly,
@@ -59,6 +60,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.one,
   },
-  text: { paddingHorizontal: Spacing.two },
-  iconOnly: { minWidth: 40, paddingHorizontal: Spacing.two },
+  text: { paddingHorizontal: 6 },
+  iconOnly: { minWidth: 40, paddingHorizontal: 6 },
 });
