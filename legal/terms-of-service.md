@@ -85,7 +85,7 @@ You agree to indemnify and hold harmless StashtagAI from claims, losses, and exp
 
 ## 14. Governing law and disputes
 
-These Terms are governed by the laws of [STATE / COUNTRY], without regard to its conflict-of-law rules. Any dispute will be resolved in the courts located in [COUNTY, STATE], unless applicable consumer protection law gives you the right to bring a claim where you live.
+These Terms are governed by the laws of the Commonwealth of Pennsylvania, United States, without regard to its conflict-of-law rules. Any dispute will be resolved in the state or federal courts located in Chester County, Pennsylvania, unless applicable consumer protection law gives you the right to bring a claim where you live.
 
 ## 15. App store terms
 
