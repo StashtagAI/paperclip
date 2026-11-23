@@ -62,10 +62,11 @@ insert into public.search_lookups (query_key, fill) values ('cafe|city', '{}');
 
 -- Every table is covered here. A new table fails this until it has RLS and a block below
 -- (list_shares, list_share_recipients, share_recipient_lookups and profiles are covered in
--- supabase/tests/list_shares_test.sql; waitlist_signups and waitlist_attempts in waitlist.test.sql).
+-- supabase/tests/list_shares_test.sql; waitlist_signups and waitlist_attempts in waitlist.test.sql; admin_users in
+-- admin_portal.test.sql).
 select is(
   array(select c.relname::text from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' order by 1),
-  array['apple_tokens', 'categories', 'feedback', 'item_photos', 'item_posts', 'item_reports', 'items', 'link_feedback', 'links', 'list_share_recipients', 'list_shares',
+  array['admin_users', 'apple_tokens', 'categories', 'feedback', 'item_photos', 'item_posts', 'item_reports', 'items', 'link_feedback', 'links', 'list_share_recipients', 'list_shares',
     'lists', 'place_lookups', 'process_events', 'profiles', 'search_lookups', 'share_recipient_lookups',
     'waitlist_attempts', 'waitlist_signups'],
   'public tables are the ones these tests cover'

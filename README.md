@@ -105,6 +105,27 @@ Feedback inserts are capped in the database: 5 per account in any 10 minutes and
 (`feedback_rate_limit` trigger). Over the cap, PostgREST returns HTTP 429 (`PT429`) and the feedback sheet keeps the
 draft and says to try later.
 
+### Admin portal
+
+Profile › **Admin portal** (`(app)/admin`, HAN-128) shows stashes imported (24 h / 7 d / 30 d / all time), failures by
+reason, users (total, new, active), estimated API spend with a per-service breakdown, a 14-day table and engagement
+counts. It reads `public.admin_stats()`, which raises `42501` unless `public.is_admin()` is true. Costs are the
+list-price estimates that process-link and place-details book as `process_events` stage `cost` (HAN-37), not invoices.
+Downloads, revenue and web traffic aren't tracked here; the screen says so and links to App Store Connect.
+
+Admins are rows in `public.admin_users` (email + account id), which clients can't read or write. A row grants access
+only to its bound `user_id`, and only while that account still has the same email. Email sign-ups are auto-confirmed
+in production, so binding by email alone would let whoever signs up first with an allowlisted address in. To add an
+admin once they've signed up, check the account is really theirs, then run in the SQL editor:
+
+```sql
+insert into public.admin_users (email, user_id)
+select lower(email), id from auth.users where lower(email) = 'someone@example.com'
+on conflict (email) do update set user_id = excluded.user_id;
+```
+
+Remove one with `delete from public.admin_users where email = '…'`.
+
 ## Running
 
 ```bash
