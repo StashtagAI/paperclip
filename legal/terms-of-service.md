@@ -1,7 +1,7 @@
 # StashtagAI Terms of Service
 
 **Effective date:** November 7, 2026
-**Last updated:** November 19, 2026
+**Last updated:** November 23, 2026
 
 These Terms of Service ("Terms") govern your use of the StashtagAI mobile and web application and related services (the "Service"), operated by [COMPANY LEGAL NAME] ("StashtagAI", "we", "us", or "our"). By creating an account or using the Service, you agree to these Terms. If you do not agree, do not use the Service.
 
@@ -17,6 +17,7 @@ You can also add your own notes, ratings, and photos to items, mark items as don
 
 - You must be at least 13 years old to use the Service. If you are under the age of majority where you live, you may use the Service only with the permission of a parent or legal guardian.
 - You are responsible for the accuracy of the information you provide, for keeping your login credentials secure, and for all activity under your account.
+- You can sign in with your email address, or with an Apple or Google account. If you use Apple or Google, you are also responsible for keeping that account secure, and your use of it is governed by Apple's or Google's own terms. An Apple or Google account with the same verified email address as your StashtagAI account signs in to the same StashtagAI account.
 - Tell us promptly at [CONTACT EMAIL] if you believe your account has been compromised. You can also use **Sign out everywhere** in your profile to sign out of all your devices.
 - The optional app lock (for example, Face ID) uses your device's own security. It adds protection on your device but does not replace keeping your device and login secure.
 
@@ -50,7 +51,7 @@ Recommendations, categories, descriptions, addresses, recipe ingredients and ste
 
 ## 6. Third-party services
 
-The Service depends on third-party platforms and providers (for example, Instagram, TikTok, Google Maps, Apple Maps, OpenStreetMap, hosting providers, content retrieval providers, and AI model providers). We do not control them and are not responsible for their availability, content, or practices. Links to or content from third-party sites are provided for convenience only.
+The Service depends on third-party platforms and providers (for example, Instagram, TikTok, Google Maps, Apple Maps, OpenStreetMap, Sign in with Apple, Google sign-in, hosting providers, content retrieval providers, and AI model providers). We do not control them and are not responsible for their availability, content, or practices. Links to or content from third-party sites are provided for convenience only.
 
 ## 7. Fees
 

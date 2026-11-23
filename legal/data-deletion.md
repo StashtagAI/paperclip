@@ -1,7 +1,7 @@
 # StashtagAI Data Deletion Policy (Right to Deletion)
 
 **Effective date:** November 7, 2026
-**Last updated:** November 19, 2026
+**Last updated:** November 23, 2026
 
 You have the right to ask [COMPANY LEGAL NAME] ("StashtagAI", "we", "us") to delete the personal information we hold about you. This page explains how to make a request, what gets deleted, and how long it takes. It supplements our [Privacy Policy](./privacy-policy.md).
 
@@ -33,6 +33,7 @@ To protect your account, we verify that a request comes from the account holder 
 
 When your account is deleted, we permanently delete:
 - your account and login information (email address, password, and authentication records) and your profile name;
+- the details Apple or Google sent us if you signed in with them or connected them (account ID, email address, and, if they shared them, your name and profile photo address), and any token we kept from Apple. If you used Sign in with Apple, we also ask Apple to revoke StashtagAI's access to your Apple ID, so StashtagAI disappears from the "Sign in with Apple" list in your Apple account settings;
 - every link you submitted;
 - the post content we retrieved for those links (captions, author names, transcripts, and other text);
 - your categories, lists, items, tags, notes, ratings, "done" marks, and photos;
@@ -70,7 +71,7 @@ Account deletion cannot be undone. Once deleted, your lists and saved links cann
 
 ## 7. Third-party platforms
 
-Deleting your StashtagAI account does not delete anything on Instagram, TikTok, Apple, Google, or any other third-party service. To delete data held by those services, contact them directly. If you turned on location or notifications for StashtagAI, you can also turn them off in your device settings.
+Deleting your StashtagAI account does not delete anything on Instagram, TikTok, Apple, Google, or any other third-party service, and it does not delete your Apple or Google account. Apart from revoking Sign in with Apple as described in Section 3, to delete data held by those services, contact them directly. If you signed in with Google, you can also remove StashtagAI from your Google account's list of connected apps. If you turned on location or notifications for StashtagAI, you can also turn them off in your device settings.
 
 ## 8. No discrimination
 

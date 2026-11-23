@@ -1,14 +1,14 @@
 # StashtagAI Privacy Policy
 
 **Effective date:** November 7, 2026
-**Last updated:** November 19, 2026
+**Last updated:** November 23, 2026
 
 This Privacy Policy explains how [COMPANY LEGAL NAME] ("StashtagAI", "we", "us", or "our") collects, uses, shares, and protects information when you use the StashtagAI mobile and web application (the "Service") or visit our website, stashtag.ai (the "Website").
 
 ## 1. Information we collect
 
 **Information you provide**
-- **Account information:** your email address, and your password if you choose to set one. You can also sign in with a link or code we email to you.
+- **Account information:** your email address, and your password if you choose to set one. You can also sign in with a link or code we email to you, or with Apple or Google (see "Signing in with Apple or Google" below).
 - **Profile:** the name you choose to show on your profile, if you set one.
 - **Links you submit:** URLs of Instagram and TikTok posts you save, including links you share to StashtagAI from another app.
 - **Text you capture:** if we can't read a post ourselves, you can paste its caption or pick screenshots or a screen recording of it. Your phone (or, on the web, your browser) reads the text and transcribes any speech, and only that text is sent to us. The screenshots, recordings, and audio stay on your device.
@@ -17,6 +17,14 @@ This Privacy Policy explains how [COMPANY LEGAL NAME] ("StashtagAI", "we", "us",
 - **Feedback and reports:** feedback you send in the app (with your app version and platform), thumbs up or down on a saved post and the reason you give, and reports that an item is wrong, with any note you add.
 - **Communications:** messages you send us, such as support requests.
 - **Launch waitlist:** if you join the waitlist on our Website, your email address, the phone platform you choose (iPhone or Android, optional), which form you used, any campaign tags in the link that brought you to the Website (such as utm_source), and the date you signed up. To stop abuse of the form, we also keep a keyed, one-way hash of your IP address for 24 hours; we do not store the IP address itself.
+
+**Signing in with Apple or Google**
+If you sign in with, or connect, an Apple or Google account, that provider sends us some information about you. We use it only to sign you in.
+- **Google:** we ask only for your basic profile and email address. Google sends us your Google account ID, your email address and whether Google has verified it, your name, and the address of your profile photo. We store these with your login record. The app doesn't currently show or use your Google name or photo.
+- **Apple:** Apple sends us your Apple account ID and your email address. If you choose "Hide My Email", Apple gives us a private relay address that forwards to you, not your real address. The iPhone app doesn't ask Apple for your name. When you sign in with Apple on the web or Android, Apple may send us your name if you choose to share it. We store these with your login record. We also keep a token from Apple, in a separate store that the app itself cannot read, only so that we can revoke StashtagAI's access to your Apple ID when you delete your account, as Apple requires.
+- **Same email, same account:** if Apple or Google gives us a verified email address that matches an existing StashtagAI account, you are signed in to that account rather than a new one. You can also connect Apple or Google from **Profile › Sign-in methods**.
+
+We don't receive your Apple or Google password, contacts, files, or calendar, and we don't send Apple or Google your lists, saved links, or other content. We don't currently offer sign-in with Facebook.
 
 **Information we generate or retrieve**
 - **Post content:** for each link you submit, we retrieve publicly available content from the post, which may include the caption, the author's display name or handle, and, where available, a transcript of the audio or text read from the images or video. If an Instagram post's caption doesn't name anything, we may download the post's video so that it can be transcribed and its on-screen text read. We may also visit public websites linked in the post to read details about the places or products it mentions.
@@ -59,6 +67,7 @@ These providers process the content to return results to us. Under the business 
 We share information only as follows:
 - **Service providers** that process data on our behalf under contracts that require them to protect it, including:
   - Supabase: database, authentication, file storage, and server functions;
+  - Apple and Google, if you use them to sign in: they receive a standard sign-in request from us. When you delete an account that uses Sign in with Apple, we also ask Apple to revoke StashtagAI's access to it;
   - Anthropic, OpenAI, and Google (Gemini): AI processing of post content (see Section 3);
   - Apify and TikTok's oEmbed service: retrieving public post content (they receive the post's link, not information about you);
   - Google Maps Platform: looking up places and their details (it receives the item's name and the city or address, not your location); and
