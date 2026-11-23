@@ -6,6 +6,7 @@ import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, 
 
 import { Button } from '@/components/button';
 import { CheckRow } from '@/components/check-row';
+import { Chiclet } from '@/components/chiclet';
 import { DeleteButton } from '@/components/delete-button';
 import { DirectionsSheet } from '@/components/directions-sheet';
 import { DisplayNameForm } from '@/components/display-name-form';
@@ -408,111 +409,98 @@ function ItemCard({ item, sources, doneLabel, onToggleDone, selected, onPress, o
           borderColor: selected ? theme.tint : theme.border,
         },
       ]}>
-      <DoneCheck checked={!!item.done_at} label={`${doneLabel}, ${item.name}`} onToggle={onToggleDone} />
-      <View style={styles.body}>
-        <Pressable
-          onPress={onPress}
-          disabled={!onPress}
-          accessible={!!onPress}
-          accessibilityRole={onPress ? 'button' : undefined}
-          accessibilityHint={onPress ? 'Get directions' : undefined}
-          accessibilityState={onPress ? { selected } : undefined}
-          style={({ pressed }) => [styles.main, { opacity: pressed && onPress ? 0.8 : 1 }]}>
-          <ThemedText type="defaultBold">{item.name}</ThemedText>
-          <View style={[styles.badge, { borderColor: theme.border }]} accessibilityLabel={provenance.detail}>
-            <ThemedText type="smallBold" themeColor="textSecondary">
-              {provenance.badge}
-            </ThemedText>
-          </View>
-          {item.description ? <ThemedText type="small">{item.description}</ThemedText> : null}
-          {item.address ? (
-            <ThemedText type="small" themeColor="textSecondary" selectable>
-              {item.address}
-            </ThemedText>
-          ) : null}
-        </Pressable>
-        <PlaceFacts item={item} />
-        {item.rating ? (
-          <ThemedText type="small" style={{ color: theme.link }} accessibilityLabel={`Your rating: ${ratingLabel(item.rating)}`}>
-            {'★'.repeat(item.rating)}
-            {'☆'.repeat(5 - item.rating)}
-          </ThemedText>
-        ) : null}
-        {item.note ? (
-          <ThemedText type="small" numberOfLines={2} accessibilityLabel={`Your note: ${item.note}`}>
-            {item.note}
-          </ThemedText>
-        ) : null}
-        <View style={styles.links}>
-          {recipe ? (
-            <Pressable
-              onPress={() => router.push({ pathname: '/recipe/[itemId]', params: { itemId: item.id } })}
-              accessibilityRole="button"
-              accessibilityLabel={`Recipe for ${item.name}`}
-              accessibilityHint="Ingredients and steps"
-              style={styles.link}>
-              <ThemedText type="small" style={{ color: theme.link }}>
-                Recipe ›
-              </ThemedText>
-            </Pressable>
-          ) : null}
+      <View style={styles.top}>
+        <DoneCheck checked={!!item.done_at} label={`${doneLabel}, ${item.name}`} onToggle={onToggleDone} />
+        <View style={styles.body}>
           <Pressable
-            onPress={() => router.push({ pathname: '/item/[itemId]', params: { itemId: item.id } })}
-            accessibilityRole="button"
-            accessibilityLabel={`Notes and photos for ${item.name}`}
-            style={styles.link}>
-            <ThemedText type="small" style={{ color: theme.link }}>
-              Notes & photos ›
-            </ThemedText>
-          </Pressable>
-          {item.link_id ? (
-            <Pressable
-              onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: item.link_id! } })}
-              accessibilityRole="button"
-              accessibilityLabel={`Source post for ${item.name}`}
-              style={styles.link}>
-              <ThemedText type="small" style={{ color: theme.link }}>
-                Source post ›
+            onPress={onPress}
+            disabled={!onPress}
+            accessible={!!onPress}
+            accessibilityRole={onPress ? 'button' : undefined}
+            accessibilityHint={onPress ? 'Get directions' : undefined}
+            accessibilityState={onPress ? { selected } : undefined}
+            style={({ pressed }) => [styles.main, { opacity: pressed && onPress ? 0.8 : 1 }]}>
+            <ThemedText type="defaultBold">{item.name}</ThemedText>
+            <View style={[styles.badge, { borderColor: theme.border }]} accessibilityLabel={provenance.detail}>
+              <ThemedText type="smallBold" themeColor="textSecondary">
+                {provenance.badge}
               </ThemedText>
-            </Pressable>
+            </View>
+            {item.description ? <ThemedText type="small">{item.description}</ThemedText> : null}
+            {item.address ? (
+              <ThemedText type="small" themeColor="textSecondary" selectable>
+                {item.address}
+              </ThemedText>
+            ) : null}
+          </Pressable>
+          <PlaceFacts item={item} />
+          {item.rating ? (
+            <ThemedText type="small" style={{ color: theme.link }} accessibilityLabel={`Your rating: ${ratingLabel(item.rating)}`}>
+              {'★'.repeat(item.rating)}
+              {'☆'.repeat(5 - item.rating)}
+            </ThemedText>
+          ) : null}
+          {item.note ? (
+            <ThemedText type="small" numberOfLines={2} accessibilityLabel={`Your note: ${item.note}`}>
+              {item.note}
+            </ThemedText>
           ) : null}
         </View>
-        {recipe ? (
-          <CheckRow checked={recipe.picked} onPress={toggle} accessibilityLabel={`Add ${item.name} to shopping list`}>
-            <ThemedText type="smallBold">{recipe.picked ? 'On shopping list' : 'Shopping list'}</ThemedText>
-          </CheckRow>
-        ) : null}
-        <View style={styles.links}>
-          {(
-            [
-              ['Edit', () => setMode('edit')],
-              ['Wrong?', () => setMode('report')],
-              ['Delete', remove],
-            ] as const
-          ).map(([label, press]) => (
-            <Pressable
-              key={label}
-              onPress={press}
-              accessibilityRole="button"
-              accessibilityLabel={label === 'Wrong?' ? `Report ${item.name} as wrong` : `${label} ${item.name}`}
-              style={styles.action}>
-              <ThemedText type="smallBold" style={{ color: label === 'Delete' ? theme.danger : theme.link }}>
-                {label}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
-        {notice ? (
-          <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
-            {notice}
-          </ThemedText>
-        ) : null}
-        {error ? (
-          <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
-            {error}
-          </ThemedText>
-        ) : null}
       </View>
+      {recipe ? (
+        <CheckRow checked={recipe.picked} onPress={toggle} accessibilityLabel={`Add ${item.name} to shopping list`}>
+          <ThemedText type="smallBold">{recipe.picked ? 'On shopping list' : 'Shopping list'}</ThemedText>
+        </CheckRow>
+      ) : null}
+      {/* Across the full card so they fit on one line on a phone; they wrap at large text sizes (HAN-123). */}
+      <View style={styles.chiclets}>
+        {recipe ? (
+          <Chiclet
+            label="Recipe"
+            onPress={() => router.push({ pathname: '/recipe/[itemId]', params: { itemId: item.id } })}
+            accessibilityLabel={`Recipe for ${item.name}`}
+            accessibilityHint="Ingredients and steps"
+          />
+        ) : null}
+        <Chiclet
+          label="Notes"
+          onPress={() => router.push({ pathname: '/item/[itemId]', params: { itemId: item.id } })}
+          accessibilityLabel={`Notes and photos for ${item.name}`}
+        />
+        {item.link_id ? (
+          <Chiclet
+            label="Post"
+            onPress={() => router.push({ pathname: '/card/[linkId]', params: { linkId: item.link_id! } })}
+            accessibilityLabel={`Source post for ${item.name}`}
+          />
+        ) : null}
+        <Chiclet
+          icon={{ ios: 'pencil', android: 'edit', web: 'edit' }}
+          onPress={() => setMode('edit')}
+          accessibilityLabel={`Edit ${item.name}`}
+        />
+        <Chiclet
+          icon={{ ios: 'flag', android: 'flag', web: 'flag' }}
+          onPress={() => setMode('report')}
+          accessibilityLabel={`Report ${item.name} as wrong`}
+        />
+        <Chiclet
+          icon={{ ios: 'trash', android: 'delete', web: 'delete' }}
+          color={theme.danger}
+          onPress={remove}
+          accessibilityLabel={`Delete ${item.name}`}
+        />
+      </View>
+      {notice ? (
+        <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
+          {notice}
+        </ThemedText>
+      ) : null}
+      {error ? (
+        <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
+          {error}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
@@ -737,18 +725,18 @@ function Tags({ kind, tags, active, total, onPick }: TagsProps) {
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'row',
     padding: Spacing.three,
     borderRadius: Radius.row,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    gap: Spacing.three,
+    gap: Spacing.two,
   },
+  top: { flexDirection: 'row', gap: Spacing.three },
   body: { flex: 1, gap: Spacing.one },
+  // Rows sit 16 apart when they wrap so each chiclet's 48pt hit area doesn't overlap the next row's.
+  chiclets: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 6, rowGap: Spacing.three },
   main: { gap: Spacing.one },
-  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.four },
   footer: { gap: Spacing.two },
   link: { minHeight: 44, justifyContent: 'center' },
-  action: { minHeight: 48, justifyContent: 'center' },
   badge: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: Radius.row, paddingHorizontal: Spacing.two, paddingVertical: 2 },
   tagFilter: { gap: Spacing.one },
   // Rows sit 16 apart so each chip's 44pt hit area doesn't overlap the next row's.

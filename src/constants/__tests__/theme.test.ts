@@ -68,7 +68,7 @@ describe.each(modes)('$name contrast (AA, 4.5:1)', ({ scheme, c }) => {
     }
   });
 
-  // Text links ("Notes & photos ›", "Edit") and the rating stars (HAN-45) on cards, the page and the selected card.
+  // Card chiclets (HAN-123), text links and the rating stars (HAN-45) on cards, the page and the selected card.
   it('link text on background, cards and the selected card', () => {
     for (const bg of [c.background, c.backgroundElement, c.backgroundSelected]) {
       expect(contrast(c.link, bg)).toBeGreaterThanOrEqual(AA);
