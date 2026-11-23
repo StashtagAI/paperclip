@@ -17,6 +17,7 @@ jest.mock('../data', () => ({
 
 const row = (token: string, seen_at: string | null = null, shared_by: string | null = 'Matt'): SharedWithMe => ({
   token,
+  list_id: `list-${token}`,
   kind: 'eats',
   category: 'Restaurants',
   list: 'Denver',

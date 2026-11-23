@@ -1,28 +1,25 @@
-import * as Linking from 'expo-linking';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { BottomNav } from '@/components/bottom-nav';
 import { Button } from '@/components/button';
 import { HomeBackButton } from '@/components/home-back-button';
 import { Screen } from '@/components/screen';
-import { TagChip } from '@/components/tag-chip';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
-import { addSharedList, fetchSharedList } from '@/lib/data';
+import { fetchSharedList } from '@/lib/data';
 import { pendingShare } from '@/lib/share';
 import { markSeen } from '@/lib/shared-with-me';
 import { supabase } from '@/lib/supabase';
-import { KIND_LABELS, PLATFORM_LABELS, type SharedItem } from '@/lib/types';
 
 /**
- * A list a friend shared (HAN-50): stashtag://s/<token> or <web app>/s/<token>. Outside the signed-in group so a
- * signed-out visitor lands here; since HAN-68 only signed-in people the owner shared with can read it, so they're asked
- * to sign in first and the token is kept across sign-in (see (app)/_layout).
+ * A link to a list a friend shared (HAN-50): stashtag://s/<token> or <web app>/s/<token>. Outside the signed-in group so
+ * a signed-out visitor lands here; since HAN-68 only signed-in people the owner shared with can read it, so they're
+ * asked to sign in first and the token is kept across sign-in (see (app)/_layout). Then it opens the list.
  */
 export default function SharedListScreen() {
   const theme = useTheme();
@@ -32,33 +29,18 @@ export default function SharedListScreen() {
   // Signed out there's nothing to fetch: the database only answers signed-in callers.
   const shared = useAsync(() => (userId ? fetchSharedList(token) : Promise.resolve(null)), [token, userId]);
   const list = shared.data;
-  const [adding, setAdding] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Opening the list counts as seeing it (HAN-71), so the new-share popup doesn't offer it again. No-op for the owner.
+  // Since HAN-125 a shared list is the same live list for everyone on it, so the link just opens it (the owner's own
+  // list for the owner). Opening it counts as seeing it (HAN-71), so the new-share popup doesn't offer it again.
   useEffect(() => {
-    if (list) markSeen([token]).catch(() => {});
+    if (!list) return;
+    if (!list.own) markSeen([token]).catch(() => {});
+    router.replace(
+      list.own
+        ? { pathname: '/list/[listId]', params: { listId: list.list_id } }
+        : { pathname: '/shared-list/[listId]', params: { listId: list.list_id } },
+    );
   }, [list, token]);
-
-  async function add() {
-    setAdding(true);
-    setError(null);
-    try {
-      const result = await addSharedList(token);
-      const message = result.own
-        ? 'This is your own list.'
-        : result.added
-          ? `Added ${result.added} ${result.added === 1 ? 'item' : 'items'} to your stash.`
-          : 'Everything in this list is already in your stash.';
-      AccessibilityInfo.announceForAccessibility(message);
-      router.replace({ pathname: '/list/[listId]', params: { listId: result.list_id } });
-    } catch (e) {
-      const message = `Couldn’t add the list: ${(e as Error).message}`;
-      setError(message);
-      if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(message);
-      setAdding(false);
-    }
-  }
 
   async function signIn() {
     await pendingShare.set(token);
@@ -71,17 +53,11 @@ export default function SharedListScreen() {
     router.replace('/sign-in');
   }
 
-  const footer =
-    session && list ? (
-      <View style={styles.footer}>
-        <Button title="Add to my stash" size="large" loading={adding} onPress={add} />
-      </View>
-    ) : null;
-  const checking = authLoading || (session && shared.loading && !shared.data);
+  const checking = authLoading || (session && ((shared.loading && !shared.data) || list));
 
   return (
     <View style={styles.fill}>
-      <Screen footer={footer} edges="none">
+      <Screen edges="none">
         {/* The root stack hides headers; this screen needs one for its back button (HAN-91). */}
         <Stack.Screen
           options={{
@@ -95,7 +71,7 @@ export default function SharedListScreen() {
             headerTitleStyle: { color: theme.text },
           }}
         />
-        {checking ? <ActivityIndicator accessibilityLabel="Loading the shared list" /> : null}
+        {checking ? <ActivityIndicator accessibilityLabel="Opening the shared list" /> : null}
         {!authLoading && !session ? <SignInFirst onSignIn={signIn} /> : null}
         {shared.error ? (
           <View style={styles.gap}>
@@ -106,38 +82,6 @@ export default function SharedListScreen() {
           </View>
         ) : null}
         {session && !shared.loading && !shared.error && !list ? <NotShared email={session.user.email} onSwitch={switchAccount} /> : null}
-        {list ? (
-          <>
-            <View style={styles.header}>
-              <ThemedText type="smallBold" themeColor="textSecondary">
-                Shared from Stashtag · {KIND_LABELS[list.kind]}
-              </ThemedText>
-              <ThemedText type="sectionTitle" accessibilityRole="header">
-                {list.category} › {list.list}
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {list.items.length} {list.items.length === 1 ? 'item' : 'items'}
-              </ThemedText>
-            </View>
-            {list.tags.length ? (
-              <View style={styles.tags}>
-                {list.tags.map((tag) => (
-                  <TagChip key={tag} kind={list.kind} tag={tag.replace(/^#+/, '')} />
-                ))}
-              </View>
-            ) : null}
-            {list.items.length === 0 ? <ThemedText themeColor="textSecondary">No items in this list yet.</ThemedText> : null}
-            {list.items.map((item) => (
-              <SharedItemCard key={item.name} item={item} />
-            ))}
-            {error ? (
-              <ThemedText type="small" themeColor="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
-                {error}
-              </ThemedText>
-            ) : null}
-            <Button title="Not now" variant="secondary" onPress={() => router.replace('/')} />
-          </>
-        ) : null}
       </Screen>
       {/* Signed in, it's part of the app like any other screen, so it gets the bottom bar too. */}
       {session ? <BottomNav /> : null}
@@ -176,41 +120,7 @@ function NotShared({ email, onSwitch }: { email?: string; onSwitch: () => void }
   );
 }
 
-function SharedItemCard({ item }: { item: SharedItem }) {
-  const theme = useTheme();
-  const platform = item.platform ? PLATFORM_LABELS[item.platform] : 'the post';
-  return (
-    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-      <ThemedText type="defaultBold">{item.name}</ThemedText>
-      {item.description ? <ThemedText type="small">{item.description}</ThemedText> : null}
-      {item.address ? (
-        <ThemedText type="small" themeColor="textSecondary" selectable>
-          {item.address}
-        </ThemedText>
-      ) : null}
-      {item.source_url ? (
-        <Pressable
-          onPress={() => Linking.openURL(item.source_url!)}
-          accessibilityRole="link"
-          accessibilityLabel={`Source post for ${item.name}`}
-          accessibilityHint={`Opens ${platform}`}
-          hitSlop={8}
-          style={styles.source}>
-          <ThemedText type="small" style={{ color: theme.tint }}>
-            Source post ›
-          </ThemedText>
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  header: { gap: Spacing.one, marginTop: Spacing.two },
   gap: { gap: Spacing.three, marginTop: Spacing.four },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  card: { padding: Spacing.three, borderRadius: Radius.row, borderWidth: StyleSheet.hairlineWidth * 2, gap: Spacing.one },
-  source: { alignSelf: 'flex-start', marginTop: Spacing.one, minHeight: 28, justifyContent: 'center' },
-  footer: { gap: Spacing.two },
 });

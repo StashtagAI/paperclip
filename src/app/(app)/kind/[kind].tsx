@@ -12,14 +12,22 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
-import { deleteCategory, fetchKind, NAME_LIMITS, renameCategory, type KindCategory } from '@/lib/data';
+import { deleteCategory, fetchKind, NAME_LIMITS, renameCategory, type KindCategory, type KindList } from '@/lib/data';
 import { progressText } from '@/lib/done-progress';
 import { groupByPlace } from '@/lib/places';
+import { withSharedLists } from '@/lib/shared-lists';
+import { useSharedWithMe } from '@/lib/shared-with-me';
 import { recipesLabel } from '@/lib/shopping-list';
 import { useShoppingSelection } from '@/lib/shopping-selection';
 import { KIND_SUBTITLES, KINDS, type Kind } from '@/lib/types';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** Where a list row goes: lists friends shared open the shared view (HAN-125). */
+const listHref = (list: KindList) =>
+  list.sharedBy
+    ? ({ pathname: '/shared-list/[listId]', params: { listId: list.id } } as const)
+    : ({ pathname: '/list/[listId]', params: { listId: list.id } } as const);
 
 type GroupBy = 'type' | 'place';
 const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
@@ -39,15 +47,21 @@ const PLACE_KINDS: readonly Kind[] = ['eats', 'travel'];
 export default function KindScreen() {
   const params = useLocalSearchParams<{ kind: string }>();
   const kind = (KINDS as readonly string[]).includes(params.kind) ? (params.kind as Kind) : null;
-  const categories = useAsync(() => (kind ? fetchKind(kind) : Promise.resolve([])), [kind]);
+  const own = useAsync(() => (kind ? fetchKind(kind) : Promise.resolve([])), [kind]);
+  // Lists friends shared sit under the category of the same name, e.g. Recipes › Dinners (HAN-125).
+  const shared = useSharedWithMe();
+  const merged = useMemo(
+    () => (own.data && kind ? withSharedLists(own.data, shared.data ?? [], kind) : undefined),
+    [own.data, shared.data, kind],
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savedGroupBy, setGroupBy] = useState<GroupBy>('place');
   const canGroupByPlace = kind !== null && PLACE_KINDS.includes(kind);
   const groupBy = canGroupByPlace ? savedGroupBy : 'type';
-  const typeSections = groupBy === 'type' ? categories.data : undefined;
+  const typeSections = groupBy === 'type' ? merged : undefined;
   const places = useMemo(
-    () => (groupBy === 'place' ? groupByPlace(categories.data ?? []) : []),
-    [groupBy, categories.data],
+    () => (groupBy === 'place' ? groupByPlace(merged ?? []) : []),
+    [groupBy, merged],
   );
 
   useEffect(() => {
@@ -65,7 +79,12 @@ export default function KindScreen() {
 
   // Pick up renames and deletions made on a list or card screen.
   const firstFocus = useRef(true);
-  const { refresh } = categories;
+  const { refresh: refreshOwn } = own;
+  const { refresh: refreshShared } = shared;
+  const refresh = useCallback(() => Promise.all([refreshOwn(), refreshShared()]), [refreshOwn, refreshShared]);
+  useEffect(() => {
+    refreshShared();
+  }, [refreshShared]);
   useFocusEffect(
     useCallback(() => {
       if (firstFocus.current) firstFocus.current = false;
@@ -104,14 +123,14 @@ export default function KindScreen() {
           />
         ) : null
       }>
-      {categories.error ? <ThemedText themeColor="danger">{categories.error.message}</ThemedText> : null}
-      {!categories.data && !categories.error ? <ActivityIndicator /> : null}
-      {categories.data?.length === 0 ? (
+      {own.error ? <ThemedText themeColor="danger">{own.error.message}</ThemedText> : null}
+      {!merged && !own.error ? <ActivityIndicator /> : null}
+      {merged?.length === 0 ? (
         <ThemedText themeColor="textSecondary">
           Nothing here yet. {KIND_SUBTITLES[kind]} you stash will be sorted into lists here.
         </ThemedText>
       ) : null}
-      {canGroupByPlace && categories.data?.length ? <GroupByPicker value={groupBy} onChange={chooseGroupBy} /> : null}
+      {canGroupByPlace && merged?.length ? <GroupByPicker value={groupBy} onChange={chooseGroupBy} /> : null}
       {places.map((place) => (
         <View key={place.key} style={styles.section}>
           <ThemedText type="smallBold" themeColor="textSecondary" accessibilityRole="header">
@@ -119,16 +138,19 @@ export default function KindScreen() {
           </ThemedText>
           {place.lists.map((list) => {
             // Show the list's own name when it adds something, e.g. "Winter Park, CO" under WINTER PARK.
-            const subtitle = [list.name === place.name ? null : list.name, plural(list.itemCount, 'item')]
+            const shareNote = list.sharedBy ? `Shared by ${list.sharedBy}` : null;
+            const subtitle = [list.name === place.name ? null : list.name, shareNote, plural(list.itemCount, 'item')]
               .filter(Boolean)
               .join(' · ');
             return (
               <RowLink
                 key={list.id}
-                href={{ pathname: '/list/[listId]', params: { listId: list.id } }}
+                href={listHref(list)}
                 title={list.categoryName}
                 subtitle={subtitle}
-                accessibilityLabel={`${list.categoryName} in ${list.name}, ${plural(list.itemCount, 'item')}`}
+                accessibilityLabel={[`${list.categoryName} in ${list.name}`, shareNote, plural(list.itemCount, 'item')]
+                  .filter(Boolean)
+                  .join(', ')}
               />
             );
           })}
@@ -150,10 +172,7 @@ export default function KindScreen() {
               <DeleteButton
                 title={`Delete ${category.name}`}
                 confirmTitle={`Delete ${category.name}?`}
-                confirmMessage={`This removes ${plural(category.lists.length, 'list')} and ${plural(
-                  category.lists.reduce((n, l) => n + l.itemCount, 0),
-                  'item',
-                )}. It can’t be undone.`}
+                confirmMessage={deleteMessage(category)}
                 onDelete={async () => {
                   await deleteCategory(category.id);
                   setEditingId(null);
@@ -162,17 +181,19 @@ export default function KindScreen() {
               />
             </>
           ) : (
-            <CategoryHeader category={category} onEdit={() => setEditingId(category.id)} />
+            <CategoryHeader category={category} onEdit={category.sharedOnly ? undefined : () => setEditingId(category.id)} />
           )}
           {category.lists.map((list) => (
             <RowLink
               key={list.id}
-              href={{ pathname: '/list/[listId]', params: { listId: list.id } }}
+              href={listHref(list)}
               title={list.name}
               subtitle={
-                list.doneCount
-                  ? progressText(kind, list.doneCount, list.itemCount)
-                  : plural(list.itemCount, 'item')
+                list.sharedBy
+                  ? `Shared by ${list.sharedBy} · ${plural(list.itemCount, 'item')}`
+                  : list.doneCount
+                    ? progressText(kind, list.doneCount, list.itemCount)
+                    : plural(list.itemCount, 'item')
               }
               progress={list.doneCount ? { done: list.doneCount, total: list.itemCount } : undefined}
             />
@@ -181,6 +202,16 @@ export default function KindScreen() {
       ))}
     </Screen>
   );
+}
+
+/** What deleting a category removes. Lists friends shared aren't the user's to delete, and stay. */
+function deleteMessage(category: KindCategory): string {
+  const mine = category.lists.filter((l) => !l.sharedBy);
+  const shared = category.lists.length - mine.length;
+  const items = mine.reduce((n, l) => n + l.itemCount, 0);
+  return `This removes ${plural(mine.length, 'list')} and ${plural(items, 'item')}. It can’t be undone.${
+    shared ? ` ${shared === 1 ? 'The list' : 'Lists'} shared with you will stay.` : ''
+  }`;
 }
 
 /** By type / By place as a radio group; the selected option has a check mark and a thicker border, not just colour. */
@@ -217,23 +248,26 @@ function GroupByPicker({ value, onChange }: { value: GroupBy; onChange: (value: 
   );
 }
 
-function CategoryHeader({ category, onEdit }: { category: KindCategory; onEdit: () => void }) {
+/** No Edit on a category that only holds lists friends shared: there's nothing of the user's to rename or delete. */
+function CategoryHeader({ category, onEdit }: { category: KindCategory; onEdit?: () => void }) {
   const theme = useTheme();
   return (
     <View style={styles.header}>
       <ThemedText type="smallBold" themeColor="textSecondary" style={styles.flex}>
         {category.name.toUpperCase()}
       </ThemedText>
-      <Pressable
-        onPress={onEdit}
-        accessibilityRole="button"
-        accessibilityLabel={`Edit ${category.name}`}
-        accessibilityHint="Rename or delete this category"
-        hitSlop={12}>
-        <ThemedText type="smallBold" style={{ color: theme.tint }}>
-          Edit
-        </ThemedText>
-      </Pressable>
+      {onEdit ? (
+        <Pressable
+          onPress={onEdit}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit ${category.name}`}
+          accessibilityHint="Rename or delete this category"
+          hitSlop={12}>
+          <ThemedText type="smallBold" style={{ color: theme.tint }}>
+            Edit
+          </ThemedText>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

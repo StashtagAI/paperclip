@@ -311,6 +311,14 @@ export default function ListScreen() {
           {toggleError}
         </ThemedText>
       ) : null}
+      {data && !editing && recipients.length ? (
+        // Friends can add to a shared list from their stash (HAN-125); so can the owner, from their other lists.
+        <Button
+          title={`Add ${itemNoun(data.category.kind, 2)} from your stash`}
+          variant="secondary"
+          onPress={() => router.push({ pathname: '/add-items/[listId]', params: { listId } })}
+        />
+      ) : null}
       {data?.items.length === 0 ? <ThemedText themeColor="textSecondary">No items in this list yet.</ThemedText> : null}
       {shown.map((item) => (
         <ItemCard
@@ -537,7 +545,7 @@ function SharedPanel({ listId, token, recipients, ownerName, onChanged, onClose,
       const added = await addShareRecipient(token ?? (await shareList(listId)), email);
       setEmail('');
       await onChanged();
-      onNote(`Added ${added}. Send them the link; it opens when they sign in with that email.`);
+      onNote(`Added ${added}. The list is in their stash now, and they can add and remove things in it.`);
     } catch (e) {
       const message = (e as Error).message;
       setAddError(message);
@@ -553,7 +561,7 @@ function SharedPanel({ listId, token, recipients, ownerName, onChanged, onClose,
     try {
       await removeShareRecipient(token, who);
       await onChanged();
-      onNote(`Removed ${who}. The link no longer opens for them.`);
+      onNote(`Removed ${who}. They can no longer open or change the list.`);
     } catch (e) {
       onNote(`Couldn’t remove ${who}: ${(e as Error).message}`, true);
     } finally {
@@ -564,7 +572,7 @@ function SharedPanel({ listId, token, recipients, ownerName, onChanged, onClose,
   async function stop() {
     const ok = await confirmDestructive(
       'Stop sharing this list?',
-      'The link stops working for everyone you shared it with. Lists friends already added stay in their stash.',
+      'Everyone you shared it with loses it: they can’t open or change it anymore. Copies they saved before stay theirs.',
       'Stop sharing',
     );
     if (!ok) return;
@@ -587,8 +595,9 @@ function SharedPanel({ listId, token, recipients, ownerName, onChanged, onClose,
         Share with
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Add the email your friend uses for Stashtag. The link opens only for the people listed here, once they sign in.
-        Your other lists stay private.
+        Add the email your friend uses for Stashtag. The list shows up in their stash under its category, and they can
+        add and remove things in it. Only the people listed here can open it. Your notes, ratings, photos and other lists
+        stay private.
       </ThemedText>
       {ownerName ? (
         <ThemedText type="small" themeColor="textSecondary">

@@ -16,8 +16,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
 /**
- * Lists friends shared with you (HAN-71), newest first, with who shared each. A row opens the list at /s/<token>, where
- * Add copies it into your stash. "New" marks the ones that were new when you opened this screen; opening it marks them
+ * Lists friends shared with you (HAN-71), newest first, with who shared each. A row opens the shared list itself, where
+ * you can add and remove items (HAN-125); it's also under its category in your stash. "New" marks the ones that were new when you opened this screen; opening it marks them
  * seen so the popup doesn't show them again.
  */
 export default function SharedWithMeScreen() {
@@ -84,7 +84,7 @@ function SharedRow({ share, isNew }: { share: SharedWithMe; isNew: boolean }) {
   const details = `${KIND_LABELS[share.kind]} · ${plural(share.item_count, 'item')} · ${date(share.shared_at)}`;
   return (
     <Pressable
-      onPress={() => router.push({ pathname: '/s/[token]', params: { token: share.token } })}
+      onPress={() => router.push({ pathname: '/shared-list/[listId]', params: { listId: share.list_id } })}
       accessibilityRole="button"
       accessibilityLabel={`${isNew ? 'New. ' : ''}${title}, shared by ${from}. ${details}`}
       accessibilityHint="Opens the list"

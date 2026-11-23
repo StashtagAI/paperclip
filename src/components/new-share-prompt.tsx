@@ -11,7 +11,7 @@ import type { SharedWithMe } from '@/lib/data';
 import { markSeen, newSharePrompt, refreshSharedWithMe, unseen } from '@/lib/shared-with-me';
 
 // Not over the shared list or Shared with me (they show it already), or mid-stash from the share sheet.
-const QUIET = /^\/(s\/|shared$|share$|stash$)/;
+const QUIET = /^\/(s\/|shared$|shared-list\/|share$|stash$)/;
 
 /**
  * "<sharer> shared Restaurants › Denver with you" (HAN-71). Checks on launch and whenever the app comes back to the
@@ -78,7 +78,7 @@ export function NewSharePrompt() {
             </ThemedText>
             <ThemedText themeColor="textSecondary">
               {prompt.token
-                ? 'Open it to see what’s in it, and add it to your stash if you like.'
+                ? 'It’s in your stash under its category. You can add and remove things in it too.'
                 : 'They’re in Shared with me on your home screen.'}
             </ThemedText>
             <View style={styles.actions}>

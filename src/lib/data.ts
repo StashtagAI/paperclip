@@ -19,13 +19,22 @@ import {
   type LinkItem,
   type LinkRow,
   type ListRow,
-  type RawContent,
   type ReportReason,
+  type SharedItem,
   type SharedList,
 } from '@/lib/types';
 
-export type KindList = ListRow & { itemCount: number; doneCount: number };
-export type KindCategory = CategoryRow & { lists: KindList[] };
+export type KindList = ListRow & {
+  itemCount: number;
+  doneCount: number;
+  /** On a list someone shared with the user (HAN-125): who shared it. It opens at /shared-list/<id>. */
+  sharedBy?: string;
+};
+export type KindCategory = CategoryRow & {
+  lists: KindList[];
+  /** The user has no category of this name: it only holds lists shared with them, so it can't be renamed or deleted. */
+  sharedOnly?: boolean;
+};
 /** An item on its list screen, with its source post's #tags so the list can be filtered by tag (HAN-79). */
 export type ListItem = ItemRow & { link: Pick<LinkRow, 'tags'> | null };
 export type ListDetail = ListRow & {
@@ -322,30 +331,31 @@ export type Recipe = Pick<ItemRow, 'id' | 'name' | 'description' | 'link_id'> & 
   steps: string[];
 };
 
-type RecipeQueryRow = Pick<ItemRow, 'id' | 'name' | 'description' | 'link_id'> & {
-  list: Pick<ListRow, 'id' | 'name'>;
-  link: { recipe_details: RawContent['recipe_details'] | null } | null;
+type RecipeRow = Pick<ItemRow, 'id' | 'name' | 'description' | 'link_id'> & {
+  list_id: string;
+  list_name: string;
+  recipe_details: { ingredients?: string[]; steps?: string[] } | null;
 };
 
 /**
- * These items as recipes, in the order asked for. Ids that no longer exist are left out. The details live in
- * links.raw_content keyed by item name (docs/extraction.md), so only that part of the link is read.
- * The embed names items.link_id's key: production also joins items to links through item_posts and
- * item_reports, and PostgREST refuses an ambiguous embed.
+ * These items as recipes, in the order asked for. Ids that no longer exist, or that the user can't see, are left out.
+ * The details live in links.raw_content keyed by item name (docs/extraction.md). Read through get_recipes so recipes in
+ * a list shared with the user work too (HAN-125); link_id is null when the post isn't the user's own.
  */
 export async function fetchRecipes(itemIds: string[]): Promise<Recipe[]> {
   if (!itemIds.length) return [];
-  const { data, error } = await supabase
-    .from('items')
-    .select('id, name, description, link_id, list:lists!inner(id, name), link:links!items_link_id_fkey(recipe_details:raw_content->recipe_details)')
-    .in('id', itemIds)
-    .returns<RecipeQueryRow[]>();
+  const { data, error } = await supabase.rpc('get_recipes', { p_item_ids: itemIds });
   if (error) throw error;
   const byId = new Map(
-    data.map(({ link, ...item }) => {
-      const details = link?.recipe_details?.[item.name];
-      return [item.id, { ...item, ingredients: details?.ingredients ?? [], steps: details?.steps ?? [] }] as const;
-    }),
+    ((data as RecipeRow[] | null) ?? []).map(({ list_id, list_name, recipe_details, ...item }) => [
+      item.id,
+      {
+        ...item,
+        list: { id: list_id, name: list_name },
+        ingredients: recipe_details?.ingredients ?? [],
+        steps: recipe_details?.steps ?? [],
+      },
+    ]),
   );
   return itemIds.flatMap((id) => byId.get(id) ?? []);
 }
@@ -637,16 +647,10 @@ export async function fetchSharedList(token: string): Promise<SharedList | null>
   return (data as SharedList | null) ?? null;
 }
 
-/** Copies a shared list into the user's stash; `own` when it's their own list. */
-export async function addSharedList(token: string): Promise<{ list_id: string; added: number; own: boolean }> {
-  const { data, error } = await supabase.rpc('add_shared_list', { p_token: token });
-  if (error) throw error.code === 'P0002' ? new Error('This list is no longer shared.') : error;
-  return data as { list_id: string; added: number; own: boolean };
-}
-
 /** A list someone shared with the signed-in user (HAN-71). `seen_at` is null until the new-share popup has shown it. */
 export type SharedWithMe = {
   token: string;
+  list_id: string;
   kind: Kind;
   category: string;
   list: string;
@@ -662,6 +666,87 @@ export async function fetchSharedWithMe(): Promise<SharedWithMe[]> {
   const { data, error } = await supabase.rpc('get_shared_with_me');
   if (error) throw error;
   return (data as SharedWithMe[] | null) ?? [];
+}
+
+/** A list shared with the signed-in user, as they see and change it (HAN-125). Never the owner's notes or ratings. */
+export type CollabList = {
+  list_id: string;
+  kind: Kind;
+  category: string;
+  list: string;
+  tags: string[];
+  /** The owner's display name, or null if they haven't set one. */
+  shared_by: string | null;
+  items: CollabItem[];
+};
+export type CollabItem = SharedItem & { id: string };
+
+/** A list shared with the signed-in user; null once it isn't (sharing stopped, or they were removed). */
+export async function fetchCollabList(listId: string): Promise<CollabList | null> {
+  const { data, error } = await supabase.rpc('get_collab_list', { p_list_id: listId });
+  if (error) throw error;
+  return (data as CollabList | null) ?? null;
+}
+
+/**
+ * Copies some of the user's own items into a list they own or that's shared with them. Items of another kind are
+ * ignored and names already in the list are skipped; the copy has no note, rating, photos or done mark.
+ */
+export async function addItemsToList(listId: string, itemIds: string[]): Promise<{ added: number; skipped: number }> {
+  const { data, error } = await supabase.rpc('add_items_to_list', { p_list_id: listId, p_item_ids: itemIds });
+  if (error) throw error.code === 'P0002' ? new Error('This list is no longer shared with you.') : error;
+  return data as { added: number; skipped: number };
+}
+
+/** Removes an item from a list shared with the user, for everyone on it. */
+export async function removeSharedItem(itemId: string): Promise<void> {
+  const { error } = await supabase.rpc('remove_shared_item', { p_item_id: itemId });
+  if (error) throw error.code === 'P0002' ? new Error('It’s already gone, or the list is no longer shared with you.') : error;
+}
+
+/** The list items are being added to: the user's own, or one shared with them. Null if it's neither. */
+export type AddTarget = { id: string; kind: Kind; category: string; list: string; names: string[]; own: boolean };
+
+export async function fetchAddTarget(listId: string): Promise<AddTarget | null> {
+  const { data, error } = await supabase
+    .from('lists')
+    .select('id, name, category:categories!inner(kind, name), items(name)')
+    .eq('id', listId)
+    .maybeSingle<{ id: string; name: string; category: Pick<CategoryRow, 'kind' | 'name'>; items: { name: string }[] }>();
+  if (error) throw error;
+  if (data) {
+    const { category, items, ...list } = data;
+    return { id: list.id, kind: category.kind, category: category.name, list: list.name, names: items.map((i) => i.name), own: true };
+  }
+  const shared = await fetchCollabList(listId);
+  if (!shared) return null;
+  return {
+    id: shared.list_id,
+    kind: shared.kind,
+    category: shared.category,
+    list: shared.list,
+    names: shared.items.map((i) => i.name),
+    own: false,
+  };
+}
+
+/** One of the user's own items that could be added to another list. */
+export type AddCandidate = Pick<ItemRow, 'id' | 'name' | 'description'> & {
+  list: Pick<ListRow, 'id' | 'name'> & { category: Pick<CategoryRow, 'name'> };
+};
+
+/** The user's own items of one kind, outside `excludeListId`, A–Z. */
+export async function fetchAddCandidates(kind: Kind, excludeListId: string): Promise<AddCandidate[]> {
+  const { data, error } = await supabase
+    .from('items')
+    .select('id, name, description, list:lists!inner(id, name, category:categories!inner(name, kind))')
+    .eq('list.category.kind', kind)
+    .neq('list_id', excludeListId)
+    .order('name')
+    .limit(500)
+    .returns<AddCandidate[]>();
+  if (error) throw error;
+  return data;
 }
 
 /** One of the signed-in user's own shared lists (HAN-75), with who it's shared with. */

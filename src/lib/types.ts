@@ -132,6 +132,9 @@ export type LinkItem = ItemRow & { list: Pick<ListRow, 'id' | 'name'> & { catego
 
 /** A friend's list as returned by get_shared_list (HAN-50): the list as it is now, without the owner's ids. */
 export type SharedList = {
+  list_id: string;
+  /** The signed-in user's own list. */
+  own: boolean;
   kind: Kind;
   category: string;
   list: string;
