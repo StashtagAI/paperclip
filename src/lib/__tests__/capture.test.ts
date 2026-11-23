@@ -1,4 +1,4 @@
-import { toCaptured, type Segment } from '@/lib/capture/draft';
+import { needsVisionRead, toCaptured, type Segment } from '@/lib/capture/draft';
 import { clip, dedupeLines, lineKey, MAX_CAPTURED_CHARS } from '@/lib/capture/lines';
 
 const seg = (source: Segment['source'], text: string, status: Segment['status'] = 'ready'): Segment => ({
@@ -62,5 +62,18 @@ describe('toCaptured', () => {
 
   it('clips each field to the server limit', () => {
     expect(clip('x'.repeat(MAX_CAPTURED_CHARS + 5))).toHaveLength(MAX_CAPTURED_CHARS);
+  });
+});
+
+describe('needsVisionRead', () => {
+  it('asks for the server read when on-device OCR found little or nothing', () => {
+    expect(needsVisionRead(undefined)).toBe(true);
+    expect(needsVisionRead('  \n ')).toBe(true);
+    expect(needsVisionRead('BaekGa')).toBe(true);
+  });
+
+  it('trusts a long on-device read such as a Top-50 list', () => {
+    const list = Array.from({ length: 50 }, (_, i) => `${i + 1}. Restaurant ${i}`).join('\n');
+    expect(needsVisionRead(list)).toBe(false);
   });
 });

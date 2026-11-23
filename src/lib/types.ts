@@ -99,7 +99,13 @@ export type ItemPhotoRow = {
 };
 
 /** Text captured on the phone, the process-link request body's `captured` field (docs/extraction.md). */
-export type Captured = { caption?: string; transcript?: string; ocr?: string };
+export type Captured = {
+  caption?: string;
+  transcript?: string;
+  ocr?: string;
+  /** Ask process-link to read the post's stored pictures with vision (image posts where on-device OCR got too little, HAN-126). */
+  read_images?: boolean;
+};
 
 /** Where an extracted field came from (process-link `item_sources`). */
 export type FieldSource = 'capture' | 'linked_site' | 'places_lookup' | 'search';
@@ -114,7 +120,7 @@ export type RawContent = {
   /** "fetched" when the caption was read from the link server-side rather than captured on the phone. */
   caption_source?: 'fetched' | null;
   /** Link-first fetch: how, how long, estimated cost, and why it fell back to capture. */
-  fetch?: { via?: string; ms?: number; cost_usd?: number; reason?: string };
+  fetch?: { via?: string; ms?: number; cost_usd?: number; reason?: string; images?: string[] };
   transcript?: string | null;
   ocr?: string | null;
   linked_sites?: string[];

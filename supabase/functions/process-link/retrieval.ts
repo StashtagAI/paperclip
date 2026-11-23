@@ -13,7 +13,8 @@ export interface Content extends Captured {
   url: string;
 }
 
-const MAX_FIELD = 8_000;
+// 20k: a Top-50 graphic read by OCR or vision runs 3-6k characters, a carousel of them more.
+const MAX_FIELD = 20_000;
 const clip = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, MAX_FIELD) || undefined : undefined);
 
 /** Validates the source link and the captured payload. Returns null if the link is not allowed or no text was captured. */

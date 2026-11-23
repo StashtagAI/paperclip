@@ -4,7 +4,7 @@
 // error "needs_capture" and the app opens the capture screen.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { processCaptured } from "./pipeline.ts";
-import { buildContent } from "./retrieval.ts";
+import { buildContent, type Captured } from "./retrieval.ts";
 import { fetchCaption } from "./fetch-caption.ts";
 import { parseAllowedUrl, platformOf } from "./url.ts";
 import { cachedSearch, type SearchCache, searchFromEnv, stubSearch } from "./search.ts";
@@ -12,6 +12,8 @@ import { cachedLookup, lookupFromEnv, type PlaceCache, stubLookup } from "./look
 import { claimBlock, errorCode, UNCLAIMABLE } from "./errors.ts";
 import { findByName, splitNew } from "./merge.ts";
 import { groupRecipes } from "./recipe-groups.ts";
+import { MODEL } from "./extract.ts";
+import { readImages, storedImageRefs } from "./images.ts";
 import { videoReader, type VideoReader, type VideoRef } from "./video.ts";
 import { book, bookVideo, costDetail, limitsFromEnv, type Meter, meteredFetch, newMeter } from "./quota.ts";
 
@@ -101,7 +103,10 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
   // Server-side re-validation: never trust the client check.
   const postUrl = parseAllowedUrl(link.url);
   if (!postUrl) return await fail("url_not_allowed");
-  const fetching = !buildContent(link.url, sent);
+  // HAN-126: the phone read an image post's pictures on-device and got too little, so ask for the vision read. The
+  // images are the ones stored from the fetch (never a client-sent URL).
+  const wantImages = (sent as { read_images?: unknown } | undefined)?.read_images === true;
+  const fetching = !buildContent(link.url, sent) && !wantImages;
   // Atomic claim: a double tap (or a retry while a run is in flight) must not start a second run.
   // raw_content.reading lets the app show "Reading the post…" until the caption is in. With captured text the earlier
   // raw_content (the fetched caption the capture screen pre-fills from) is kept, minus any stage from a previous run.
@@ -154,9 +159,27 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
     const detail = { platform: platformOf(postUrl), cost_usd: f.cost_usd, ...(f.ok ? { via: f.via, caption_chars: f.caption.length } : { reason: f.reason, tried: f.tried }), has_video: !!f.video };
     await event("fetch_caption", f.ok, f.ms, detail);
     console.log(`[process-link] fetch_caption ${JSON.stringify({ ok: f.ok, ms: f.ms, ...detail })}`);
+    // Photo/carousel post (HAN-126): the pictures hold the list, so the phone reads them first (on-device OCR), and a
+    // server vision read follows only if that gets too little. Keep the URLs on the link for both steps.
+    if (f.images?.length && (f.ok || f.reason === "empty_caption")) {
+      return await needsCapture("image_post", { ms: f.ms, cost_usd: f.cost_usd, tried: f.ok ? ["apify_instagram"] : f.tried, images: f.images }, f.ok ? f.caption : undefined);
+    }
     if (!f.ok && !(f.reason === "empty_caption" && f.video)) return await needsCapture(f.reason, { ms: f.ms, cost_usd: f.cost_usd, tried: f.tried });
     fetched = { via: f.ok ? f.via : "apify_instagram", ms: f.ms, cost_usd: f.cost_usd };
     captured = f.ok ? { caption: f.caption } : {};
+  }
+
+  if (wantImages) {
+    const stored = storedImageRefs((link.raw_content as { fetch?: { images?: unknown } } | null)?.fetch?.images);
+    const had = (link.raw_content as { caption?: string } | null)?.caption ?? undefined;
+    const v = await readImages(stored, env, env("ANTHROPIC_API_KEY"), MODEL, paidFetch, fetchFn, limits.runUsd);
+    await event("image_vision", "captured" in v, "captured" in v ? v.ms : undefined, "captured" in v
+      ? { images: v.images, cost_usd: v.cost_usd, ocr_chars: v.captured.ocr?.length ?? 0 }
+      : { reason: v.skipped, images: stored.length });
+    const sentText = (sent ?? {}) as Captured;
+    const ocr = [sentText.ocr, "captured" in v ? v.captured.ocr : undefined].filter(Boolean).join("\n") || undefined;
+    captured = { ...(had ? { caption: had } : {}), ...sentText, ...(ocr ? { ocr } : {}) };
+    if (!buildContent(link.url, captured)) return await needsCapture("image_unreadable", { images: stored }, had);
   }
 
   // HAN-88: read the video when the caption is empty or names nothing. Transcript first (cheap); the video model
@@ -204,7 +227,7 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
   const sBase = searchFromEnv(env, paidFetch);
   const base = lookupFromEnv(env, paidFetch);
   try {
-    const pdeps = { apiKey: env("ANTHROPIC_API_KEY")!, fetchFn: paidFetch, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`), event: sink };
+    const pdeps = { apiKey: env("ANTHROPIC_API_KEY")!, fetchFn: paidFetch, lookup: base === stubLookup ? base : cachedLookup(base, cache), search: sBase === stubSearch ? sBase : cachedSearch(sBase, sCache), log: (m) => console.log(`[process-link] ${m}`), event: sink, deadline: t00 + 110_000 };
     let r = await processCaptured(link.url, captured, pdeps);
     // Caption (or transcript) named nothing: try the next, dearer video stage once, then re-extract.
     while (fetching && r.ok && "unsorted" in r && video) {

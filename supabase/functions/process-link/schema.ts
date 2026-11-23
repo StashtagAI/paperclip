@@ -29,7 +29,7 @@ export interface Extraction {
 }
 
 /** Per-run item cap: each item can cost a Places lookup and a web search. */
-export const MAX_ITEMS = 20;
+export const MAX_ITEMS = 60;
 
 const str = (v: unknown, max: number) =>
   typeof v === "string" && v.trim() && v.length <= max ? v.trim() : null;

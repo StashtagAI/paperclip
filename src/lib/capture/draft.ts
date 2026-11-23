@@ -41,3 +41,9 @@ export function toCaptured(segments: readonly Segment[]): Captured {
 }
 
 export const hasText = (c: Captured) => Boolean(c.caption || c.transcript || c.ocr);
+
+/** Fewer characters than this from a post's pictures counts as "OCR missed it": a Top-50 list is thousands. */
+export const MIN_IMAGE_OCR_CHARS = 200;
+
+/** Whether the on-device read of an image post got too little, so process-link should read the pictures with vision. */
+export const needsVisionRead = (ocr: string | undefined) => (ocr?.trim().length ?? 0) < MIN_IMAGE_OCR_CHARS;
