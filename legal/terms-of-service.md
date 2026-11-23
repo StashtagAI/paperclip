@@ -3,7 +3,7 @@
 **Effective date:** November 7, 2026
 **Last updated:** November 23, 2026
 
-These Terms of Service ("Terms") govern your use of the StashtagAI mobile and web application and related services (the "Service"), operated by [COMPANY LEGAL NAME] ("StashtagAI", "we", "us", or "our"). By creating an account or using the Service, you agree to these Terms. If you do not agree, do not use the Service.
+These Terms of Service ("Terms") govern your use of the StashtagAI mobile and web application and related services (the "Service"), operated by Stashtag AI, LLC ("StashtagAI", "we", "us", or "our"). By creating an account or using the Service, you agree to these Terms. If you do not agree, do not use the Service.
 
 ## 1. What the Service does
 
@@ -97,8 +97,8 @@ We may update these Terms from time to time. If we make material changes, we wil
 
 ## 17. Contact
 
-[COMPANY LEGAL NAME]
-[MAILING ADDRESS]
+Stashtag AI, LLC
+229 W Lancaster Ave, Paoli, PA 19301
 [CONTACT EMAIL]
 
 See also: [Privacy Policy](./privacy-policy.md) · [Data Deletion Policy](./data-deletion.md)

@@ -3,7 +3,7 @@
 **Effective date:** November 7, 2026
 **Last updated:** November 23, 2026
 
-You have the right to ask [COMPANY LEGAL NAME] ("StashtagAI", "we", "us") to delete the personal information we hold about you. This page explains how to make a request, what gets deleted, and how long it takes. It supplements our [Privacy Policy](./privacy-policy.md).
+You have the right to ask Stashtag AI, LLC ("StashtagAI", "we", "us") to delete the personal information we hold about you. This page explains how to make a request, what gets deleted, and how long it takes. It supplements our [Privacy Policy](./privacy-policy.md).
 
 ## 1. How to request deletion
 
@@ -80,6 +80,6 @@ We will not deny you service, charge you a different price, or otherwise treat y
 ## 9. Contact
 
 Questions about deletion: **[PRIVACY EMAIL]**
-[COMPANY LEGAL NAME], [MAILING ADDRESS]
+Stashtag AI, LLC, 229 W Lancaster Ave, Paoli, PA 19301
 
 See also: [Terms of Service](./terms-of-service.md) · [Privacy Policy](./privacy-policy.md)

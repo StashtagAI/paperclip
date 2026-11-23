@@ -3,7 +3,7 @@
 **Effective date:** November 7, 2026
 **Last updated:** November 23, 2026
 
-This Privacy Policy explains how [COMPANY LEGAL NAME] ("StashtagAI", "we", "us", or "our") collects, uses, shares, and protects information when you use the StashtagAI mobile and web application (the "Service") or visit our website, stashtag.ai (the "Website").
+This Privacy Policy explains how Stashtag AI, LLC ("StashtagAI", "we", "us", or "our") collects, uses, shares, and protects information when you use the StashtagAI mobile and web application (the "Service") or visit our website, stashtag.ai (the "Website").
 
 ## 1. Information we collect
 
@@ -123,8 +123,8 @@ We may update this Policy from time to time. If we make material changes, we wil
 
 ## 12. Contact us
 
-[COMPANY LEGAL NAME]
-[MAILING ADDRESS]
+Stashtag AI, LLC
+229 W Lancaster Ave, Paoli, PA 19301
 Privacy questions and requests: [PRIVACY EMAIL]
 
 See also: [Terms of Service](./terms-of-service.md) · [Data Deletion Policy](./data-deletion.md)
