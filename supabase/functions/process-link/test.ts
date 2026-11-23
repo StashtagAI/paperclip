@@ -291,6 +291,39 @@ assert.equal(findByName([{ id: 1, name: "Denver" }], "Boulder"), undefined);
 }
 console.log("merge ok");
 
+// ---- recipes file into Recipes › <meal> (HAN-124) ----
+import { groupRecipes, recipeGroup } from "./recipe-groups.ts";
+{
+  const rec = (list_scope: string | null, category: string, names: string[], tags: string[] = []) =>
+    groupRecipes({ kind: "recipes", category, list_scope, tags, items: names.map((name) => ({ name, description: "" })) });
+  // The scopes and categories the model gave a beta user's recipes before this change.
+  const cases: [string | null, string, string[], string[], string][] = [
+    ["Breakfast", "Breakfast", ["Crispy potato balls stuffed with buttery mushrooms"], ["side dish"], "Breakfast"],
+    ["Warm breakfast", "Recipes", ["Baked Butternut with Spiced Pears"], [], "Breakfast"],
+    ["Carrot button noodles", "Recipes", ["Carrot button noodles"], ["easy dinner"], "Dinner"],
+    ["Desserts", "Recipes", ["Chocolate & Pomegranate Clusters"], ["healthy snack"], "Desserts"],
+    ["Holiday cookies", "Recipes", ["Holiday Hedgehogs"], [], "Desserts"],
+    ["Snack", "Recipes", ["Snickers Banana Bark"], ["dessert"], "Snacks"],
+    ["Appetizers & easy dinners", "Recipes", ["Baked brie"], [], "Snacks"],
+    ["Holiday fusion drinks", "Recipes", ["Chai eggnog"], [], "Drinks"],
+    ["Thanksgiving", "Recipes", ["Herb roasted turkey"], ["holiday"], "Dinner"],
+    [null, "Recipes", ["Chicken caesar salad"], [], "Lunch"],
+    ["Lunch", "Recipes", ["Miso Chicken Ramen"], [], "Lunch"],
+  ];
+  for (const [scope, category, names, tags, want] of cases) {
+    const out = rec(scope, category, names, tags);
+    assert.equal(out.category, "Recipes", `${scope}`);
+    assert.equal(out.list_scope, want, `${scope}`);
+  }
+  // Other kinds keep the model's category and scope.
+  const eats = { kind: "eats" as const, category: "Restaurants", list_scope: "Denver", tags: [], items: [] };
+  assert.equal(groupRecipes(eats), eats);
+  assert.equal(recipeGroup(["Persimmon season is here"], "Snacks"), "Snacks");
+  // Word matches only: "steak" is not "tea", "rice" in "price" does not count.
+  assert.equal(recipeGroup(["Steak at a fair price"]), "Dinner");
+}
+console.log("recipe groups ok");
+
 // ---- rate limit and spend metering (HAN-37) ----
 import { book, DEFAULT_LIMITS, limitsFromEnv, meteredFetch, newMeter, PRICES, RunBudgetError } from "./quota.ts";
 assert.deepEqual(limitsFromEnv(() => undefined), DEFAULT_LIMITS);

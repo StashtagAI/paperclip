@@ -491,8 +491,8 @@ function FilePanel({ link, onDone }: { link: LinkDetail; onDone: (message: strin
     setBusy(kind);
     setError(null);
     try {
-      await fileLink(link.id, kind, name);
-      const message = `Filed in ${KIND_LABELS[kind]} › Saved posts › ${platform}`;
+      const { path } = await fileLink(link.id, kind, name);
+      const message = path ? `Filed in ${KIND_LABELS[kind]} › ${path}` : `Filed in ${KIND_LABELS[kind]}`;
       announce(message);
       onDone(message);
     } catch (e) {
