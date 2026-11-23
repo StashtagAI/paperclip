@@ -11,6 +11,7 @@ import { DeleteButton } from '@/components/delete-button';
 import { DirectionsSheet } from '@/components/directions-sheet';
 import { DisplayNameForm } from '@/components/display-name-form';
 import { DoneCheck } from '@/components/done-check';
+import { FavoriteStar } from '@/components/favorite-star';
 import { PlaceFacts } from '@/components/google-place-info';
 import { ItemEditForm, ReportItemForm } from '@/components/item-forms';
 import { PlaceMap } from '@/components/place-map';
@@ -40,6 +41,7 @@ import {
   renameCategory,
   renameList,
   setItemDone,
+  setItemFavorite,
   shareList,
   stopSharingList,
 } from '@/lib/data';
@@ -165,6 +167,27 @@ export default function ListScreen() {
       );
     } catch {
       setDoneAt(item.id, item.done_at);
+      AccessibilityInfo.announceForAccessibility(`Couldn't save. ${item.name} is unchanged.`);
+      setToggleError(`Couldn't save ${item.name}. Check your connection and try again.`);
+    }
+  };
+
+  // The favorite star (HAN-123) works the same way: flips at once, reverts if the save fails.
+  const setFavoritedAt = useCallback(
+    (id: string, at: string | null) =>
+      update((d) => ({ ...d, items: d.items.map((i) => (i.id === id ? { ...i, favorited_at: at } : i)) })),
+    [update],
+  );
+  const toggleFavorite = async (item: ItemRow) => {
+    const favorite = !item.favorited_at;
+    setFavoritedAt(item.id, favorite ? new Date().toISOString() : null);
+    try {
+      setFavoritedAt(item.id, await setItemFavorite(item.id, favorite));
+      AccessibilityInfo.announceForAccessibility(
+        favorite ? `Added ${item.name} to favorites.` : `Removed ${item.name} from favorites.`,
+      );
+    } catch {
+      setFavoritedAt(item.id, item.favorited_at);
       AccessibilityInfo.announceForAccessibility(`Couldn't save. ${item.name} is unchanged.`);
       setToggleError(`Couldn't save ${item.name}. Check your connection and try again.`);
     }
@@ -323,6 +346,10 @@ export default function ListScreen() {
             setToggleError(null);
             toggleDone(item);
           }}
+          onToggleFavorite={() => {
+            setToggleError(null);
+            toggleFavorite(item);
+          }}
           selected={item.id === selectedId || (recipes && picked.includes(item.id))}
           onPress={places ? () => select(item) : undefined}
           recipe={recipes ? { picked: picked.includes(item.id), count: picked.length } : undefined}
@@ -350,6 +377,7 @@ type ItemCardProps = {
   sources: ItemSources | undefined;
   doneLabel: string;
   onToggleDone: () => void;
+  onToggleFavorite: () => void;
   selected: boolean;
   onPress?: () => void;
   onLayoutY: (y: number) => void;
@@ -359,7 +387,18 @@ type ItemCardProps = {
 };
 
 /** The check sits beside the tappable body rather than inside it, so each is its own VoiceOver/TalkBack element. */
-function ItemCard({ item, sources, doneLabel, onToggleDone, selected, onPress, onLayoutY, onChanged, recipe }: ItemCardProps) {
+function ItemCard({
+  item,
+  sources,
+  doneLabel,
+  onToggleDone,
+  onToggleFavorite,
+  selected,
+  onPress,
+  onLayoutY,
+  onChanged,
+  recipe,
+}: ItemCardProps) {
   const theme = useTheme();
   // Edit, report and delete (HAN-40).
   const [mode, setMode] = useState<'view' | 'edit' | 'report'>('view');
@@ -446,6 +485,7 @@ function ItemCard({ item, sources, doneLabel, onToggleDone, selected, onPress, o
             </ThemedText>
           ) : null}
         </View>
+        <FavoriteStar favorite={!!item.favorited_at} name={item.name} onToggle={onToggleFavorite} />
       </View>
       {recipe ? (
         <CheckRow checked={recipe.picked} onPress={toggle} accessibilityLabel={`Add ${item.name} to shopping list`}>

@@ -69,6 +69,8 @@ export type ItemRow = {
   edited_at: string | null;
   /** When the user marked it Visited/Tried/Cooked/Done (HAN-41); null if not yet. */
   done_at: string | null;
+  /** When the user starred it as a favorite (HAN-123); null if not starred. */
+  favorited_at: string | null;
   /** The user's own note and 1–5 star rating (HAN-45); process-link never writes these. */
   note: string;
   rating: number | null;
