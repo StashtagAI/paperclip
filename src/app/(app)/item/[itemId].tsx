@@ -7,9 +7,11 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Button } from '@/components/button';
 import { WeeklyHours } from '@/components/google-place-info';
 import { Screen } from '@/components/screen';
+import { BuyButtons } from '@/components/shop-buttons';
 import { ratingLabel, StarRating } from '@/components/star-rating';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
+import { Features } from '@/constants/features';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
@@ -60,6 +62,11 @@ export default function ItemScreen() {
             ) : null}
           </View>
           <WeeklyHours item={data} />
+          {Features.shopLinks && data.list.category.kind === 'shop' ? (
+            <Section title="Buy it">
+              <BuyButtons itemId={data.id} name={data.name} />
+            </Section>
+          ) : null}
           <Rating itemId={data.id} initial={data.rating} />
           <Note itemId={data.id} initial={data.note} />
           <Photos itemId={data.id} photos={data.photos} onChanged={item.refresh} />

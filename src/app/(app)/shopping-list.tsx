@@ -6,13 +6,16 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Button } from '@/components/button';
 import { CheckRow } from '@/components/check-row';
 import { Screen } from '@/components/screen';
+import { InstacartButton } from '@/components/shop-buttons';
 import { ThemedText } from '@/components/themed-text';
+import { Features } from '@/constants/features';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { announce } from '@/lib/announce';
 import { confirmDestructive } from '@/lib/confirm';
 import { fetchRecipes } from '@/lib/data';
+import { shoppingListRequest } from '@/lib/shop-links';
 import { buildShoppingList, recipesLabel, shoppingListText } from '@/lib/shopping-list';
 import {
   clearShoppingList,
@@ -31,6 +34,7 @@ export default function ShoppingListScreen() {
   const data = recipes.data?.found;
   const lines = useMemo(() => (data ? buildShoppingList(data) : []), [data]);
   const done = lines.filter((l) => checked.includes(l.key)).length;
+  const toBuy = lines.filter((l) => !checked.includes(l.key));
   const missing = data?.filter((r) => !r.ingredients.length) ?? [];
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -175,6 +179,13 @@ export default function ShoppingListScreen() {
                 );
               })}
             </View>
+          ) : null}
+          {Features.shopLinks && lines.length ? (
+            // What's still to buy: ticked-off lines are already in the basket or the cupboard.
+            <InstacartButton
+              request={toBuy.length ? shoppingListRequest(toBuy, data.map((r) => r.name)) : null}
+              variant="primary"
+            />
           ) : null}
           <Button title="Clear list" variant="secondary" onPress={clear} />
         </>

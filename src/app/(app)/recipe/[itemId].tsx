@@ -4,12 +4,15 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Button } from '@/components/button';
 import { CheckRow } from '@/components/check-row';
 import { Screen } from '@/components/screen';
+import { InstacartButton } from '@/components/shop-buttons';
 import { ThemedText } from '@/components/themed-text';
+import { Features } from '@/constants/features';
 import { Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { announce } from '@/lib/announce';
 import { fetchRecipes } from '@/lib/data';
+import { recipeRequest } from '@/lib/shop-links';
 import { recipesLabel } from '@/lib/shopping-list';
 import { toggleRecipe, useShoppingSelection } from '@/lib/shopping-selection';
 
@@ -76,6 +79,7 @@ export default function RecipeScreen() {
               </View>
             </View>
           ) : null}
+          {Features.shopLinks && data.ingredients.length ? <InstacartButton request={recipeRequest(data)} /> : null}
           {data.steps.length ? (
             <View style={styles.section}>
               <ThemedText type="defaultBold" accessibilityRole="header">

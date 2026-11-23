@@ -53,6 +53,8 @@ Recommendations, categories, descriptions, addresses, recipe ingredients and ste
 
 The Service depends on third-party platforms and providers (for example, Instagram, TikTok, Google Maps, Apple Maps, OpenStreetMap, Sign in with Apple, Google sign-in, hosting providers, content retrieval providers, and AI model providers). We do not control them and are not responsible for their availability, content, or practices. Links to or content from third-party sites are provided for convenience only.
 
+**Affiliate links.** Buy buttons and Send to Instacart open third-party stores. Some of these links are affiliate links: if you buy something, StashtagAI may earn a commission, at no extra cost to you. As an Amazon Associate, StashtagAI earns from qualifying purchases. Purchases are between you and the store; we don't set prices, sell, ship, or handle returns.
+
 ## 7. Fees
 
 The Service is currently offered free of charge, with usage limits. If we introduce paid features, we will tell you the price and terms before you are charged, and those terms will apply in addition to these Terms.

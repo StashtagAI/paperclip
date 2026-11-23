@@ -18,6 +18,7 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 | `supabase/functions/process-link/` | Extraction edge function (owned by Extraction, HAN-6) |
 | `supabase/functions/delete-account/` | Deletes the caller's rows, storage objects and auth user with the service role (HAN-34, matches `legal/data-deletion.md`). Deploy with `supabase functions deploy delete-account` |
 | `supabase/functions/place-details/` | Fills in the Google rating and opening hours for restaurants on an Eats list when it opens, refreshed weekly; uses `GOOGLE_PLACES_API_KEY` and counts toward process-link's daily spend caps (HAN-83). Deploy with `supabase functions deploy place-details` |
+| `supabase/functions/shop-links/` | Buy links for Shop items (Amazon search first, then two stores that fit the item) and Send to Instacart pages for recipes and the shopping list (HAN-131). Affiliate IDs are function secrets; see "Affiliate links" below. Deploy with `supabase functions deploy shop-links` |
 | `supabase/functions/waitlist/` | Launch waitlist signups from the landing page; the only write path to `waitlist_signups` (HAN-100, see `landing/README.md`). Deploy with `supabase functions deploy waitlist --no-verify-jwt` |
 
 ## Setup
@@ -44,6 +45,28 @@ values are bundled into the client. For EAS builds, set the same two variables p
 (`npx eas-cli@latest env:create`), since `.env.local` is not uploaded.
 
 If the variables are missing the app shows a "Supabase not configured" screen instead of crashing.
+
+### Affiliate links (HAN-131)
+
+The Buy and Send to Instacart buttons are off until `EXPO_PUBLIC_SHOP_LINKS=1` is set for the build. The affiliate IDs
+are `shop-links` function secrets, so they change without an app release. Unset, blank, or `placeholder…` values count
+as unset: Buy links then go to plain store searches with no tag, and Send to Instacart replies "not switched on yet".
+
+| Secret | Value |
+| --- | --- |
+| `AMAZON_ASSOCIATE_TAG` | Amazon Associates tracking ID, e.g. `stashtag-20`. Added as `tag=` to Amazon searches |
+| `AFFILIATE_WRAPPER` | `sovrn` or `skimlinks`: the network that wraps every non-Amazon store link |
+| `AFFILIATE_WRAPPER_ID` | Sovrn Commerce API key, or Skimlinks publisher ID (e.g. `123456X789012`) |
+| `INSTACART_API_KEY` | Instacart Developer Platform key |
+| `INSTACART_API_BASE` | Optional. `https://connect.instacart.com` (default) or `https://connect.dev.instacart.tools` for a development key |
+
+```bash
+supabase secrets set AMAZON_ASSOCIATE_TAG=placeholder AFFILIATE_WRAPPER=sovrn AFFILIATE_WRAPPER_ID=placeholder INSTACART_API_KEY=placeholder
+supabase functions deploy shop-links
+```
+
+Amazon's rules: links open in the browser or Amazon app, never in an in-app web view, and the disclosure
+("As an Amazon Associate, StashtagAI earns from qualifying purchases") sits next to every Buy button.
 
 ### Database
 
