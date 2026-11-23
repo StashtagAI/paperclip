@@ -725,7 +725,9 @@ function Tags({ kind, tags, active, total, onPick }: TagsProps) {
 
 const styles = StyleSheet.create({
   card: {
-    padding: Spacing.three,
+    // 12 at the sides (not 16) so the chiclet row fits on one line on a 393pt-wide iPhone 15 Pro (HAN-123).
+    paddingVertical: Spacing.three,
+    paddingHorizontal: 12,
     borderRadius: Radius.row,
     borderWidth: StyleSheet.hairlineWidth * 2,
     gap: Spacing.two,
@@ -733,7 +735,7 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', gap: Spacing.three },
   body: { flex: 1, gap: Spacing.one },
   // Rows sit 16 apart when they wrap so each chiclet's 48pt hit area doesn't overlap the next row's.
-  chiclets: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 6, rowGap: Spacing.three },
+  chiclets: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.one, rowGap: Spacing.three },
   main: { gap: Spacing.one },
   footer: { gap: Spacing.two },
   link: { minHeight: 44, justifyContent: 'center' },
