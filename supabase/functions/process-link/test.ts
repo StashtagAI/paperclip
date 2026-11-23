@@ -415,6 +415,6 @@ assert.equal(errorCode("x".repeat(100)).code, "internal_error");
 assert.match(errorCode({ message: "relation \"x\" does not exist" }).detail, /does not exist/);
 
 // caps
-assert.equal(validateExtraction({ kind: "eats", category: "c", items: Array.from({ length: 60 }, (_, i) => ({ name: `n${i}` })) }).items.length, MAX_ITEMS);
-assert.equal(buildContent("https://www.instagram.com/reel/a/", { caption: "x".repeat(60_000) })!.caption!.length, 8_000);
+assert.equal(validateExtraction({ kind: "eats", category: "c", items: Array.from({ length: 100 }, (_, i) => ({ name: `n${i}` })) }).items.length, MAX_ITEMS);
+assert.equal(buildContent("https://www.instagram.com/reel/a/", { caption: "x".repeat(60_000) })!.caption!.length, 20_000);
 console.log("HAN-55 ok");

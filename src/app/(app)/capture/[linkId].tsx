@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Linking, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
@@ -11,13 +11,15 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
-import { hasText, SOURCE_LABELS, toCaptured, type Segment } from '@/lib/capture/draft';
+import { hasText, needsVisionRead, SOURCE_LABELS, toCaptured, type Segment } from '@/lib/capture/draft';
 import { recognizeText } from '@/lib/capture/ocr';
+import { readPostImage } from '@/lib/capture/post-images';
 import { recordingText, recordingTranscript } from '@/lib/capture/recording';
 import { downloadModel, isModelDownloaded, MODEL_LABEL } from '@/lib/capture/transcribe';
 import { buildCard, fetchLink } from '@/lib/data';
+import { dedupeLines } from '@/lib/capture/lines';
 import { shortUrl } from '@/lib/link-summary';
-import { PLATFORM_LABELS } from '@/lib/types';
+import { PLATFORM_LABELS, type Captured } from '@/lib/types';
 
 const native = Platform.OS !== 'web';
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
@@ -27,6 +29,7 @@ const FETCH_COPY: Record<string, string> = {
   empty_caption: 'This post has no caption we could read. Add what the post says.',
   not_available: 'We couldn’t open this post (it may be private). Add what the post says.',
   timeout: 'Reading the post took too long. Add what the post says.',
+  image_unreadable: 'We couldn’t read the text in this post’s pictures. Add screenshots of them, or paste the caption.',
 };
 
 /**
@@ -61,6 +64,36 @@ export default function CaptureScreen() {
     add({ source: 'fetched_caption', label: 'Read from the link', status: 'ready', text: fetched });
   }, [fetched]);
   const fetchReason = link.data?.error === 'needs_capture' ? link.data.raw_content?.fetch?.reason : undefined;
+
+  // HAN-126: an image post's list is in its pictures. Read them on this phone first (free); if that gets too little text,
+  // process-link reads the same pictures with vision. Either way the card is built without more taps.
+  const postImages = link.data?.error === 'needs_capture' && fetchReason === 'image_post' ? link.data.raw_content?.fetch?.images : undefined;
+  const readingImages = useRef(false);
+  useEffect(() => {
+    if (!postImages?.length || readingImages.current) return;
+    readingImages.current = true;
+    const caption = fetched ?? undefined;
+    const say = (m: string) => {
+      setBusy(m);
+      AccessibilityInfo.announceForAccessibility(m);
+    };
+    say(`Reading ${postImages.length === 1 ? 'the picture' : `${postImages.length} pictures`} in this post…`);
+    (async () => {
+      const texts = await Promise.all(
+        postImages.map((url, i) =>
+          native ? readPostImage(url, i).catch(() => '') : Promise.resolve(''),
+        ),
+      );
+      const ocr = dedupeLines(texts).join('\n');
+      setBusy(null);
+      const body: Captured = needsVisionRead(ocr)
+        ? { ...(caption ? { caption } : {}), ...(ocr ? { ocr } : {}), read_images: true }
+        : { ...(caption ? { caption } : {}), ocr };
+      AccessibilityInfo.announceForAccessibility('Building your card');
+      buildCard(linkId, body).catch((e: Error) => console.warn('[process-link]', e.message));
+      router.replace({ pathname: '/card/[linkId]', params: { linkId, sent: '1' } });
+    })();
+  }, [postImages, fetched, linkId]);
 
   async function addScreenshots() {
     setError(null);

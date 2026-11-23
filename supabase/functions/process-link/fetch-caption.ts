@@ -2,13 +2,14 @@
 // taps. TikTok: public oEmbed first (free), then Apify. Instagram: Apify only. Any failure returns ok:false and the
 // app falls back to the capture screen; it never fails the link.
 import { ALLOWED_HOSTS, type Platform, platformOf } from "./url.ts";
+import { imageRefsFrom } from "./images.ts";
 import { type VideoRef, videoRefFrom } from "./video.ts";
 
 export type FetchVia = "tiktok_oembed" | "apify_instagram" | "apify_tiktok";
 
 export type FetchOutcome =
-  | { ok: true; caption: string; via: FetchVia; ms: number; cost_usd: number; video?: VideoRef }
-  | { ok: false; reason: string; ms: number; cost_usd: number; tried: FetchVia[]; video?: VideoRef };
+  | { ok: true; caption: string; via: FetchVia; ms: number; cost_usd: number; video?: VideoRef; images?: string[] }
+  | { ok: false; reason: string; ms: number; cost_usd: number; tried: FetchVia[]; video?: VideoRef; images?: string[] };
 
 type Env = (k: string) => string | undefined;
 
@@ -155,7 +156,10 @@ export async function fetchCaption(url: URL, env: Env, fetchFn: typeof fetch = f
     const caption = clean(items[0]?.caption);
     // The same result carries the video URL (HAN-88), so keeping it costs nothing extra.
     const video = videoRefFrom(items[0]);
-    return caption ? okay(caption, "apify_instagram", video) : fail(items[0]?.error || !items.length ? "not_available" : "empty_caption", video);
+    // Photo and carousel posts: the pictures may hold the real content (HAN-126), so hand their URLs on too.
+    const images = imageRefsFrom(items[0]);
+    const out = caption ? okay(caption, "apify_instagram", video) : fail(items[0]?.error || !items.length ? "not_available" : "empty_caption", video);
+    return images.length ? { ...out, images } : out;
   } catch (e) {
     const name = (e as Error).name;
     return fail(name === "TimeoutError" || name === "AbortError" ? "timeout" : String((e as Error).message ?? e).slice(0, 80));

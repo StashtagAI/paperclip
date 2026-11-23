@@ -74,7 +74,7 @@ export async function extract(
     headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 4000,
+      max_tokens: 8000,
       system: SYSTEM,
       messages: [{ role: "user", content: `<post>\n${strip(post)}\n</post>\n${sites}` }],
     }),

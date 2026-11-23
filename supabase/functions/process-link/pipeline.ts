@@ -16,6 +16,25 @@ export interface Deps {
   log?: (msg: string) => void;
   /** stage events for the process_events table: counts, lengths and item names only */
   event?: (stage: string, ok: boolean, ms: number | undefined, detail: Record<string, unknown>) => void;
+  /** epoch ms after which no new place lookup or search starts (the edge function's wall-clock limit); items past it stay as extracted */
+  deadline?: number;
+}
+
+/** Items looked up at once. A 50-place list done one by one would outlast the edge function (Places ~0.5 s, search 10-20 s each). */
+export const LOOKUP_CONCURRENCY = 8;
+
+/** Runs `fn` over `items` with at most `n` in flight; stops starting new ones after `deadline`. Order of side effects is not guaranteed. */
+export async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>, deadline = Infinity): Promise<number> {
+  let next = 0, skipped = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const x = items[next++];
+      if (Date.now() >= deadline) { skipped++; continue; }
+      await fn(x);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  return skipped;
 }
 
 export type Result =
@@ -55,38 +74,39 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
 
   const lookup = d.lookup ?? stubLookup;
   const t1 = Date.now();
-  for (const it of ex.items) {
-    if (!PLACE_KINDS.includes(ex.kind)) continue;
+  const placeSkipped = await pool(ex.items, LOOKUP_CONCURRENCY, async (it) => {
+    if (!PLACE_KINDS.includes(ex.kind)) return;
     try {
       if (it.address) {
         // address stated in the text or linked data: geocode it, never replace it
-        if (it.lat != null || !lookup.geocode) continue;
+        if (it.lat != null || !lookup.geocode) return;
         const g = await lookup.geocode(it.address);
         if (g) { it.lat = g.lat; it.lng = g.lng; it.sources = { ...it.sources, lat: "places_lookup", lng: "places_lookup" }; }
-        continue;
+        return;
       }
       const p = await lookup.findPlace(it.name, ex.list_scope);
-      if (!p) continue;
+      if (!p) return;
       it.address = p.address;
       it.sources = { ...it.sources, address: "places_lookup" };
       if (p.lat != null && p.lng != null) { it.lat = p.lat; it.lng = p.lng; it.sources.lat = it.sources.lng = "places_lookup"; }
     } catch { /* lookup is best-effort */ }
-  }
+  }, d.deadline);
   d.event?.("places", true, Date.now() - t1, {
     items: ex.items.length,
+    skipped_for_time: placeSkipped,
     with_address: ex.items.filter((i) => i.address).length,
     with_coords: ex.items.filter((i) => i.lat != null).length,
   });
   const t2 = Date.now();
   const search = d.search ?? stubSearch;
   let searches = 0, cardsSearched = 0;
-  for (const it of ex.items) {
+  const searchSkipped = await pool(ex.items, LOOKUP_CONCURRENCY, async (it) => {
     try {
       const out = await search.research(it, ex.kind, ex.list_scope);
       searches += out.searches;
       if (out.searches || out.cached) cardsSearched++;
       const f = out.fill;
-      if (!f) continue;
+      if (!f) return;
       const urls: Record<string, string> = { ...it.source_urls };
       for (const k of ["address", "ingredients", "steps"] as const) {
         if (f[k] && !it[k]?.length && !(k === "address" && it.address)) {
@@ -97,8 +117,8 @@ export async function processCaptured(url: string, captured: unknown, d: Deps): 
       }
       if (Object.keys(urls).length) it.source_urls = urls;
     } catch { /* search is best-effort */ }
-  }
-  d.event?.("search", true, Date.now() - t2, { searches, cards: cardsSearched });
+  }, d.deadline);
+  d.event?.("search", true, Date.now() - t2, { searches, cards: cardsSearched, skipped_for_time: searchSkipped });
   d.log?.(`web_search count=${searches} cards=${cardsSearched}/${ex.items.length}`);
   return {
     ok: true,
