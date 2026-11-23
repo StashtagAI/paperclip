@@ -135,7 +135,9 @@ export function PendingLinkRow({ link, onRemoved }: { link: InFlightLink; onRemo
         </View>
       </Pressable>
       <View style={styles.actions}>
-        {retry ? (
+        {retry === 'upgrade' ? (
+          <Button title="See Premium" accessibilityLabel={`See Premium: ${post}`} onPress={() => router.push('/premium')} style={styles.action} />
+        ) : retry ? (
           <Button
             title={retry === 'rerun' ? 'Try again' : 'Add text'}
             accessibilityLabel={retry === 'rerun' ? `Try again: ${post}` : `Add what the post says: ${post}`}

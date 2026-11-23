@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useEffect, useState, type ReactNode } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Alert, Linking, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { DisplayNameForm } from '@/components/display-name-form';
@@ -15,6 +15,7 @@ import { appLockSupported, authenticate, biometricName, useAppLock } from '@/lib
 import { useAuth } from '@/lib/auth';
 import { confirmDestructive } from '@/lib/confirm';
 import { fetchDisplayName } from '@/lib/data';
+import { allowanceLine, fetchPlan, planTitle } from '@/lib/plan';
 import { PROVIDER_NAMES, SOCIAL_PROVIDERS, isAppleRelayEmail, linkedProviders, socialErrorMessage, type SocialProvider } from '@/lib/sign-in-providers';
 import { continueWith } from '@/lib/social-auth';
 import { supabase } from '@/lib/supabase';
@@ -32,7 +33,7 @@ function showAlert(title: string, message: string) {
 
 /**
  * Profile (HAN-34): your name (HAN-71), sign-in methods (HAN-112), appearance, security (HAN-49), feedback, support,
- * billing (later) and account deletion.
+ * plan (HAN-132) and account deletion.
  */
 export default function ProfileScreen() {
   const { session } = useAuth();
@@ -135,8 +136,8 @@ export default function ProfileScreen() {
         />
       </Section>
 
-      <Section title="Billing">
-        <Row title="Plans and billing" subtitle="Coming soon" disabled />
+      <Section title="Plan">
+        <PlanRow />
       </Section>
 
       <Section title="Account">
@@ -165,6 +166,30 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       </ThemedText>
       {children}
     </View>
+  );
+}
+
+/** Free or Premium and this month's AI stashes (HAN-132). Re-read when Profile comes back into view, e.g. after buying. */
+function PlanRow() {
+  const plan = useAsync(fetchPlan, []);
+  const { poll } = plan;
+  useFocusEffect(useCallback(() => void poll(), [poll]));
+  if (plan.error && !plan.data) {
+    return (
+      <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+        Couldn’t load your plan: {plan.error.message}
+      </ThemedText>
+    );
+  }
+  if (!plan.data) return null;
+  const premium = plan.data.plan === 'premium';
+  return (
+    <Row
+      title={premium ? planTitle(plan.data) : 'Free plan: see Premium'}
+      subtitle={allowanceLine(plan.data)}
+      hint={premium ? 'Shows your Premium details' : 'Shows Premium prices'}
+      onPress={() => router.push('/premium')}
+    />
   );
 }
 

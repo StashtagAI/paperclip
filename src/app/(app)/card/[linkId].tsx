@@ -198,6 +198,18 @@ export default function CardScreen() {
               onPress={() => router.dismissTo('/stash')}
             />
           </View>
+        ) : tryAgain === 'upgrade' ? (
+          // Over the monthly allowance (HAN-132). Try again works once Premium is on or the month has reset.
+          <View style={styles.footer}>
+            <Button title="See Premium" size="large" onPress={() => router.push('/premium')} />
+            <Button
+              title="Try again"
+              variant="secondary"
+              size="large"
+              accessibilityHint="Reads the post again and builds the card"
+              onPress={retry}
+            />
+          </View>
         ) : tryAgain ? (
           <Button
             title={tryAgain === 'rerun' ? 'Try again' : 'Add what the post says'}

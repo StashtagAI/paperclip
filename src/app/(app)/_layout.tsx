@@ -78,6 +78,7 @@ export default function AppLayout() {
         {/* A top-level screen like Home: the bottom bar is the way out. */}
         <Stack.Screen name="profile" options={{ title: 'Profile', headerBackVisible: false, headerLeft: () => null }} />
         <Stack.Screen name="shared" options={{ title: 'Shared with me' }} />
+        <Stack.Screen name="premium" options={{ title: 'Premium' }} />
         <Stack.Screen name="shared-by-you" options={{ title: 'Shared by you' }} />
         <Stack.Screen name="stashes" options={{ title: 'All stashes' }} />
         <Stack.Screen
