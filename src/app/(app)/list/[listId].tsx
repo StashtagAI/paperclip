@@ -16,7 +16,7 @@ import { PlaceFacts } from '@/components/google-place-info';
 import { ItemEditForm, ReportItemForm } from '@/components/item-forms';
 import { PlaceMap } from '@/components/place-map';
 import { ProgressBar } from '@/components/progress-bar';
-import { RenameForm } from '@/components/rename-form';
+import { MoveForm } from '@/components/move-form';
 import { Screen } from '@/components/screen';
 import { BuyButtons } from '@/components/shop-buttons';
 import { TextField } from '@/components/text-field';
@@ -37,11 +37,8 @@ import {
   fetchList,
   fetchListShare,
   fetchShareRecipients,
-  NAME_LIMITS,
   refreshPlaceDetails,
   removeShareRecipient,
-  renameCategory,
-  renameList,
   setItemDone,
   setItemFavorite,
   shareList,
@@ -61,7 +58,8 @@ const PLACE_KINDS: readonly Kind[] = ['eats', 'travel'];
 
 /** Level 3: the items in one list, e.g. Restaurants > Denver. */
 export default function ListScreen() {
-  const { listId } = useLocalSearchParams<{ listId: string }>();
+  // `moved` is the summary from moving another list into this one (HAN-124), shown once on arrival.
+  const { listId, moved } = useLocalSearchParams<{ listId: string; moved?: string }>();
   const list = useAsync(() => fetchList(listId), [listId]);
   const data = list.data;
   const places = !!data && PLACE_KINDS.includes(data.category.kind);
@@ -117,7 +115,7 @@ export default function ListScreen() {
   const ownerName = share.data?.name ?? null;
   const [shareOpen, setShareOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [shareNote, setShareNote] = useState<{ text: string; error?: boolean } | null>(null);
+  const [shareNote, setShareNote] = useState<{ text: string; error?: boolean } | null>(moved ? { text: moved } : null);
 
   const note = (text: string, error = false) => {
     setShareNote({ text, error });
@@ -267,7 +265,7 @@ export default function ListScreen() {
                 onPress={() => setEditing(true)}
                 accessibilityRole="button"
                 accessibilityLabel="Edit list"
-                accessibilityHint="Rename or delete this list"
+                accessibilityHint="Move or delete this list"
                 hitSlop={12}>
                 <ThemedText type="defaultBold" style={{ color: theme.link }}>
                   Edit
@@ -280,19 +278,17 @@ export default function ListScreen() {
       {list.loading && !data ? <ActivityIndicator /> : null}
       {data && editing ? (
         <>
-          <RenameForm
-            fields={[
-              { key: 'category', label: 'Category', value: data.category.name, maxLength: NAME_LIMITS.category },
-              { key: 'list', label: 'List', value: data.name, maxLength: NAME_LIMITS.list },
-            ]}
-            onCancel={() => setEditing(false)}
-            onSave={async (changed) => {
-              if (changed.category !== undefined) await renameCategory(data.category, changed.category);
-              if (changed.list !== undefined) await renameList(data, changed.list);
-              await refresh();
-              setEditing(false);
-            }}
-          />
+          {data.items.length ? (
+            <MoveForm
+              kind={data.category.kind}
+              fromListId={data.id}
+              itemIds={data.items.map((i) => i.id)}
+              title={data.items.length === 1 ? 'Move its 1 item to' : `Move all ${data.items.length} items to`}
+              warning={token ? 'This list is shared. Moving everything out of it stops its link working.' : undefined}
+              onCancel={() => setEditing(false)}
+              onMoved={(dest, summary) => router.replace({ pathname: '/list/[listId]', params: { listId: dest, moved: summary } })}
+            />
+          ) : null}
           <DeleteButton
             title="Delete this list"
             confirmTitle={`Delete ${data.name}?`}

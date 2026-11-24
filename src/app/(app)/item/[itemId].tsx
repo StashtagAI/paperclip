@@ -6,6 +6,7 @@ import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from 'react-
 
 import { Button } from '@/components/button';
 import { WeeklyHours } from '@/components/google-place-info';
+import { MoveForm } from '@/components/move-form';
 import { Screen } from '@/components/screen';
 import { BuyButtons } from '@/components/shop-buttons';
 import { ratingLabel, StarRating } from '@/components/star-rating';
@@ -25,6 +26,7 @@ import {
   rateItem,
   saveItemNote,
   updatePhotoAlt,
+  type ItemDetail,
   type ItemPhoto,
   type PickedPhoto,
 } from '@/lib/data';
@@ -67,6 +69,7 @@ export default function ItemScreen() {
               <BuyButtons itemId={data.id} name={data.name} />
             </Section>
           ) : null}
+          <Move item={data} onMoved={item.refresh} />
           <Rating itemId={data.id} initial={data.rating} />
           <Note itemId={data.id} initial={data.note} />
           <Photos itemId={data.id} photos={data.photos} onChanged={item.refresh} />
@@ -98,6 +101,50 @@ function Status({ text, error }: { text: string | null; error?: boolean }) {
       accessibilityRole={error ? 'alert' : undefined}>
       {text}
     </ThemedText>
+  );
+}
+
+/** Move this card to another of the user's lists under the same kind (HAN-124), chosen rather than typed. */
+function Move({ item, onMoved }: { item: ItemDetail; onMoved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  return (
+    <Section title="Category and list">
+      {open ? (
+        <MoveForm
+          kind={item.list.category.kind}
+          fromListId={item.list.id}
+          itemIds={[item.id]}
+          title={`Move “${item.name}” to`}
+          onCancel={() => setOpen(false)}
+          onMoved={(_, summary) => {
+            setOpen(false);
+            setStatus(summary);
+            onMoved();
+          }}
+        />
+      ) : (
+        <>
+          <ThemedText>
+            {item.list.category.name} › {item.list.name}
+          </ThemedText>
+          <View style={styles.actions}>
+            <Button
+              title="Move"
+              variant="secondary"
+              accessibilityLabel="Move to another category or list"
+              onPress={() => {
+                setStatus(null);
+                setOpen(true);
+              }}
+              style={styles.flex}
+            />
+          </View>
+        </>
+      )}
+      <Status text={status} />
+    </Section>
   );
 }
 
