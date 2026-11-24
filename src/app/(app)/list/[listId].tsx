@@ -18,10 +18,12 @@ import { PlaceMap } from '@/components/place-map';
 import { ProgressBar } from '@/components/progress-bar';
 import { RenameForm } from '@/components/rename-form';
 import { Screen } from '@/components/screen';
+import { BuyButtons } from '@/components/shop-buttons';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ratingLabel } from '@/components/star-rating';
 import { TagChip } from '@/components/tag-chip';
+import { Features } from '@/constants/features';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
@@ -64,6 +66,7 @@ export default function ListScreen() {
   const data = list.data;
   const places = !!data && PLACE_KINDS.includes(data.category.kind);
   const recipes = data?.category.kind === 'recipes';
+  const buy = Features.shopLinks && data?.category.kind === 'shop';
   const picked = useShoppingSelection().ids;
   // Tapping a #tag narrows the list and its map to the items from posts with that tag (HAN-79).
   const [tag, setTag] = useState<string | null>(null);
@@ -353,6 +356,7 @@ export default function ListScreen() {
           selected={item.id === selectedId || (recipes && picked.includes(item.id))}
           onPress={places ? () => select(item) : undefined}
           recipe={recipes ? { picked: picked.includes(item.id), count: picked.length } : undefined}
+          buy={buy}
           onLayoutY={(y) => rowY.current.set(item.id, y)}
         />
       ))}
@@ -384,6 +388,8 @@ type ItemCardProps = {
   onChanged: () => Promise<unknown> | void;
   /** Recipe cards (HAN-74): whether it's on the shopping list, and how many recipes are. */
   recipe?: { picked: boolean; count: number };
+  /** Shop cards (HAN-131): a Buy chiclet that opens store links on the card. */
+  buy?: boolean;
 };
 
 /** The check sits beside the tappable body rather than inside it, so each is its own VoiceOver/TalkBack element. */
@@ -398,10 +404,12 @@ function ItemCard({
   onLayoutY,
   onChanged,
   recipe,
+  buy,
 }: ItemCardProps) {
   const theme = useTheme();
   // Edit, report and delete (HAN-40).
   const [mode, setMode] = useState<'view' | 'edit' | 'report'>('view');
+  const [buyOpen, setBuyOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const provenance = provenanceOf(item, sources);
@@ -502,6 +510,16 @@ function ItemCard({
             accessibilityHint="Ingredients and steps"
           />
         ) : null}
+        {buy ? (
+          <Chiclet
+            label={buyOpen ? 'Hide stores' : 'Buy'}
+            icon={{ ios: 'bag', android: 'shopping_bag', web: 'shopping_bag' }}
+            onPress={() => setBuyOpen((o) => !o)}
+            accessibilityLabel={`Buy ${item.name}`}
+            accessibilityHint={buyOpen ? 'Hides the stores' : 'Shows stores that sell it'}
+            expanded={buyOpen}
+          />
+        ) : null}
         <Chiclet
           label="Notes"
           onPress={() => router.push({ pathname: '/item/[itemId]', params: { itemId: item.id } })}
@@ -531,6 +549,7 @@ function ItemCard({
           accessibilityLabel={`Delete ${item.name}`}
         />
       </View>
+      {buy && buyOpen ? <BuyButtons itemId={item.id} name={item.name} /> : null}
       {notice ? (
         <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
           {notice}

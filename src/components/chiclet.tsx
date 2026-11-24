@@ -14,13 +14,15 @@ type ChicletProps = {
   label?: string;
   icon?: SymbolViewProps['name'];
   color?: string;
+  /** For a chiclet that shows or hides something below it; read out as expanded or collapsed. */
+  expanded?: boolean;
 };
 
 /**
  * A small pill button for the actions at the bottom of an item card (HAN-123), so they sit on one line instead of
  * two rows of full-height links. The pill stays compact; hitSlop takes the tap area to 48pt.
  */
-export function Chiclet({ onPress, accessibilityLabel, accessibilityHint, label, icon, color }: ChicletProps) {
+export function Chiclet({ onPress, accessibilityLabel, accessibilityHint, label, icon, color, expanded }: ChicletProps) {
   const theme = useTheme();
   const ink = color ?? theme.link;
   return (
@@ -29,6 +31,7 @@ export function Chiclet({ onPress, accessibilityLabel, accessibilityHint, label,
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
+      accessibilityState={expanded === undefined ? undefined : { expanded }}
       // Sideways slop is half the 4pt gap between chiclets, so neighbouring tap areas meet without overlapping.
       hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
       style={({ pressed }) => [
