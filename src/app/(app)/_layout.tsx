@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { BottomNav } from '@/components/bottom-nav';
 import { HomeBackButton } from '@/components/home-back-button';
 import { NewSharePrompt } from '@/components/new-share-prompt';
+import { Tutorial } from '@/components/tutorial';
 import { useNudges } from '@/hooks/use-nudges';
 import { useTheme } from '@/hooks/use-theme';
 import { pendingShare } from '@/lib/share';
@@ -78,8 +79,10 @@ export default function AppLayout() {
         {/* A top-level screen like Home: the bottom bar is the way out. */}
         <Stack.Screen name="profile" options={{ title: 'Profile', headerBackVisible: false, headerLeft: () => null }} />
         <Stack.Screen name="shared" options={{ title: 'Shared with me' }} />
+        <Stack.Screen name="premium" options={{ title: 'Premium' }} />
         <Stack.Screen name="shared-by-you" options={{ title: 'Shared by you' }} />
         <Stack.Screen name="stashes" options={{ title: 'All stashes' }} />
+        <Stack.Screen name="admin" options={{ title: 'Admin' }} />
         <Stack.Screen
           name="feedback"
           options={{ title: 'Send feedback', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.75, 1] }}
@@ -95,6 +98,7 @@ export default function AppLayout() {
       </Stack>
       <BottomNav />
       <NewSharePrompt />
+      <Tutorial />
     </View>
   );
 }

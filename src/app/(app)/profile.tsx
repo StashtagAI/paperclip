@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useEffect, useState, type ReactNode } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Alert, Linking, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { DisplayNameForm } from '@/components/display-name-form';
@@ -10,13 +10,16 @@ import { Radius, Spacing, type ThemeColor } from '@/constants/theme';
 import { useSchemePreference, type SchemePreference } from '@/hooks/use-color-scheme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
+import { fetchIsAdmin } from '@/lib/admin';
 import { SUPPORT_EMAIL, appVersion, signOutEverywhere, signOutHere, supportMailto } from '@/lib/account';
 import { appLockSupported, authenticate, biometricName, useAppLock } from '@/lib/app-lock';
 import { useAuth } from '@/lib/auth';
 import { confirmDestructive } from '@/lib/confirm';
 import { fetchDisplayName } from '@/lib/data';
+import { allowanceLine, fetchPlan, planTitle } from '@/lib/plan';
 import { PROVIDER_NAMES, SOCIAL_PROVIDERS, isAppleRelayEmail, linkedProviders, socialErrorMessage, type SocialProvider } from '@/lib/sign-in-providers';
 import { continueWith } from '@/lib/social-auth';
+import { openTutorial } from '@/lib/tutorial';
 import { supabase } from '@/lib/supabase';
 
 const SCHEMES: { value: SchemePreference; label: string }[] = [
@@ -32,11 +35,13 @@ function showAlert(title: string, message: string) {
 
 /**
  * Profile (HAN-34): your name (HAN-71), sign-in methods (HAN-112), appearance, security (HAN-49), feedback, support,
- * billing (later) and account deletion.
+ * the tutorial (HAN-137), plan (HAN-132), the admin portal for admins (HAN-128) and account deletion.
  */
 export default function ProfileScreen() {
   const { session } = useAuth();
   const displayName = useAsync(fetchDisplayName, []);
+  // HAN-128: a convenience only; admin_stats() checks again on the server. A failed check just hides the row.
+  const isAdmin = useAsync(fetchIsAdmin, []);
   const toast = useToast();
   const [signingOut, setSigningOut] = useState(false);
 
@@ -125,6 +130,12 @@ export default function ProfileScreen() {
       </Section>
 
       <Section title="Help">
+        <Row
+          title="How StashtagAI works"
+          subtitle="A quick tour of stashing and your lists"
+          hint="Opens the tutorial"
+          onPress={() => openTutorial(session?.user.id ?? null)}
+        />
         <Row title="Send feedback" subtitle="Report a bug or share an idea" onPress={() => router.push('/feedback')} />
         <Row
           title="Contact support"
@@ -135,9 +146,15 @@ export default function ProfileScreen() {
         />
       </Section>
 
-      <Section title="Billing">
-        <Row title="Plans and billing" subtitle="Coming soon" disabled />
+      <Section title="Plan">
+        <PlanRow />
       </Section>
+
+      {isAdmin.data ? (
+        <Section title="Admin">
+          <Row title="Admin portal" subtitle="Usage, costs, users and stashes" onPress={() => router.push('/admin')} />
+        </Section>
+      ) : null}
 
       <Section title="Account">
         <Row title="Sign out" subtitle="On this device" onPress={signOutHere} />
@@ -165,6 +182,30 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       </ThemedText>
       {children}
     </View>
+  );
+}
+
+/** Free or Premium and this month's AI stashes (HAN-132). Re-read when Profile comes back into view, e.g. after buying. */
+function PlanRow() {
+  const plan = useAsync(fetchPlan, []);
+  const { poll } = plan;
+  useFocusEffect(useCallback(() => void poll(), [poll]));
+  if (plan.error && !plan.data) {
+    return (
+      <ThemedText type="small" themeColor="danger" accessibilityRole="alert">
+        Couldn’t load your plan: {plan.error.message}
+      </ThemedText>
+    );
+  }
+  if (!plan.data) return null;
+  const premium = plan.data.plan === 'premium';
+  return (
+    <Row
+      title={premium ? planTitle(plan.data) : 'Free plan: see Premium'}
+      subtitle={allowanceLine(plan.data)}
+      hint={premium ? 'Shows your Premium details' : 'Shows Premium prices'}
+      onPress={() => router.push('/premium')}
+    />
   );
 }
 

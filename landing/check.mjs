@@ -25,6 +25,9 @@ for (const path of ['index.html', ...content.legalPages.map((p) => `${p.slug}/in
   check(/<meta name="description" content="[^"]+">/.test(page), `${path}: missing meta description`);
   check(/<link rel="canonical" href="https:\/\/[^"]+">/.test(page), `${path}: missing canonical`);
   check(!/href=""/.test(page), `${path}: empty href`);
+  // HAN-128: Cloudflare Pages injects the Web Analytics beacon at deploy; a CSP that blocks it silently counts nothing.
+  check(/script-src [^;"]*https:\/\/static\.cloudflareinsights\.com[;"]/.test(page), `${path}: CSP blocks the Web Analytics beacon`);
+  check(/connect-src [^;"]*https:\/\/cloudflareinsights\.com[;"]/.test(page), `${path}: CSP blocks Web Analytics reporting`);
 }
 
 // JSON-LD parses, and the FAQPage matches the visible FAQ word for word.
@@ -69,7 +72,7 @@ for (const [form, action] of forms) {
   check(/<div class="hp"><label>[^<]+<input type="text" name="website" tabindex="-1"/.test(form), 'waitlist: honeypot missing');
   check(!/name="(platform|email)"[^>]*\bvalue="[^"]*"[^>]*type="radio"/.test(form), 'waitlist: no platform preselected in HTML');
   check(new RegExp(`form-action 'self' ${fn.origin}[;"]`).test(html), 'waitlist: CSP form-action does not allow the function');
-  check(html.includes(`connect-src 'self' ${fn.origin};`), 'waitlist: CSP connect-src does not allow the function');
+  check(new RegExp(`connect-src 'self' ${fn.origin}[ ;]`).test(html), 'waitlist: CSP connect-src does not allow the function');
   const pending = [!config.appStore.url && 'ios', !config.googlePlay.url && 'android'].filter(Boolean);
   for (const p of ['ios', 'android']) {
     check(form.includes(`value="${p}"`) === pending.includes(p), `waitlist: platform "${p}" offered while its listing is ${pending.includes(p) ? 'missing' : 'live'}`);
@@ -91,6 +94,14 @@ for (const path of readdirSync(join(root, 'dist'), { recursive: true }).filter((
   check(!tokens, `${path}: unfilled placeholder ${[...new Set(tokens ?? [])].join(', ')}`);
 }
 check(read('privacy/index.html').includes(`href="mailto:${config.contactEmail}"`), 'privacy: no mailto link to contactEmail');
+
+// Cloudflare Email Obfuscation swaps addresses for "[email protected]" and a decoder script our CSP blocks (HAN-138):
+// every address in a page body must sit inside <!--email_off-->, which Cloudflare leaves alone.
+for (const path of readdirSync(join(root, 'dist'), { recursive: true }).filter((f) => f.endsWith('.html'))) {
+  const body = read(path).split('<body>')[1] ?? '';
+  const outside = body.replace(/<!--email_off-->[\s\S]*?<!--\/email_off-->/g, '').replace(/<script[\s\S]*?<\/script>/g, '');
+  check(!/[^\s@<>"]+@[^\s@<>"]+\.[a-z]/i.test(outside), `${path}: email address outside <!--email_off-->`);
+}
 
 // robots.txt allows the AI crawlers by name and points at the sitemap.
 const robots = read('robots.txt');

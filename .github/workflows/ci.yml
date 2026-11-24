@@ -32,6 +32,10 @@ jobs:
       - run: node --experimental-strip-types supabase/functions/shop-links/test.ts
       # HAN-112: Apple client secret, token checks for apple-token, and revoking on account deletion.
       - run: node --experimental-strip-types supabase/functions/apple-token/test.ts
+      # HAN-132: RevenueCat sync (who may call it, sandbox, expiry, manual grants).
+      - run: node --experimental-strip-types supabase/functions/entitlements/test.ts
+      # HAN-128: admin website traffic (admins only, missing secrets, Cloudflare errors, query windows).
+      - run: node --experimental-strip-types supabase/functions/admin-web-traffic/test.ts
       # HAN-96/HAN-100: landing site builds and passes its checks (FAQ/JSON-LD, store links, waitlist form and CSP).
       - run: npm run check
         working-directory: landing

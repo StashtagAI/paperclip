@@ -122,6 +122,17 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
     return json({ error: claimBlock(link.status) ?? "already_processing" }, 409);
   }
 
+  // HAN-132: the plan's monthly stash allowance (free cap, Premium fair-use ceiling), before any paid call. Fails closed.
+  const { data: allowance, error: ae } = await db.rpc("claim_stash_allowance", { p_user: link.user_id, p_link: link_id });
+  if (ae || !allowance) {
+    console.error(`[process-link] allowance check failed: ${ae?.message}`);
+    return await fail("quota_unavailable");
+  }
+  if (!allowance.allowed) {
+    await event("allowance", false, undefined, allowance);
+    return await fail("monthly_limit", 429);
+  }
+
   // HAN-129: a post someone already stashed is read once. Only for runs the server fetches itself: text the user sent
   // is never served to anyone else. A hit spends nothing, so it skips the quota (a cost event of $0 is still booked).
   const srcKey = sourceKey(postUrl);
@@ -314,6 +325,9 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
       );
       if (ie) throw ie;
     }
+    // HAN-132: one stash used this month. Kept when the stash is later deleted; a not-sorted run isn't counted.
+    const { error: ue } = await db.from("stash_usage").upsert({ user_id: link.user_id, link_id }, { onConflict: "link_id", ignoreDuplicates: true });
+    if (ue) console.error(`[process-link] stash_usage: ${ue.message}`);
     await db.from("links").update({
       status: "done",
       error: null,

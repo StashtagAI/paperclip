@@ -7,7 +7,7 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 
 | Path | What |
 | --- | --- |
-| `src/app/` | Routes: `sign-in`, `auth/callback`, `(app)/index` (Home), `(app)/stash` (Stash a link sheet), `(app)/share` (share-sheet landing), `(app)/capture/[linkId]` (screenshots / recording / caption), `(app)/card/[linkId]` (live status + review), `(app)/kind/[kind]` (Kind › Category › List), `(app)/list/[listId]` (items), `(app)/profile` (appearance, feedback, support, billing, delete account) with its `(app)/feedback` and `(app)/delete-account` sheets |
+| `src/app/` | Routes: `sign-in`, `auth/callback`, `(app)/index` (Home), `(app)/stash` (Stash a link sheet), `(app)/share` (share-sheet landing), `(app)/capture/[linkId]` (screenshots / recording / caption), `(app)/card/[linkId]` (live status + review), `(app)/kind/[kind]` (Kind › Category › List), `(app)/list/[listId]` (items), `(app)/profile` (appearance, feedback, support, plan, delete account) with its `(app)/feedback` and `(app)/delete-account` sheets |
 | `src/lib/capture/`, `modules/media-extract/` | On-device OCR, frame sampling, audio extraction and whisper transcription; see `docs/capture.md` |
 | `src/lib/link-filter.ts` | Instagram/TikTok URL allowlist; re-exports `supabase/functions/_shared/link-filter.ts`, which `process-link` also uses (unit-tested in `src/lib/__tests__`) |
 | `src/lib/supabase.ts`, `src/lib/auth.tsx` | Supabase client and session context (email magic link / one-time code) |
@@ -19,6 +19,8 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 | `supabase/functions/delete-account/` | Deletes the caller's rows, storage objects and auth user with the service role (HAN-34, matches `legal/data-deletion.md`). Deploy with `supabase functions deploy delete-account` |
 | `supabase/functions/place-details/` | Fills in the Google rating and opening hours for restaurants on an Eats list when it opens, refreshed weekly; uses `GOOGLE_PLACES_API_KEY` and counts toward process-link's daily spend caps (HAN-83). Deploy with `supabase functions deploy place-details` |
 | `supabase/functions/shop-links/` | Buy links for Shop items (Amazon search first, then two stores that fit the item) and Send to Instacart pages for recipes and the shopping list (HAN-131). Affiliate IDs are function secrets; see "Affiliate links" below. Deploy with `supabase functions deploy shop-links` |
+| `supabase/functions/entitlements/` | Free / Premium (HAN-132): RevenueCat webhook and the app's after-purchase sync; the only write path to `entitlements` besides manual grants. See `docs/premium.md`. Deploy with `supabase functions deploy entitlements --no-verify-jwt` |
+| `src/app/(app)/premium.tsx`, `src/lib/plan.ts`, `src/lib/purchases.ts` | Premium paywall, plan and monthly allowance, in-app purchase through RevenueCat (HAN-132, `docs/premium.md`) |
 | `supabase/functions/waitlist/` | Launch waitlist signups from the landing page; the only write path to `waitlist_signups` (HAN-100, see `landing/README.md`). Deploy with `supabase functions deploy waitlist --no-verify-jwt` |
 
 ## Setup
@@ -127,6 +129,38 @@ Supabase dashboard › Authentication:
 Feedback inserts are capped in the database: 5 per account in any 10 minutes and 20 in any 24 hours
 (`feedback_rate_limit` trigger). Over the cap, PostgREST returns HTTP 429 (`PT429`) and the feedback sheet keeps the
 draft and says to try later.
+
+### Admin portal
+
+Profile › **Admin portal** (`(app)/admin`, HAN-128) shows stashes imported (24 h / 7 d / 30 d / all time), failures by
+reason, users (total, new, active), estimated API spend with a per-service breakdown, a 14-day table and engagement
+counts. It reads `public.admin_stats()`, which raises `42501` unless `public.is_admin()` is true. Costs are the
+list-price estimates that process-link and place-details book as `process_events` stage `cost` (HAN-37), not invoices.
+Downloads and revenue aren't tracked here; the screen says so and links to App Store Connect.
+
+**Website traffic** comes from Cloudflare Web Analytics on the `stashtag-landing` Pages project (Metrics › Web
+Analytics, cookie-free). Pages injects the beacon at deploy time, and `landing/build.mjs` allows it in each page's CSP
+(`npm run check` fails if it doesn't). The `admin-web-traffic` Edge Function checks the caller with `is_admin()`, then
+asks Cloudflare's GraphQL API for visits and page views on `stashtag.ai` (24 h / 7 d / 30 d, bots excluded) and the top
+pages, referrers and countries over 30 days. Secrets: `CLOUDFLARE_ANALYTICS_TOKEN` (a token with only Account ›
+Account Analytics › Read) and `CLOUDFLARE_ACCOUNT_ID`. Without them the section says "Unavailable".
+
+```bash
+supabase functions deploy admin-web-traffic   # JWT verification stays on
+```
+
+Admins are rows in `public.admin_users` (email + account id), which clients can't read or write. A row grants access
+only to its bound `user_id`, and only while that account still has the same email. Email sign-ups are auto-confirmed
+in production, so binding by email alone would let whoever signs up first with an allowlisted address in. To add an
+admin once they've signed up, check the account is really theirs, then run in the SQL editor:
+
+```sql
+insert into public.admin_users (email, user_id)
+select lower(email), id from auth.users where lower(email) = 'someone@example.com'
+on conflict (email) do update set user_id = excluded.user_id;
+```
+
+Remove one with `delete from public.admin_users where email = '…'`.
 
 ## Running
 
