@@ -45,10 +45,13 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   }
 }
 
-/** Logs the alert and, when ALERT_WEBHOOK_URL is set (Slack-style incoming webhook), posts it there. Never throws. */
 async function sendAlert(env: HandlerDeps["env"], fetchFn: typeof fetch, kind: string, userId: string, q: Record<string, unknown>) {
-  const text = `StashtagAI process-link alert: ${kind} (user ${userId.slice(0, 8)}, ${q.hour_runs} runs in the last hour, `
-    + `$${Number(q.user_usd).toFixed(2)} this user / $${Number(q.all_usd).toFixed(2)} all users today)`;
+  await postAlert(env, fetchFn, `StashtagAI process-link alert: ${kind} (user ${userId.slice(0, 8)}, ${q.hour_runs} runs in the last hour, `
+    + `$${Number(q.user_usd).toFixed(2)} this user / $${Number(q.all_usd).toFixed(2)} all users today)`);
+}
+
+/** Logs the alert and, when ALERT_WEBHOOK_URL is set (Slack-style incoming webhook), posts it there. Never throws. */
+async function postAlert(env: HandlerDeps["env"], fetchFn: typeof fetch, text: string) {
   console.error(`[process-link] ALERT ${text}`);
   const hook = env("ALERT_WEBHOOK_URL");
   if (!hook) return;
@@ -296,8 +299,15 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
       if (ie) throw ie;
     }
     // HAN-132: one stash used this month. Kept when the stash is later deleted; a not-sorted run isn't counted.
-    const { error: ue } = await db.from("stash_usage").upsert({ user_id: link.user_id, link_id }, { onConflict: "link_id", ignoreDuplicates: true });
-    if (ue) console.error(`[process-link] stash_usage: ${ue.message}`);
+    // The items are already filed, so a write that fails twice still finishes the stash, but alerts (HAN-134): an
+    // uncounted stash is a free one.
+    const countStash = () => db.from("stash_usage").upsert({ user_id: link.user_id, link_id }, { onConflict: "link_id", ignoreDuplicates: true });
+    const { error: ue } = await countStash().then((r: { error: unknown }) => r.error ? countStash() : r);
+    if (ue) {
+      await event("stash_usage", false, undefined, { error: (ue as { code?: string }).code ?? "error" });
+      await postAlert(env, fetchFn, `StashtagAI process-link alert: stash_usage write failed twice (user ${link.user_id.slice(0, 8)}, `
+        + `link ${link_id.slice(0, 8)}); this stash isn't counted against the monthly cap`);
+    }
     await db.from("links").update({
       status: "done",
       error: null,
