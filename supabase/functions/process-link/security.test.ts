@@ -15,10 +15,12 @@ class FakeDb {
   constructor(tables: Record<string, Row[]>, tokens: Record<string, string>) { this.tables = tables; this.tokens = tokens; }
   auth = { getUser: async (t: string) => ({ data: { user: this.tokens[t] ? { id: this.tokens[t] } : null } }) };
   from(table: string) { return new Query(this, table); }
-  /** claim_process_quota (HAN-37): always allows, and records the call like a write. */
+  /** claim_stash_allowance's answer (HAN-132); tests set it to refuse. */
+  allowance: Row = { allowed: true };
+  /** claim_process_quota (HAN-37) and claim_stash_allowance: allow, and record the call like a write. */
   rpc(fn: string, args: Row) {
     this.writes.push({ table: `rpc:${fn}`, op: "rpc", rows: [args] });
-    return Promise.resolve({ data: { allowed: true, alert: null }, error: null });
+    return Promise.resolve({ data: fn === "claim_stash_allowance" ? this.allowance : { allowed: true, alert: null }, error: null });
   }
 }
 
@@ -162,6 +164,22 @@ const captured = { caption: "Taco Uno in Austin" };
     const r = await call(db, { link_id: VICTIM.link_id, captured }, "token-b", f.fn);
     assert.equal(r.status, 200);
     assert.equal((await r.json()).status, "done");
+    // HAN-132: a stash that filed something counts once against B's month.
+    assert.deepEqual(db.tables.stash_usage.map(({ user_id, link_id }) => ({ user_id, link_id })), [{ user_id: VICTIM.user_id, link_id: VICTIM.link_id }]);
+  }
+
+  // HAN-132: over the monthly allowance, the link fails with monthly_limit before any outbound call or quota claim.
+  {
+    const db = world();
+    db.allowance = { allowed: false, reason: "monthly_limit", plan: "free", used: 15, limit: 15 };
+    const f = mockFetch({ kind: "eats", category: "Restaurants", list_scope: "Austin", tags: [], items: [{ name: "Taco Uno", description: "" }] });
+    const r = await call(db, { link_id: LA, captured }, "token-a", f.fn);
+    assert.equal(r.status, 429);
+    assert.deepEqual(await r.json(), { status: "failed", error: "monthly_limit" });
+    assert.equal(db.tables.links.find((l) => l.id === LA)!.error, "monthly_limit");
+    assert.equal(f.urls.length, 0, "no paid calls");
+    assert.ok(!db.writes.some((w) => w.table === "rpc:claim_process_quota"), "quota not claimed");
+    assert.equal(db.tables.stash_usage, undefined, "nothing counted");
   }
 }
 

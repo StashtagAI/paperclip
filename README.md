@@ -7,7 +7,7 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 
 | Path | What |
 | --- | --- |
-| `src/app/` | Routes: `sign-in`, `auth/callback`, `(app)/index` (Home), `(app)/stash` (Stash a link sheet), `(app)/share` (share-sheet landing), `(app)/capture/[linkId]` (screenshots / recording / caption), `(app)/card/[linkId]` (live status + review), `(app)/kind/[kind]` (Kind › Category › List), `(app)/list/[listId]` (items), `(app)/profile` (appearance, feedback, support, billing, delete account) with its `(app)/feedback` and `(app)/delete-account` sheets |
+| `src/app/` | Routes: `sign-in`, `auth/callback`, `(app)/index` (Home), `(app)/stash` (Stash a link sheet), `(app)/share` (share-sheet landing), `(app)/capture/[linkId]` (screenshots / recording / caption), `(app)/card/[linkId]` (live status + review), `(app)/kind/[kind]` (Kind › Category › List), `(app)/list/[listId]` (items), `(app)/profile` (appearance, feedback, support, plan, delete account) with its `(app)/feedback` and `(app)/delete-account` sheets |
 | `src/lib/capture/`, `modules/media-extract/` | On-device OCR, frame sampling, audio extraction and whisper transcription; see `docs/capture.md` |
 | `src/lib/link-filter.ts` | Instagram/TikTok URL allowlist; re-exports `supabase/functions/_shared/link-filter.ts`, which `process-link` also uses (unit-tested in `src/lib/__tests__`) |
 | `src/lib/supabase.ts`, `src/lib/auth.tsx` | Supabase client and session context (email magic link / one-time code) |
@@ -19,6 +19,8 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 | `supabase/functions/delete-account/` | Deletes the caller's rows, storage objects and auth user with the service role (HAN-34, matches `legal/data-deletion.md`). Deploy with `supabase functions deploy delete-account` |
 | `supabase/functions/place-details/` | Fills in the Google rating and opening hours for restaurants on an Eats list when it opens, refreshed weekly; uses `GOOGLE_PLACES_API_KEY` and counts toward process-link's daily spend caps (HAN-83). Deploy with `supabase functions deploy place-details` |
 | `supabase/functions/shop-links/` | Buy links for Shop items (Amazon search first, then two stores that fit the item) and Send to Instacart pages for recipes and the shopping list (HAN-131). Affiliate IDs are function secrets; see "Affiliate links" below. Deploy with `supabase functions deploy shop-links` |
+| `supabase/functions/entitlements/` | Free / Premium (HAN-132): RevenueCat webhook and the app's after-purchase sync; the only write path to `entitlements` besides manual grants. See `docs/premium.md`. Deploy with `supabase functions deploy entitlements --no-verify-jwt` |
+| `src/app/(app)/premium.tsx`, `src/lib/plan.ts`, `src/lib/purchases.ts` | Premium paywall, plan and monthly allowance, in-app purchase through RevenueCat (HAN-132, `docs/premium.md`) |
 | `supabase/functions/waitlist/` | Launch waitlist signups from the landing page; the only write path to `waitlist_signups` (HAN-100, see `landing/README.md`). Deploy with `supabase functions deploy waitlist --no-verify-jwt` |
 
 ## Setup

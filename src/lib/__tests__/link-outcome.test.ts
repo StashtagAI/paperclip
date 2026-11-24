@@ -34,6 +34,11 @@ describe('retryAction', () => {
     expect(retryAction('failed', 'run_budget')).toBe('capture');
   });
 
+  it('offers Premium over the monthly allowance (HAN-132)', () => {
+    expect(retryAction('failed', 'monthly_limit')).toBe('upgrade');
+    expect(failureReason('monthly_limit')).toMatch(/Premium lifts the limit/);
+  });
+
   it('has nothing to retry for a link that is not allowed, or one that did not fail', () => {
     expect(retryAction('failed', 'url_not_allowed')).toBeNull();
     expect(retryAction('done', null)).toBeNull();
