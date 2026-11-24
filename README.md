@@ -227,6 +227,33 @@ The workflow can't prompt for an Apple login, so it relies on (both already in p
 - `submit.production.ios.ascAppId` in `eas.json`: the app's numeric Apple ID (App Store Connect ›
   the app › App Information › General Information › Apple ID).
 
+### Releasing to Google Play
+
+`.eas/workflows/release-android.yml` builds the `production` profile (an `.aab`) and uploads it to
+the track in `submit.production.android.track` in `eas.json` (`internal`). It runs only when started:
+
+```bash
+git fetch origin main
+npx eas-cli@latest workflow:run release-android.yml --ref $(git rev-parse origin/main)
+```
+
+One-time setup before the workflow can submit (HAN-140):
+
+1. Play Console › Create app, package `ai.stashtag.app`.
+2. First build by hand, `npx eas-cli@latest build --platform android --profile production`. Let EAS
+   generate the upload keystore. Upload that `.aab` in Play Console › Test and release › Testing ›
+   Internal testing › Create new release. Google Play's API can't create the app's first release.
+3. A Google Cloud service account with access to the app in Play Console › Users and permissions.
+   Its JSON key goes in Expo's credential store, not the repo: `npx eas-cli@latest credentials
+   --platform android` › `production` › Google Service Account › Set up a Google Service Account Key
+   for Play Store Submissions.
+
+The manifest asks for background location (nudges: `isAndroidBackgroundLocationEnabled` in
+`app.json`), so Play Console wants the location permissions declaration, with a short video of the
+nudges feature, before a release can roll out. If a submission fails with "Only releases with status
+draft may be created on draft app", add `"releaseStatus": "draft"` to `submit.production.android`
+and roll the release out by hand until the app is no longer in draft.
+
 Static web build: `npm run build:web` (outputs `dist/`, one pre-rendered HTML page per route).
 
 Web security headers (CSP, HSTS, `X-Frame-Options`, referrer and permissions policy) live in `app.json` under the

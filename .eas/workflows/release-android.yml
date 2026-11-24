@@ -1,0 +1,26 @@
+# Production Android build (.aab) from GitHub, then upload to Google Play's internal testing track.
+# Manual only: run it with `npx eas-cli@latest workflow:run release-android.yml --ref <sha>`.
+#
+# Uses the Google service account key on the Expo project (`eas credentials --platform android`)
+# and `submit.production.android.track` in eas.json; see README "Releasing to Google Play".
+# The very first .aab must be uploaded by hand in Play Console before this can submit.
+name: Release Android
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build_android:
+    name: Build Android (production)
+    type: build
+    params:
+      platform: android
+      profile: production
+
+  submit_android:
+    name: Upload to Play internal testing
+    needs: [build_android]
+    type: submit
+    params:
+      build_id: ${{ needs.build_android.outputs.build_id }}
+      profile: production
