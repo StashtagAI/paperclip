@@ -20,6 +20,8 @@ assert.notEqual(key("https://www.instagram.com/p/dabc123_x-y/"), ig);
 assert.equal(key("https://www.tiktok.com/@a/video/7300000000000000001?lang=en"), "tiktok:video:7300000000000000001");
 assert.equal(key("https://www.tiktok.com/@b/video/7300000000000000001"), "tiktok:video:7300000000000000001");
 assert.notEqual(key("https://www.tiktok.com/@a/video/7300000000000000002"), "tiktok:video:7300000000000000001");
+// share links carry their own id space: never mistaken for a shortcode
+assert.notEqual(key("https://www.instagram.com/share/p/DABC123_x-Y/"), ig);
 // short links are not resolved: they only match themselves
 assert.equal(key("https://vm.tiktok.com/ZMabc/"), key("https://vm.tiktok.com/ZMabc"));
 

@@ -27,7 +27,7 @@ export function sourceKey(url: URL): string {
   const platform = platformOf(url);
   const path = url.pathname.replace(/\/+$/, "");
   if (platform === "instagram") {
-    const m = path.match(/\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
+    const m = path.match(/^(?:\/(?!share\/)[^/]+)?\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
     if (m) return `instagram:${m[1]}`; // shortcodes are case-sensitive
   } else {
     const m = path.match(/\/video\/(\d+)/);
