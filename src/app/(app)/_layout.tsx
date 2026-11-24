@@ -81,6 +81,7 @@ export default function AppLayout() {
         <Stack.Screen name="premium" options={{ title: 'Premium' }} />
         <Stack.Screen name="shared-by-you" options={{ title: 'Shared by you' }} />
         <Stack.Screen name="stashes" options={{ title: 'All stashes' }} />
+        <Stack.Screen name="admin" options={{ title: 'Admin' }} />
         <Stack.Screen
           name="feedback"
           options={{ title: 'Send feedback', presentation: 'formSheet', sheetGrabberVisible: true, sheetAllowedDetents: [0.75, 1] }}

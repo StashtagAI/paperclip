@@ -65,7 +65,13 @@ describe('buildShoppingList', () => {
   it('adds up the same ingredient across recipes and says which recipes need it', () => {
     const list = buildShoppingList([bombs, subs]);
     const garlic = list.find((l) => l.key === 'garlic');
-    expect(garlic).toEqual({ key: 'garlic', text: '6 cloves garlic', recipes: ['Cheeseburger Bombs', 'Meatball Sub Bites'] });
+    expect(garlic).toEqual({
+      key: 'garlic',
+      text: '6 cloves garlic',
+      recipes: ['Cheeseburger Bombs', 'Meatball Sub Bites'],
+      name: 'garlic',
+      amount: { quantity: 6, unit: 'clove' },
+    });
   });
 
   it('keeps an unquantified mention as "more"', () => {
@@ -78,7 +84,8 @@ describe('buildShoppingList', () => {
       { name: 'A', ingredients: ['½ cup butter'] },
       { name: 'B', ingredients: ['2 tbsp butter', '1 cup butter'] },
     ]);
-    expect(list).toEqual([{ key: 'butter', text: '1½ cups + 2 tbsp butter', recipes: ['A', 'B'] }]);
+    // Two units can't be one Instacart amount, so the line goes without one.
+    expect(list).toEqual([{ key: 'butter', text: '1½ cups + 2 tbsp butter', recipes: ['A', 'B'], name: 'butter' }]);
   });
 
   it('names it plainly when one recipe says how to prepare it', () => {
@@ -89,6 +96,7 @@ describe('buildShoppingList', () => {
   it('uses the wording with the biggest amount and keeps first-seen order', () => {
     const list = buildShoppingList([{ name: 'A', ingredients: ['1 egg', 'Salt'] }, { name: 'B', ingredients: ['2 eggs'] }]);
     expect(list.map((l) => l.text)).toEqual(['3 eggs', 'Salt']);
+    expect(list.map((l) => [l.name, l.amount])).toEqual([['eggs', { quantity: 3, unit: '' }], ['Salt', undefined]]);
   });
 
   it('returns nothing for recipes without ingredients', () => {

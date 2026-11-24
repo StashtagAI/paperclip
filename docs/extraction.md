@@ -62,3 +62,12 @@ Run tests: `node --experimental-strip-types supabase/functions/process-link/test
 - **Live (`extraction-benchmark.yml`):** `benchmark-run.ts` calls the real `processCaptured` (extract + grounding; place lookup and web search stubbed) 3 times and gates the *worst* run against `fixtures/benchmark/thresholds.json`. Runs on PRs touching `process-link/` or the fixtures, weekly, and on demand. Needs the `ANTHROPIC_API_KEY` repo secret. Prints per-post failures, token counts, and (with `PRICE_IN_PER_MTOK`/`PRICE_OUT_PER_MTOK`) dollars; the full JSON is uploaded as an artifact.
 - **Metrics:** item recall, empty-post correctness, forbidden items (itinerary lines like "helicopter transfer", giveaway rules), capture-sourced addresses not in the text (must be 0), category / scope / reason pass rates.
 - **Not covered yet:** geocoding and web-search accuracy (needs Google/search budget), linked-recipe pages, transcript/OCR inputs (no real captured samples), TikTok. Thresholds are initial guesses until the first live numbers exist.
+
+## Source-link cache (HAN-129)
+
+`source_extractions` (migration `20261124000000`) keeps one extraction per public post, keyed by `sourceKey()` (Instagram shortcode or TikTok video id, so `?igsh=` tracking and `/p/` vs `/reel/` spellings share an entry). A later user who stashes the same link gets the stored extraction filed into their own lists with no Apify, model, Places or search spend, and skips the per-user quota (a $0 `cost` event is still written).
+- **Written only** when the server fetched the text itself (`fetching` path, incl. video transcript/OCR). Text the user pasted or OCR'd on the phone is never stored, so one user cannot plant content for another.
+- **Stored:** the extraction plus the public `raw_content` fields (caption, transcript, OCR, linked sites, item sources, recipe details). **Not stored:** user, link, list or category ids. Account deletion has nothing to remove.
+- **Expiry:** 30 days, checked on read. Unsorted / `needs_capture` / failed runs are never cached.
+- **Measuring:** `process_events` stage `source_cache`, `detail.hit`. Hit rate = hits / rows.
+- Short links (`vm.tiktok.com/...`) are not resolved and only match themselves.

@@ -14,6 +14,10 @@ export type ShoppingLine = {
   text: string;
   /** The recipes that need it, in selection order. */
   recipes: string[];
+  /** What to search a store for, e.g. "butter" (Send to Instacart, HAN-131). */
+  name: string;
+  /** The amount when it's one number in one unit ("" for a count); left out for "1 cup + 2 tbsp" or "2 + more". */
+  amount?: { quantity: number; unit: string };
 };
 
 const FRACTIONS: Record<string, string> = {
@@ -164,7 +168,14 @@ export function buildShoppingList(recipes: RecipeIngredients[]): ShoppingLine[] 
     // "Chopped parsley" starts a line in the recipe but not after an amount; other capitals may be names.
     const mid = PREP.has(name.split(' ')[0].toLowerCase()) ? name.charAt(0).toLowerCase() + name.slice(1) : name;
     const text = amounts.length ? `${amounts.join(' + ')} ${mid}` : name;
-    return { key: g.key, text: text.charAt(0).toUpperCase() + text.slice(1), recipes: g.recipes };
+    const single = g.units.size === 1 && !g.loose ? [...g.units][0] : null;
+    return {
+      key: g.key,
+      text: text.charAt(0).toUpperCase() + text.slice(1),
+      recipes: g.recipes,
+      name: mid,
+      ...(single ? { amount: { quantity: single[1], unit: single[0] } } : {}),
+    };
   });
 }
 

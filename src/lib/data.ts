@@ -6,6 +6,7 @@ import { photoBytes } from '@/lib/photo-bytes';
 import type { PickItem } from '@/lib/picks';
 import type { ItemSources } from '@/lib/provenance';
 import { itemSearchFilter, likePattern } from '@/lib/search';
+import { instacartErrorMessage, type BuyLink, type InstacartRequest } from '@/lib/shop-links';
 import { supabase } from '@/lib/supabase';
 import {
   KINDS,
@@ -415,6 +416,31 @@ export async function refreshPlaceDetails(listId: string): Promise<number> {
   const { data, error } = await supabase.functions.invoke<{ updated?: number }>('place-details', { body: { list_id: listId } });
   if (error) return 0;
   return data?.updated ?? 0;
+}
+
+/** Store searches for a Shop item, tagged for commission by the shop-links function (HAN-131). */
+export async function fetchBuyLinks(itemId: string): Promise<BuyLink[]> {
+  const { data, error } = await supabase.functions.invoke<{ links?: BuyLink[] }>('shop-links', {
+    body: { action: 'buy', item_id: itemId },
+  });
+  if (error) throw new Error('Couldn’t load the stores. Try again.');
+  return data?.links ?? [];
+}
+
+// Instacart asks partners to reuse a page until its contents change, so the same list taps straight through.
+const instacartPages = new Map<string, string>();
+
+/** An Instacart page for a shopping list or recipe (HAN-131). Throws a user-facing message. */
+export async function sendToInstacart(request: InstacartRequest): Promise<string> {
+  const key = JSON.stringify(request);
+  const cached = instacartPages.get(key);
+  if (cached) return cached;
+  const { data, error } = await supabase.functions.invoke<{ url?: string }>('shop-links', {
+    body: { action: 'instacart', ...request },
+  });
+  if (error || !data?.url) throw new Error(instacartErrorMessage((error as { context?: Response } | null)?.context?.status));
+  instacartPages.set(key, data.url);
+  return data.url;
 }
 
 export async function saveItemNote(itemId: string, note: string): Promise<void> {

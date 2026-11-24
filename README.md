@@ -18,6 +18,7 @@ Expo (SDK 58, TypeScript, Expo Router) app for **iOS first**, plus Android and w
 | `supabase/functions/process-link/` | Extraction edge function (owned by Extraction, HAN-6) |
 | `supabase/functions/delete-account/` | Deletes the caller's rows, storage objects and auth user with the service role (HAN-34, matches `legal/data-deletion.md`). Deploy with `supabase functions deploy delete-account` |
 | `supabase/functions/place-details/` | Fills in the Google rating and opening hours for restaurants on an Eats list when it opens, refreshed weekly; uses `GOOGLE_PLACES_API_KEY` and counts toward process-link's daily spend caps (HAN-83). Deploy with `supabase functions deploy place-details` |
+| `supabase/functions/shop-links/` | Buy links for Shop items (Amazon search first, then two stores that fit the item) and Send to Instacart pages for recipes and the shopping list (HAN-131). Affiliate IDs are function secrets; see "Affiliate links" below. Deploy with `supabase functions deploy shop-links` |
 | `supabase/functions/entitlements/` | Free / Premium (HAN-132): RevenueCat webhook and the app's after-purchase sync; the only write path to `entitlements` besides manual grants. See `docs/premium.md`. Deploy with `supabase functions deploy entitlements --no-verify-jwt` |
 | `src/app/(app)/premium.tsx`, `src/lib/plan.ts`, `src/lib/purchases.ts` | Premium paywall, plan and monthly allowance, in-app purchase through RevenueCat (HAN-132, `docs/premium.md`) |
 | `supabase/functions/waitlist/` | Launch waitlist signups from the landing page; the only write path to `waitlist_signups` (HAN-100, see `landing/README.md`). Deploy with `supabase functions deploy waitlist --no-verify-jwt` |
@@ -46,6 +47,28 @@ values are bundled into the client. For EAS builds, set the same two variables p
 (`npx eas-cli@latest env:create`), since `.env.local` is not uploaded.
 
 If the variables are missing the app shows a "Supabase not configured" screen instead of crashing.
+
+### Affiliate links (HAN-131)
+
+The Buy and Send to Instacart buttons are off until `EXPO_PUBLIC_SHOP_LINKS=1` is set for the build. The affiliate IDs
+are `shop-links` function secrets, so they change without an app release. Unset, blank, or `placeholder…` values count
+as unset: Buy links then go to plain store searches with no tag, and Send to Instacart replies "not switched on yet".
+
+| Secret | Value |
+| --- | --- |
+| `AMAZON_ASSOCIATE_TAG` | Amazon Associates tracking ID, e.g. `stashtag-20`. Added as `tag=` to Amazon searches |
+| `AFFILIATE_WRAPPER` | `sovrn` or `skimlinks`: the network that wraps every non-Amazon store link |
+| `AFFILIATE_WRAPPER_ID` | Sovrn Commerce API key, or Skimlinks publisher ID (e.g. `123456X789012`) |
+| `INSTACART_API_KEY` | Instacart Developer Platform key |
+| `INSTACART_API_BASE` | Optional. `https://connect.instacart.com` (default) or `https://connect.dev.instacart.tools` for a development key |
+
+```bash
+supabase secrets set AMAZON_ASSOCIATE_TAG=placeholder AFFILIATE_WRAPPER=sovrn AFFILIATE_WRAPPER_ID=placeholder INSTACART_API_KEY=placeholder
+supabase functions deploy shop-links
+```
+
+Amazon's rules: links open in the browser or Amazon app, never in an in-app web view, and the disclosure
+("As an Amazon Associate, StashtagAI earns from qualifying purchases") sits next to every Buy button.
 
 ### Database
 
@@ -106,6 +129,27 @@ Supabase dashboard › Authentication:
 Feedback inserts are capped in the database: 5 per account in any 10 minutes and 20 in any 24 hours
 (`feedback_rate_limit` trigger). Over the cap, PostgREST returns HTTP 429 (`PT429`) and the feedback sheet keeps the
 draft and says to try later.
+
+### Admin portal
+
+Profile › **Admin portal** (`(app)/admin`, HAN-128) shows stashes imported (24 h / 7 d / 30 d / all time), failures by
+reason, users (total, new, active), estimated API spend with a per-service breakdown, a 14-day table and engagement
+counts. It reads `public.admin_stats()`, which raises `42501` unless `public.is_admin()` is true. Costs are the
+list-price estimates that process-link and place-details book as `process_events` stage `cost` (HAN-37), not invoices.
+Downloads, revenue and web traffic aren't tracked here; the screen says so and links to App Store Connect.
+
+Admins are rows in `public.admin_users` (email + account id), which clients can't read or write. A row grants access
+only to its bound `user_id`, and only while that account still has the same email. Email sign-ups are auto-confirmed
+in production, so binding by email alone would let whoever signs up first with an allowlisted address in. To add an
+admin once they've signed up, check the account is really theirs, then run in the SQL editor:
+
+```sql
+insert into public.admin_users (email, user_id)
+select lower(email), id from auth.users where lower(email) = 'someone@example.com'
+on conflict (email) do update set user_id = excluded.user_id;
+```
+
+Remove one with `delete from public.admin_users where email = '…'`.
 
 ## Running
 

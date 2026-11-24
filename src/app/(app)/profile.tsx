@@ -10,6 +10,7 @@ import { Radius, Spacing, type ThemeColor } from '@/constants/theme';
 import { useSchemePreference, type SchemePreference } from '@/hooks/use-color-scheme';
 import { useAsync } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
+import { fetchIsAdmin } from '@/lib/admin';
 import { SUPPORT_EMAIL, appVersion, signOutEverywhere, signOutHere, supportMailto } from '@/lib/account';
 import { appLockSupported, authenticate, biometricName, useAppLock } from '@/lib/app-lock';
 import { useAuth } from '@/lib/auth';
@@ -33,11 +34,13 @@ function showAlert(title: string, message: string) {
 
 /**
  * Profile (HAN-34): your name (HAN-71), sign-in methods (HAN-112), appearance, security (HAN-49), feedback, support,
- * plan (HAN-132) and account deletion.
+ * plan (HAN-132), the admin portal for admins (HAN-128) and account deletion.
  */
 export default function ProfileScreen() {
   const { session } = useAuth();
   const displayName = useAsync(fetchDisplayName, []);
+  // HAN-128: a convenience only; admin_stats() checks again on the server. A failed check just hides the row.
+  const isAdmin = useAsync(fetchIsAdmin, []);
   const toast = useToast();
   const [signingOut, setSigningOut] = useState(false);
 
@@ -139,6 +142,12 @@ export default function ProfileScreen() {
       <Section title="Plan">
         <PlanRow />
       </Section>
+
+      {isAdmin.data ? (
+        <Section title="Admin">
+          <Row title="Admin portal" subtitle="Usage, costs, users and stashes" onPress={() => router.push('/admin')} />
+        </Section>
+      ) : null}
 
       <Section title="Account">
         <Row title="Sign out" subtitle="On this device" onPress={signOutHere} />
