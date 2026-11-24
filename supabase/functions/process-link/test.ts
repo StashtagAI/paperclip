@@ -324,6 +324,43 @@ import { groupRecipes, recipeGroup } from "./recipe-groups.ts";
 }
 console.log("recipe groups ok");
 
+// ---- shop files into Shop › <category> › <group> (HAN-124) ----
+import { groupShop, SHOP_FALLBACK, shopGroup } from "./shop-groups.ts";
+{
+  const shop = (list_scope: string | null, category: string, names: string[], tags: string[] = []) =>
+    groupShop({ kind: "shop", category, list_scope, tags, items: names.map((name) => ({ name, description: "" })) });
+  // The same cases are in supabase/tests/database/shop_groups.test.sql.
+  const cases: [string | null, string, string[], string, string][] = [
+    ["Men's fragrances", "Fragrances", ["Parfums de Marly Layton"], "Beauty", "Fragrances"],
+    ["Men’s fragrances", "Saved posts", ["Strongest Fragrances in my Collection"], "Beauty", "Fragrances"],
+    [null, "Skincare", ["CeraVe cleanser"], "Beauty", "Skincare"],
+    ["Travel makeup bag", "Bags", [], "Beauty", "Makeup"],
+    ["Weekend duffel bag", "Bags", [], "Travel", "Luggage"],
+    ["Carry-on essentials", "Travel", [], "Travel", "Luggage"],
+    ["Travel gadgets", "Travel", [], "Tech", "Gadgets"],
+    ["Trip must-haves", "Travel", [], "Travel", "Travel accessories"],
+    ["Bath towels", "Home", [], "Home", "Bedding & bath"],
+    ["Amazon finds", "Home", ["Cordless drill"], "Home", "Tools & DIY"],
+    ["Amazon finds", "Home", ["Thing"], "Home", "Other home"],
+    ["Gifts for him", "Gifts", ["Leather wallet"], "Clothing", "Bags"],
+    ["Fall outfits", "Style", [], "Clothing", "Clothes"],
+    ["Laptops", "Tech", [], "Tech", "Computers"],
+    ["Dog toys", "Pets", [], "Pets", "Pet supplies"],
+    ["Pantry staples", "Food & drink", [], "Food & drink", "Groceries"],
+  ];
+  for (const [scope, category, names, wantCat, wantList] of cases) {
+    const out = shop(scope, category, names);
+    assert.deepEqual([out.category, out.list_scope], [wantCat, wantList], `${scope}`);
+  }
+  assert.deepEqual(shopGroup(["Cool stuff"]), SHOP_FALLBACK);
+  // Word matches only: "laptops" is not "tops", "headphones" is not "phones".
+  assert.deepEqual(shopGroup(["Best headphones"]), { category: "Tech", list: "Audio" });
+  // Other kinds keep the model's category and scope.
+  const eats = { kind: "eats" as const, category: "Restaurants", list_scope: "Denver", tags: [], items: [] };
+  assert.equal(groupShop(eats), eats);
+}
+console.log("shop groups ok");
+
 // ---- rate limit and spend metering (HAN-37) ----
 import { book, DEFAULT_LIMITS, limitsFromEnv, meteredFetch, newMeter, PRICES, RunBudgetError } from "./quota.ts";
 assert.deepEqual(limitsFromEnv(() => undefined), DEFAULT_LIMITS);

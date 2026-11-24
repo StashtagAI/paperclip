@@ -19,14 +19,14 @@ insert into auth.users (id, email) values
   ('00000000-0000-4000-8000-00000000000a', 'a@example.com'),
   ('00000000-0000-4000-8000-00000000000b', 'b@example.com');
 insert into public.categories (id, user_id, kind, name) values
-  ('00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-00000000000a', 'shop', 'saved posts'),
+  ('00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-00000000000a', 'watch', 'saved posts'),
   ('00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-00000000000a', 'eats', 'Cafes');
 insert into public.lists (id, user_id, category_id, name) values
   ('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-000000000201', 'instagram'),
   ('00000000-0000-4000-8000-000000000302', '00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-000000000202', 'Lisbon');
 insert into public.links (id, user_id, url, platform, status, error, raw_content) values
   -- 11: not sorted. 12: filed. 13: done but every item was already listed. 14: needs text. 15: B's not sorted.
-  -- 16: not sorted TikTok. 17: not sorted, its name is already in the shop list.
+  -- 16: not sorted TikTok. 17: not sorted, its name is already in the watch list.
   ('00000000-0000-4000-8000-000000000111', '00000000-0000-4000-8000-00000000000a', 'https://www.instagram.com/p/A1/', 'instagram', 'done', null,
     '{"unsorted":true,"caption":"Festive chocolate treat\n#chocolate"}'),
   ('00000000-0000-4000-8000-000000000112', '00000000-0000-4000-8000-00000000000a', 'https://www.instagram.com/p/A2/', 'instagram', 'done', null,
@@ -65,17 +65,17 @@ select throws_ok($$ update public.links set dismissed_at = null where id = '0000
   '42501', null, 'clients still cannot update links directly');
 
 -- file_link: refusals
-select throws_ok($$ select public.file_link('00000000-0000-4000-8000-000000000115', 'shop', 'X') $$, 'P0002', 'link not found',
+select throws_ok($$ select public.file_link('00000000-0000-4000-8000-000000000115', 'watch', 'X') $$, 'P0002', 'link not found',
   'cannot file another user''s link');
-select throws_ok($$ select public.file_link('00000000-0000-4000-8000-000000000112', 'shop', 'X') $$, '55000', null,
+select throws_ok($$ select public.file_link('00000000-0000-4000-8000-000000000112', 'watch', 'X') $$, '55000', null,
   'a link that already has items is refused');
-select throws_ok($$ select public.file_link('00000000-0000-4000-8000-000000000114', 'shop', 'X') $$, '55000', null,
+select throws_ok($$ select public.file_link('00000000-0000-4000-8000-000000000114', 'watch', 'X') $$, '55000', null,
   'a link still waiting for text is refused');
-select throws_ok($$ select public.file_link('00000000-0000-4000-8000-000000000111', 'shop', '   ') $$, '22023', null,
+select throws_ok($$ select public.file_link('00000000-0000-4000-8000-000000000111', 'watch', '   ') $$, '22023', null,
   'a blank name is refused');
 
 -- file_link: into an existing "saved posts › instagram" (matched case-insensitively).
-select is(public.file_link('00000000-0000-4000-8000-000000000111', 'shop', '  Festive chocolate treat '),
+select is(public.file_link('00000000-0000-4000-8000-000000000111', 'watch', '  Festive chocolate treat '),
   '00000000-0000-4000-8000-000000000301'::uuid, 'files into the existing Saved posts list, case-insensitively');
 select is(
   (select row(name, description, list_id)::text from public.items where link_id = '00000000-0000-4000-8000-000000000111'),
@@ -98,7 +98,7 @@ select is(
   row('do'::public.list_kind, 'Saved posts', 'TikTok')::text, 'creates Do › Saved posts › TikTok');
 
 -- file_link: a name already in the list is kept, recorded as already listed, and the link counts as filed.
-select is(public.file_link('00000000-0000-4000-8000-000000000117', 'shop', 'GIFT BOX'),
+select is(public.file_link('00000000-0000-4000-8000-000000000117', 'watch', 'GIFT BOX'),
   '00000000-0000-4000-8000-000000000301'::uuid, 'files into the list that already has the name');
 select is((select count(*)::int from public.items where list_id = '00000000-0000-4000-8000-000000000301' and lower(name) = 'gift box'),
   1, 'the existing item is not duplicated');
@@ -111,7 +111,7 @@ select is((select not_sorted from public.link_overview where id = '00000000-0000
 reset role;
 set local role anon;
 select throws_ok($$ select public.dismiss_link('00000000-0000-4000-8000-000000000111') $$, '42501', null, 'anon cannot dismiss');
-select throws_ok($$ select public.file_link('00000000-0000-4000-8000-000000000111', 'shop', 'X') $$, '42501', null, 'anon cannot file');
+select throws_ok($$ select public.file_link('00000000-0000-4000-8000-000000000111', 'watch', 'X') $$, '42501', null, 'anon cannot file');
 select throws_ok($$ select * from public.link_overview $$, '42501', null, 'anon cannot read link_overview');
 
 select * from finish();

@@ -20,11 +20,11 @@ insert into auth.users (id, email) values
 insert into public.categories (id, user_id, kind, name) values
   ('00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-00000000000a', 'travel', 'Packing'),
   ('00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-00000000000a', 'travel', 'Gear'),
-  ('00000000-0000-4000-8000-000000000203', '00000000-0000-4000-8000-00000000000a', 'shop', 'gear'),
+  ('00000000-0000-4000-8000-000000000203', '00000000-0000-4000-8000-00000000000a', 'shop', 'clothing'),
   ('00000000-0000-4000-8000-000000000204', '00000000-0000-4000-8000-00000000000a', 'eats', 'Cafes');
 insert into public.lists (id, user_id, category_id, name, tags) values
-  -- 1: only link 11's items. 2: link 12's and an older post's. 3: shop's existing "gear › Bags". 4: link 14's.
-  ('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-000000000201', 'Cubes', '{travel}'),
+  -- 1: only link 11's items. 2: link 12's and an older post's. 3: shop's existing "clothing › bags". 4: link 14's.
+  ('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-000000000201', 'Packing cubes', '{travel}'),
   ('00000000-0000-4000-8000-000000000302', '00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-000000000202', 'Bags', '{carry-on}'),
   ('00000000-0000-4000-8000-000000000303', '00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-000000000203', 'bags', '{deals}'),
   ('00000000-0000-4000-8000-000000000304', '00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-000000000204', 'Lisbon', '{}');
@@ -66,11 +66,12 @@ select is((select list_id from public.items where id = '00000000-0000-4000-8000-
 select is(public.choose_link_kind('00000000-0000-4000-8000-000000000114', 'do'), '00000000-0000-4000-8000-000000000304'::uuid,
   'once answered, choosing again is a no-op');
 
--- Move a list that holds only this post's items: the list itself moves, keeping its id; the empty category goes.
+-- Move a list that holds only this post's items: the list itself moves to its Shop group (HAN-124), keeping its id;
+-- the empty category goes.
 select is(public.choose_link_kind('00000000-0000-4000-8000-000000000111', 'shop'), '00000000-0000-4000-8000-000000000301'::uuid,
   'whole-list move keeps the list id');
-select is((select c.kind::text || ' › ' || c.name from public.lists l join public.categories c on c.id = l.category_id
-  where l.id = '00000000-0000-4000-8000-000000000301'), 'shop › Packing', 'list is now under Shop › Packing');
+select is((select c.kind::text || ' › ' || c.name || ' › ' || l.name from public.lists l join public.categories c on c.id = l.category_id
+  where l.id = '00000000-0000-4000-8000-000000000301'), 'shop › Travel › Luggage', 'list is now Shop › Travel › Luggage');
 select is((select count(*)::int from public.categories where id = '00000000-0000-4000-8000-000000000201'), 0,
   'the emptied Travel category is removed');
 select is((select row(address, lat, lng)::text from public.items where id = '00000000-0000-4000-8000-000000000401'), '(,,)',
@@ -80,10 +81,10 @@ select is((select address from public.items where id = '00000000-0000-4000-8000-
 select is((select raw_content ? 'alt_kind' from public.links where id = '00000000-0000-4000-8000-000000000111'), false,
   'move clears alt_kind');
 
--- Move from a list shared with another post into an existing list (case-insensitive names): only this post's items
+-- Move from a list shared with another post into the existing Clothing › Bags list (case-insensitive names): only this post's items
 -- move, a duplicate is dropped and reported as already listed, tags merge, the shared list stays.
 select is(public.choose_link_kind('00000000-0000-4000-8000-000000000112', 'shop'), '00000000-0000-4000-8000-000000000303'::uuid,
-  'merges into the existing shop › gear › bags list');
+  'merges into the existing Shop › clothing › bags list');
 select is((select list_id from public.items where id = '00000000-0000-4000-8000-000000000403'), '00000000-0000-4000-8000-000000000303'::uuid,
   'this post''s item moved');
 select is((select count(*)::int from public.items where id = '00000000-0000-4000-8000-000000000404'), 0,
