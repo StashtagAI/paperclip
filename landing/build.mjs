@@ -214,6 +214,7 @@ function page({ path, title, description, main, structured = null, script = fals
     }
   </head>
   <body>
+    <!--email_off-->
     <a class="skip" href="#main">Skip to content</a>
     <header class="site-header">
       <div class="wrap">
@@ -233,7 +234,8 @@ ${main}
         </nav>
         <p>© ${year} ${esc(config.name)}</p>
       </div>
-    </footer>${script ? `\n    <script>${js}</script>` : ''}
+    </footer>
+    <!--/email_off-->${script ? `\n    <script>${js}</script>` : ''}
   </body>
 </html>
 `;
