@@ -15,6 +15,8 @@ class FakeDb {
   constructor(tables: Record<string, Row[]>, tokens: Record<string, string>) { this.tables = tables; this.tokens = tokens; }
   auth = { getUser: async (t: string) => ({ data: { user: this.tokens[t] ? { id: this.tokens[t] } : null } }) };
   from(table: string) { return new Query(this, table); }
+  /** Upserts to these tables fail this many times (HAN-134). */
+  failUpserts: Record<string, number> = {};
   /** claim_stash_allowance's answer (HAN-132); tests set it to refuse. */
   allowance: Row = { allowed: true };
   /** claim_process_quota (HAN-37) and claim_stash_allowance: allow, and record the call like a write. */
@@ -54,6 +56,11 @@ class Query {
   then<T>(ok: (r: { data: any; error: any }) => T, bad?: (e: unknown) => T) { return Promise.resolve(this.run()).then(ok, bad); }
 
   private run() {
+    if (this.op === "upsert" && this.db.failUpserts[this.table] > 0) {
+      this.db.failUpserts[this.table]--;
+      this.db.writes.push({ table: this.table, op: "upsert_failed", rows: [] });
+      return { data: null, error: { code: "57014", message: "canceling statement due to statement timeout" } };
+    }
     const rows = (this.db.tables[this.table] ??= []);
     const match = (r: Row) => this.filters.every(([op, c, v]) =>
       op === "eq" ? r[c] === v : op === "neq" ? r[c] !== v : op === "notin" ? !(v as string[]).includes(r[c] as string) : r[c] === undefined || (r[c] as string) > (v as string));
@@ -166,6 +173,24 @@ const captured = { caption: "Taco Uno in Austin" };
     assert.equal((await r.json()).status, "done");
     // HAN-132: a stash that filed something counts once against B's month.
     assert.deepEqual(db.tables.stash_usage.map(({ user_id, link_id }) => ({ user_id, link_id })), [{ user_id: VICTIM.user_id, link_id: VICTIM.link_id }]);
+  }
+
+  // HAN-134: a stash_usage write that fails is retried once; failing twice still finishes the stash, but alerts.
+  for (const failures of [1, 2]) {
+    const db = world();
+    db.failUpserts.stash_usage = failures;
+    const f = mockFetch({ kind: "eats", category: "Restaurants", list_scope: "Austin", tags: [], items: [{ name: "Taco Uno", description: "" }] });
+    const r = await call(db, { link_id: VICTIM.link_id, captured }, "token-b", f.fn);
+    assert.equal((await r.json()).status, "done", `${failures} failure(s): the stash still finishes`);
+    assert.equal(db.writes.filter((w) => w.table === "stash_usage").length, 2, "one retry, no more");
+    const alerted = (db.tables.process_events ?? []).filter((e) => e.stage === "stash_usage");
+    if (failures === 1) {
+      assert.equal(db.tables.stash_usage.length, 1, "the retry counted it");
+      assert.equal(alerted.length, 0);
+    } else {
+      assert.equal(db.tables.stash_usage, undefined);
+      assert.deepEqual(alerted.map((e) => [e.ok, e.detail]), [[false, { error: "57014" }]], "logged for the alert");
+    }
   }
 
   // HAN-132: over the monthly allowance, the link fails with monthly_limit before any outbound call or quota claim.

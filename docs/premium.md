@@ -29,6 +29,12 @@ Everything is checked on the server. The app only displays the result.
   editor (`source 'manual'`). The function never overwrites a manual grant.
 - `public.stash_usage`: one row per stash that reached `done` and filed something. `process-link` writes it.
   Deleting a stash doesn't give the allowance back. Lists added from a friend's share and "not sorted" runs don't count.
+  If the write fails it is retried once; a second failure still finishes the stash (the items are filed), logs a
+  `stash_usage` event with `ok = false` and posts to `ALERT_WEBHOOK_URL` (HAN-134).
+- Failed and "not sorted" runs don't count, even when they got past extraction and spent model or lookup money, and a
+  failed link can be retried. That is on purpose: a user shouldn't lose a stash to our failure. The HAN-37 limits
+  (20 runs/hour, $3/day per user, global daily cap) bound what such runs can cost. If spend from failed runs shows up
+  in the `cost` events, count runs past extraction or cap retries per link (HAN-133 / HAN-134 note).
 - `claim_stash_allowance` runs in `process-link` right after it claims a link and before any paid call. It fails
   closed. Over the limit, the link fails with `monthly_limit` (HTTP 429). The app then shows **See Premium** and
   **Try again**. Runs already in flight count, so a burst of links sent at once can't overshoot the cap.
@@ -82,6 +88,17 @@ Nothing can be bought until all of these are done. **No live payments until the 
 
 Sandbox purchases (TestFlight, sandbox Apple IDs) turn Premium on only while `REVENUECAT_ALLOW_SANDBOX=true`. Real
 App Store purchases always count.
+
+## Launch checklist (production project, before the first real purchase)
+
+- [ ] `REVENUECAT_ALLOW_SANDBOX` is **unset** in the production Supabase project. Set, a sandbox (free) TestFlight
+      purchase grants real Premium. Check with `supabase secrets list` (it must not be listed) and remove it with
+      `supabase secrets unset REVENUECAT_ALLOW_SANDBOX`.
+- [ ] `REVENUECAT_WEBHOOK_SECRET` is 32 characters or longer, and matches the webhook's `Bearer` header. The function
+      ignores a shorter secret, so webhooks would be refused (the app's own after-purchase call still works).
+- [ ] `entitlements` is deployed with `--no-verify-jwt` (below). Without it Supabase rejects RevenueCat's webhook,
+      which has no Supabase session, before the function can check the secret.
+- [ ] The prices are the ones the board confirmed.
 
 ## Deploy
 
