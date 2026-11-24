@@ -264,8 +264,7 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
     // A fetched caption that names nothing (only hashtags, "recipe in bio"…): let the user add what the video says.
     if (fetched && "unsorted" in r) return await needsCapture("no_items", fetched, (captured as { caption?: string }).caption);
     // Server-fetched text only (see source-cache.ts); a failed write never fails the run.
-    // A run that hit its budget skipped Places/search; do not hand that degraded result to everyone for 30 days.
-    if (fetching && !hit && !("unsorted" in r) && meter.refused === 0) {
+    if (fetching && !hit && !("unsorted" in r)) {
       try { await sourceCache.set(srcKey, { extraction: r.extraction, raw_content: publicRaw(r.raw_content) }); } catch { /* best-effort */ }
     }
     if (fetched) r.raw_content = { ...r.raw_content, caption_source: "fetched", fetch: fetched };

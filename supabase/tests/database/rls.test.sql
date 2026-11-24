@@ -66,7 +66,7 @@ insert into public.search_lookups (query_key, fill) values ('cafe|city', '{}');
 select is(
   array(select c.relname::text from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' order by 1),
   array['apple_tokens', 'categories', 'feedback', 'item_photos', 'item_posts', 'item_reports', 'items', 'link_feedback', 'links', 'list_share_recipients', 'list_shares',
-    'lists', 'place_lookups', 'process_events', 'profiles', 'search_lookups', 'share_recipient_lookups',
+    'lists', 'place_lookups', 'process_events', 'profiles', 'search_lookups', 'share_recipient_lookups', 'source_extractions',
     'waitlist_attempts', 'waitlist_signups'],
   'public tables are the ones these tests cover'
 );
@@ -79,13 +79,13 @@ select is(
 select is(
   array(
     select t || ' ' || r || ' ' || p
-    from unnest(array['public.place_lookups', 'public.search_lookups']) t,
+    from unnest(array['public.place_lookups', 'public.search_lookups', 'public.source_extractions']) t,
       unnest(array['anon', 'authenticated']) r,
       unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) p
     where has_table_privilege(r, t, p)
   ),
   array[]::text[],
-  'place_lookups and search_lookups: no table privileges for anon or authenticated'
+  'place_lookups, search_lookups and source_extractions: no table privileges for anon or authenticated'
 );
 -- HAN-112: Apple refresh tokens are server-only (apple-token and delete-account functions), even for their owner.
 select is(
@@ -114,6 +114,7 @@ select is((select array_agg(item_id) from public.item_posts), array['00000000-00
 select is((select count(*)::int from public.item_reports), 0, 'item_reports: A cannot see B''s report');
 select throws_ok($$select * from public.place_lookups$$, '42501', null, 'place_lookups: no client reads');
 select throws_ok($$select * from public.search_lookups$$, '42501', null, 'search_lookups: no client reads');
+select throws_ok($$select * from public.source_extractions$$, '42501', null, 'source_extractions: no client reads');
 select is((select count(*)::int from public.items where link_id = '00000000-0000-4000-8000-0000000001b0'), 0, 'items: filtering by B''s link_id finds nothing');
 
 -- ---------- inserts: A cannot write as B or attach to B's rows ----------
