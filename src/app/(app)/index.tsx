@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, usePathname } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Keyboard, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
@@ -19,6 +19,7 @@ import { useHere } from '@/hooks/use-here';
 import { usePollWhile } from '@/hooks/use-poll-while';
 import { useTheme } from '@/hooks/use-theme';
 import { announce } from '@/lib/announce';
+import { useAuth } from '@/lib/auth';
 import {
   fetchHomeItems,
   fetchInFlightLinks,
@@ -35,6 +36,7 @@ import { postName } from '@/lib/link-summary';
 import { hasPlaces } from '@/lib/picks';
 import { sharedByMeSummary } from '@/lib/shared-by-me';
 import { unseen, useSharedWithMe } from '@/lib/shared-with-me';
+import { hasSeenTutorial, openTutorial, shouldAutoShow } from '@/lib/tutorial';
 import { KIND_LABELS, type Kind } from '@/lib/types';
 
 const GRID: Kind[][] = [
@@ -62,6 +64,7 @@ export default function HomeScreen() {
   const [items, attention] = recent.data ?? [];
   const pending = attention?.links;
   const location = useHere(!!items && hasPlaces(items));
+  useFirstRunTutorial(recent.data ? !items?.length && !pending?.length : null);
 
   // Pick up new items (and the time of day) when coming back from "Stash a link" or a list.
   const firstFocus = useRef(true);
@@ -209,6 +212,23 @@ export default function HomeScreen() {
       )}
     </Screen>
   );
+}
+
+/**
+ * Opens the tutorial once for a new account (HAN-137): the first time Home is on screen with an empty stash. Accounts
+ * that already have stashes never get it by surprise; it's in Profile › Help.
+ */
+function useFirstRunTutorial(stashEmpty: boolean | null) {
+  const userId = useAuth().session?.user.id;
+  const onHome = usePathname() === '/';
+  const checked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!userId || stashEmpty === null || !onHome || checked.current === userId) return;
+    checked.current = userId;
+    hasSeenTutorial(userId).then((seen) => {
+      if (shouldAutoShow({ seen, stashEmpty })) openTutorial(userId);
+    });
+  }, [userId, stashEmpty, onHome]);
 }
 
 function Header() {
