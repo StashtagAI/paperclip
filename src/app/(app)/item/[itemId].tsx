@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { WeeklyHours } from '@/components/google-place-info';
@@ -326,12 +326,14 @@ function PhotoCard({
 }
 
 function PhotoImage({ uri, width, height, label }: { uri: string; width?: number | null; height?: number | null; label: string }) {
-  // Keep the photo's shape, but don't let a tall one take more than a screen's worth of scrolling.
+  // Keep the photo's shape, but don't let a tall one take more than a screen's worth of scrolling. On an iPad in
+  // landscape the content is wide and the screen short, so the height cap matters too (HAN-139).
   const aspectRatio = width && height ? Math.max(width / height, 0.6) : 4 / 3;
+  const maxHeight = Math.round(useWindowDimensions().height * 0.7);
   return (
     <Image
       source={{ uri }}
-      style={[styles.photo, { aspectRatio }]}
+      style={[styles.photo, { aspectRatio, maxHeight }]}
       contentFit="cover"
       transition={0}
       accessible
