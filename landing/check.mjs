@@ -95,6 +95,14 @@ for (const path of readdirSync(join(root, 'dist'), { recursive: true }).filter((
 }
 check(read('privacy/index.html').includes(`href="mailto:${config.contactEmail}"`), 'privacy: no mailto link to contactEmail');
 
+// Cloudflare Email Obfuscation swaps addresses for "[email protected]" and a decoder script our CSP blocks (HAN-138):
+// every address in a page body must sit inside <!--email_off-->, which Cloudflare leaves alone.
+for (const path of readdirSync(join(root, 'dist'), { recursive: true }).filter((f) => f.endsWith('.html'))) {
+  const body = read(path).split('<body>')[1] ?? '';
+  const outside = body.replace(/<!--email_off-->[\s\S]*?<!--\/email_off-->/g, '').replace(/<script[\s\S]*?<\/script>/g, '');
+  check(!/[^\s@<>"]+@[^\s@<>"]+\.[a-z]/i.test(outside), `${path}: email address outside <!--email_off-->`);
+}
+
 // robots.txt allows the AI crawlers by name and points at the sitemap.
 const robots = read('robots.txt');
 for (const bot of ['GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'Claude-SearchBot', 'Claude-User',
