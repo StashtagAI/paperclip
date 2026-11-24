@@ -169,4 +169,5 @@ export const Radius = {
   tile: 22,
 } as const;
 
-export const MaxContentWidth = 800;
+/** Widest a page gets: fills iPhones and iPads, with side margins only on a landscape 13" iPad (1376pt). */
+export const MaxContentWidth = 1200;

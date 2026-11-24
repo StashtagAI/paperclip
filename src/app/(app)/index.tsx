@@ -1,7 +1,7 @@
 import { router, useFocusEffect, usePathname } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, Keyboard, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Keyboard, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { HomePicks } from '@/components/home-picks';
@@ -39,11 +39,19 @@ import { unseen, useSharedWithMe } from '@/lib/shared-with-me';
 import { hasSeenTutorial, openTutorial, shouldAutoShow } from '@/lib/tutorial';
 import { KIND_LABELS, type Kind } from '@/lib/types';
 
-const GRID: Kind[][] = [
-  ['eats', 'travel'],
-  ['recipes', 'do'],
-  ['shop', 'watch'],
-];
+const TILE_ORDER: Kind[] = ['eats', 'travel', 'recipes', 'do', 'shop', 'watch'];
+/**
+ * Window width, in text-size-adjusted points, from which Home shows three tiles a row: an iPad, or a wide iPad
+ * window (HAN-139). Dividing by the font scale keeps two a row at large text sizes, so tile titles don't wrap.
+ */
+const WIDE_GRID_WIDTH = 700;
+
+/** The category tiles in rows of `columns`. */
+function gridRows(columns: number): Kind[][] {
+  const rows: Kind[][] = [];
+  for (let i = 0; i < TILE_ORDER.length; i += columns) rows.push(TILE_ORDER.slice(i, i + columns));
+  return rows;
+}
 
 /**
  * "Recently stashed" rows, counting links that need you (being read, failed, waiting for text or not sorted). Those
@@ -59,6 +67,7 @@ export default function HomeScreen() {
   const recent = useAsync(() => Promise.all([fetchHomeItems(), fetchInFlightLinks()]), []);
   const [query, setQuery] = useState('');
   const [now, setNow] = useState(() => new Date());
+  const { width, fontScale } = useWindowDimensions();
   const search = useDebouncedSearch(query, now);
 
   const [items, attention] = recent.data ?? [];
@@ -161,7 +170,7 @@ export default function HomeScreen() {
       ) : (
         <>
           <View style={styles.grid}>
-            {GRID.map((row) => (
+            {gridRows(width / fontScale >= WIDE_GRID_WIDTH ? 3 : 2).map((row) => (
               <View key={row.join()} style={styles.gridRow}>
                 {row.map((kind) => (
                   <KindTile key={kind} kind={kind} />

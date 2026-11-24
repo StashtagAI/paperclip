@@ -20,7 +20,7 @@
         "tinted": "./assets/images/icon-tinted.png"
       },
       "bundleIdentifier": "ai.stashtag.app",
-      "supportsTablet": false,
+      "supportsTablet": true,
       "config": {
         "usesNonExemptEncryption": false
       },
