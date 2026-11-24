@@ -9,7 +9,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -58,7 +58,7 @@ jobs:
           --health-cmd "pg_isready -U postgres -h 127.0.0.1"
           --health-interval 5s --health-timeout 5s --health-retries 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Two migrations with the same version clash in Supabase's history, and one is skipped.
       - run: |
           dupes=$(ls supabase/migrations | cut -c1-14 | sort | uniq -d)
@@ -74,7 +74,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Secret scan (gitleaks, full history)
