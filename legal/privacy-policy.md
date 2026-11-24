@@ -1,7 +1,7 @@
 # StashtagAI Privacy Policy
 
 **Effective date:** November 7, 2026
-**Last updated:** November 23, 2026
+**Last updated:** November 24, 2026
 
 This Privacy Policy explains how Stashtag AI, LLC ("StashtagAI", "we", "us", or "our") collects, uses, shares, and protects information when you use the StashtagAI mobile and web application (the "Service") or visit our website, stashtag.ai (the "Website").
 
@@ -17,6 +17,7 @@ This Privacy Policy explains how Stashtag AI, LLC ("StashtagAI", "we", "us", or 
 - **Feedback and reports:** feedback you send in the app (with your app version and platform), thumbs up or down on a saved post and the reason you give, and reports that an item is wrong, with any note you add.
 - **Communications:** messages you send us, such as support requests.
 - **Launch waitlist:** if you join the waitlist on our Website, your email address, the phone platform you choose (iPhone or Android, optional), which form you used, any campaign tags in the link that brought you to the Website (such as utm_source), and the date you signed up. To stop abuse of the form, we also keep a keyed, one-way hash of your IP address for 24 hours; we do not store the IP address itself.
+- **Website visits:** when you visit our Website, Cloudflare Web Analytics counts the visit: the page you viewed, the site that linked you there, your country, your browser and device type, and how fast the page loaded. It uses no cookies, doesn't fingerprint your device, and doesn't track you across sites. We see only totals, such as visits per page, and nothing that identifies you. The StashtagAI app doesn't use it.
 
 **Signing in with Apple or Google**
 If you sign in with, or connect, an Apple or Google account, that provider sends us some information about you. We use it only to sign you in.

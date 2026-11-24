@@ -136,7 +136,18 @@ Profile › **Admin portal** (`(app)/admin`, HAN-128) shows stashes imported (24
 reason, users (total, new, active), estimated API spend with a per-service breakdown, a 14-day table and engagement
 counts. It reads `public.admin_stats()`, which raises `42501` unless `public.is_admin()` is true. Costs are the
 list-price estimates that process-link and place-details book as `process_events` stage `cost` (HAN-37), not invoices.
-Downloads, revenue and web traffic aren't tracked here; the screen says so and links to App Store Connect.
+Downloads and revenue aren't tracked here; the screen says so and links to App Store Connect.
+
+**Website traffic** comes from Cloudflare Web Analytics on the `stashtag-landing` Pages project (Metrics › Web
+Analytics, cookie-free). Pages injects the beacon at deploy time, and `landing/build.mjs` allows it in each page's CSP
+(`npm run check` fails if it doesn't). The `admin-web-traffic` Edge Function checks the caller with `is_admin()`, then
+asks Cloudflare's GraphQL API for visits and page views on `stashtag.ai` (24 h / 7 d / 30 d, bots excluded) and the top
+pages, referrers and countries over 30 days. Secrets: `CLOUDFLARE_ANALYTICS_TOKEN` (a token with only Account ›
+Account Analytics › Read) and `CLOUDFLARE_ACCOUNT_ID`. Without them the section says "Unavailable".
+
+```bash
+supabase functions deploy admin-web-traffic   # JWT verification stays on
+```
 
 Admins are rows in `public.admin_users` (email + account id), which clients can't read or write. A row grants access
 only to its bound `user_id`, and only while that account still has the same email. Email sign-ups are auto-confirmed
