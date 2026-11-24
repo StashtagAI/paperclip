@@ -556,8 +556,8 @@ export async function chooseLinkKind(linkId: string, kind: Kind): Promise<string
 
 /**
  * Files a not-sorted stash by hand (HAN-89): one item called `name`, with the caption as its description, in
- * "Saved posts › Instagram" (or TikTok) under `kind`; Recipes go to Recipes › <meal> instead (HAN-124). Returns that
- * list's id and where it is, e.g. "Recipes › Desserts".
+ * "Saved posts › Instagram" (or TikTok) under `kind`; Recipes go to Recipes › <meal> and Shop to <category> › <group>
+ * instead (HAN-124). Returns that list's id and where it is, e.g. "Recipes › Desserts".
  */
 export async function fileLink(linkId: string, kind: Kind, name: string): Promise<{ listId: string; path: string }> {
   const { data, error } = await supabase.rpc('file_link', { p_link_id: linkId, p_kind: kind, p_name: name });

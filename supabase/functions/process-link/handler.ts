@@ -13,6 +13,7 @@ import { cachedLookup, lookupFromEnv, type PlaceCache, stubLookup } from "./look
 import { claimBlock, errorCode, UNCLAIMABLE } from "./errors.ts";
 import { findByName, splitNew } from "./merge.ts";
 import { groupRecipes } from "./recipe-groups.ts";
+import { groupShop } from "./shop-groups.ts";
 import { MODEL } from "./extract.ts";
 import { readImages, storedImageRefs } from "./images.ts";
 import { videoReader, type VideoReader, type VideoRef } from "./video.ts";
@@ -276,7 +277,7 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
       await event("final", true, Date.now() - t00, { status: "done", items: 0, unsorted: true });
       return json({ status: "done", items: 0, unsorted: true });
     }
-    const ex = groupRecipes(r.extraction);
+    const ex = groupShop(groupRecipes(r.extraction));
 
     // Merge into existing category/list/items, matching names case-insensitively (merge.ts).
     const { data: cats, error: cle } = await db.from("categories").select("id,name").eq("user_id", link.user_id).eq("kind", ex.kind);

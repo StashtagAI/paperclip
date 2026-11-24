@@ -35,11 +35,11 @@ select tests.login('00000000-0000-4000-8000-00000000000a');
 
 select lives_ok($$ select public.file_link('00000000-0000-4000-8000-000000000111', 'recipes', 'Persimmon season') $$, 'files a recipe');
 select lives_ok($$ select public.file_link('00000000-0000-4000-8000-000000000112', 'recipes', 'Grandma special') $$, 'files a recipe with no meal');
-select lives_ok($$ select public.file_link('00000000-0000-4000-8000-000000000113', 'shop', 'Mug') $$, 'files a product');
+select lives_ok($$ select public.file_link('00000000-0000-4000-8000-000000000113', 'watch', 'Mug') $$, 'files a show');
 select is(
   array(select c.kind || ' › ' || c.name || ' › ' || l.name from public.items i join public.lists l on l.id = i.list_id
           join public.categories c on c.id = l.category_id order by i.link_id),
-  array['recipes › Recipes › Desserts', 'recipes › Recipes › Saved posts', 'shop › Saved posts › Instagram'],
+  array['recipes › Recipes › Desserts', 'recipes › Recipes › Saved posts', 'watch › Saved posts › Instagram'],
   'recipes go to Recipes › <meal> from the caption, else Recipes › Saved posts; other kinds are unchanged');
 
 select * from finish();
