@@ -9,6 +9,7 @@ type Env = (k: string) => string | undefined;
 export interface VideoRef { url: string; durationSec?: number }
 
 export const VIDEO_LIMITS = {
+  /** the free plan's length; claim_stash_allowance returns the caller's plan value (HAN-126: Premium 150) */
   maxSeconds: 90,
   maxBytes: 25 * 1024 * 1024,
   /** Gemini inline data: the request (base64, +33%) must stay under ~20 MB */
@@ -94,7 +95,9 @@ const VISION_PROMPT = `Transcribe this short video for a recommendation extracto
 {"speech": "<what is said, verbatim, in order>", "on_screen_text": "<all readable text shown in the video, in order>"}
 Copy words exactly. Do not summarize, translate, describe visuals or add anything that is not said or shown. Use "" when there is none.`;
 
-export function videoReader(video: VideoRef | undefined, env: Env, fetchFn: typeof fetch = fetch): VideoReader {
+export function videoReader(
+  video: VideoRef | undefined, env: Env, fetchFn: typeof fetch = fetch, maxSeconds: number = VIDEO_LIMITS.maxSeconds,
+): VideoReader {
   let cost = 0;
   let bytes: Uint8Array | null | undefined;
   const skip = (skipped: string): VideoSkip => ({ skipped });
@@ -106,7 +109,7 @@ export function videoReader(video: VideoRef | undefined, env: Env, fetchFn: type
     if (!video || !allowedVideoUrl(video.url)) return skip("no_video");
     // Unknown duration is refused: the cap exists to bound spend, so it cannot be skipped by omitting the field.
     if (sec == null) return skip("duration_unknown");
-    if (sec > VIDEO_LIMITS.maxSeconds) return skip("too_long");
+    if (sec > maxSeconds) return skip("too_long");
     const key = via === "transcribe" ? env("OPENAI_API_KEY")?.trim() : env("GEMINI_API_KEY")?.trim();
     if (!key) return skip("no_key");
     const estimate = via === "transcribe"

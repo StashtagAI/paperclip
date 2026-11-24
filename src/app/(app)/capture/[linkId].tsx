@@ -19,6 +19,7 @@ import { downloadModel, isModelDownloaded, MODEL_LABEL } from '@/lib/capture/tra
 import { buildCard, fetchLink } from '@/lib/data';
 import { dedupeLines } from '@/lib/capture/lines';
 import { shortUrl } from '@/lib/link-summary';
+import { videoTooLong } from '@/lib/plan';
 import { PLATFORM_LABELS, type Captured } from '@/lib/types';
 
 const native = Platform.OS !== 'web';
@@ -64,6 +65,8 @@ export default function CaptureScreen() {
     add({ source: 'fetched_caption', label: 'Read from the link', status: 'ready', text: fetched });
   }, [fetched]);
   const fetchReason = link.data?.error === 'needs_capture' ? link.data.raw_content?.fetch?.reason : undefined;
+  // HAN-126: the reel was longer than this plan reads, so say plainly to record it (the phone has no length limit).
+  const tooLong = native && fetchReason ? videoTooLong(link.data?.raw_content?.fetch) : null;
 
   // HAN-126: an image post's list is in its pictures. Read them on this phone first (free); if that gets too little text,
   // process-link reads the same pictures with vision. Either way the card is built without more taps.
@@ -207,7 +210,21 @@ export default function CaptureScreen() {
           />
         </View>
       ) : null}
-      {fetchReason && FETCH_COPY[fetchReason] ? <ThemedText>{FETCH_COPY[fetchReason]}</ThemedText> : null}
+      {tooLong ? (
+        <View style={styles.source}>
+          <ThemedText accessibilityLabel={tooLong.spoken}>{tooLong.text}</ThemedText>
+          {tooLong.premiumWouldRead ? (
+            <Button
+              title="See Premium"
+              variant="secondary"
+              accessibilityHint="Opens the Premium plan, which reads longer videos"
+              onPress={() => router.push('/premium')}
+            />
+          ) : null}
+        </View>
+      ) : fetchReason && FETCH_COPY[fetchReason] ? (
+        <ThemedText>{FETCH_COPY[fetchReason]}</ThemedText>
+      ) : null}
       <ThemedText themeColor="textSecondary">
         {native
           ? 'Add screenshots of the expanded caption, a screen recording of the reel, or paste the caption. One is enough; more helps. Pictures and video stay on this phone, only the text is sent.'

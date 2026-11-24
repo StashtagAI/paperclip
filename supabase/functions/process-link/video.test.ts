@@ -49,6 +49,16 @@ for (const [name, e, v, why] of [
   assert.equal(m.calls.length, 0, name);
 }
 
+// HAN-126: the limit is the plan's. A 1:55 reel is too long for free (90 s) and read on Premium (150 s); 2:31 is not.
+{
+  const reel = { url: V, durationSec: 115 };
+  assert.deepEqual(await videoReader(reel, keys, mock([]).fn).read("transcribe"), { skipped: "too_long" });
+  const m = mock([[/cdninstagram/, mp4], [/api\.openai\.com/, () => new Response("Number one is Santal 33.")]]);
+  const r = await videoReader(reel, keys, m.fn, 150).read("transcribe");
+  assert.ok("via" in r && r.cost_usd < 0.02, "premium: 1:55 transcribed, about $0.012");
+  assert.deepEqual(await videoReader({ url: V, durationSec: 151 }, keys, mock([]).fn, 150).read("transcribe"), { skipped: "too_long" });
+}
+
 // redirects are not followed; oversized and failed downloads are skipped without a paid call
 {
   const m = mock([[/cdninstagram/, () => new Response(null, { status: 302, headers: { location: "http://169.254.169.254/" } })]]);

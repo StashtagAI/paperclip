@@ -16,6 +16,10 @@ export type Plan = {
   shared_lists: number;
   shared_list_limit: number;
   free_shared_list_limit: number;
+  /** Longest video process-link reads on this plan, and on each plan (HAN-126). Absent before that migration. */
+  video_seconds?: number;
+  free_video_seconds?: number;
+  premium_video_seconds?: number;
   custom_organization: boolean;
 };
 
@@ -85,4 +89,42 @@ export function premiumUntil(p: Plan): string | null {
   if (!p.expires_at) return p.source === 'manual' ? 'Premium is on for this account.' : null;
   const date = new Date(p.expires_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   return `Paid through ${date}.`;
+}
+
+/** 150 → "2:30", 90 → "1:30", 115.4 → "1:55". */
+export function clockLength(sec: number): string {
+  const s = Math.round(sec);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Spoken form: VoiceOver reads "2:30" as a time of day. 150 → "2 minutes 30 seconds". */
+export function spokenLength(sec: number): string {
+  const s = Math.round(sec);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  const part = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+  if (!m) return part(r, 'second');
+  return r ? `${part(m, 'minute')} ${part(r, 'second')}` : part(m, 'minute');
+}
+
+type VideoFetch = { video_skip?: string; video_sec?: number | null; video_max_sec?: number; video_premium_max_sec?: number };
+
+/**
+ * HAN-126: what the capture screen says when process-link skipped a reel for being longer than the plan reads, and
+ * whether Premium would have read it. Null when the video wasn't skipped for length.
+ */
+export function videoTooLong(f: VideoFetch | undefined): { text: string; spoken: string; premiumWouldRead: boolean } | null {
+  if (f?.video_skip !== 'too_long' || !f.video_max_sec) return null;
+  const sec = f.video_sec ?? null;
+  const premium = f.video_premium_max_sec;
+  const premiumWouldRead = !!premium && premium > f.video_max_sec && (sec == null || sec <= premium);
+  const say = (fmt: (n: number) => string) => {
+    const len = sec ? ` (${fmt(sec)})` : '';
+    return (
+      `This video${len} is longer than the ${fmt(f.video_max_sec!)} we can read automatically. ` +
+      'Record your screen while it plays, then add the recording below. We’ll read it on this phone.' +
+      (premiumWouldRead ? ` Premium reads videos up to ${fmt(premium!)}.` : '')
+    );
+  };
+  return { text: say(clockLength), spoken: say(spokenLength), premiumWouldRead };
 }
