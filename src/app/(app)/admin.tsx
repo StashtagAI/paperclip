@@ -18,11 +18,14 @@ import {
   formatUsd,
   formatUsdPer,
   isNotAdmin,
+  fetchWebTraffic,
   type AdminStats,
+  type WebTraffic,
 } from '@/lib/admin';
 import { announce } from '@/lib/announce';
 
 const APP_STORE_ANALYTICS = 'https://appstoreconnect.apple.com/analytics';
+const CLOUDFLARE_ANALYTICS = 'https://dash.cloudflare.com/?to=/:account/web-analytics';
 
 /**
  * Admin portal (HAN-128): usage, estimated API spend, users and stashes across every account. Only accounts in
@@ -31,7 +34,12 @@ const APP_STORE_ANALYTICS = 'https://appstoreconnect.apple.com/analytics';
  */
 export default function AdminScreen() {
   const stats = useAsync(fetchAdminStats, []);
+  const traffic = useAsync(fetchWebTraffic, []);
   const s = stats.data;
+  const refreshAll = () => {
+    stats.refresh();
+    traffic.refresh();
+  };
   const status = stats.loading
     ? s
       ? 'Refreshing stats…'
@@ -46,6 +54,10 @@ export default function AdminScreen() {
   useEffect(() => {
     if (!stats.loading) announce(status);
   }, [stats.loading, status]);
+  const trafficError = traffic.error && !isNotAdmin(stats.error) ? `Couldn’t load website traffic: ${traffic.error.message}` : '';
+  useEffect(() => {
+    if (trafficError) announce(trafficError);
+  }, [trafficError]);
 
   if (stats.error && isNotAdmin(stats.error)) {
     return (
@@ -58,7 +70,7 @@ export default function AdminScreen() {
   return (
     <Screen
       edges="none"
-      refreshControl={<RefreshControl refreshing={stats.loading && !!s} onRefresh={stats.refresh} />}>
+      refreshControl={<RefreshControl refreshing={stats.loading && !!s} onRefresh={refreshAll} />}>
       <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
         {s && !stats.loading && !stats.error ? `Updated ${new Date(s.generated_at).toLocaleString()}` : status}
       </ThemedText>
@@ -70,20 +82,22 @@ export default function AdminScreen() {
           <Button title="Try again" variant="secondary" onPress={stats.refresh} />
         </View>
       ) : null}
-      {!s ? stats.error ? null : <ActivityIndicator accessibilityLabel="Loading stats" /> : <Stats s={s} />}
+      {!s ? stats.error ? null : <ActivityIndicator accessibilityLabel="Loading stats" /> : <Stats s={s} traffic={traffic} />}
       {s ? (
         <Button
           title={stats.loading ? 'Refreshing…' : 'Refresh'}
           variant="secondary"
           loading={stats.loading}
-          onPress={stats.refresh}
+          onPress={refreshAll}
         />
       ) : null}
     </Screen>
   );
 }
 
-function Stats({ s }: { s: AdminStats }) {
+type TrafficState = { data: WebTraffic | undefined; error: Error | undefined; loading: boolean; refresh: () => void };
+
+function Stats({ s, traffic }: { s: AdminStats; traffic: TrafficState }) {
   const st = s.stashes;
   const c = s.costs;
   const e = s.engagement;
@@ -139,6 +153,8 @@ function Stats({ s }: { s: AdminStats }) {
         </Rows>
       </Section>
 
+      <Traffic traffic={traffic} waitlist7d={s.engagement.waitlist_7d} />
+
       <Section title="API costs (estimated)">
         <ThemedText type="small" themeColor="textSecondary">
           Estimated at list prices from each run’s usage, not taken from invoices. The daily caps reset at midnight UTC.
@@ -193,11 +209,6 @@ function Stats({ s }: { s: AdminStats }) {
         <Rows>
           <Stat label="App downloads" value="Unavailable" note="Apple reports these in App Store Connect." />
           <Stat label="Revenue" value="Unavailable" note="There’s no billing yet." />
-          <Stat
-            label="Website traffic"
-            value="Unavailable"
-            note="No web analytics are set up. Active users above count use of the app."
-          />
         </Rows>
         <Button
           title="Open App Store Connect analytics"
@@ -208,6 +219,84 @@ function Stats({ s }: { s: AdminStats }) {
         />
       </Section>
     </>
+  );
+}
+
+/** stashtag.ai visits from Cloudflare Web Analytics. A visit is a page view that didn’t come from another page on the site. */
+function Traffic({ traffic, waitlist7d }: { traffic: TrafficState; waitlist7d: number }) {
+  const t = traffic.data;
+  return (
+    <Section title="Website traffic (stashtag.ai)">
+      {traffic.error ? (
+        <View style={styles.gap}>
+          <ThemedText type="small" themeColor="danger">
+            Couldn’t load website traffic: {traffic.error.message}
+          </ThemedText>
+          <Button title="Try again" variant="secondary" onPress={traffic.refresh} />
+        </View>
+      ) : !t ? (
+        <ActivityIndicator accessibilityLabel="Loading website traffic" />
+      ) : !t.configured ? (
+        <Rows>
+          <Stat label="Website traffic" value="Unavailable" note="Cloudflare Web Analytics isn’t connected on the server." />
+        </Rows>
+      ) : (
+        <>
+          <ThemedText type="small" themeColor="textSecondary">
+            From Cloudflare Web Analytics, counted since 24 Nov 2026. Ad blockers hide some visits, and bots are left out.
+          </ThemedText>
+          <Tiles>
+            <Tile label="Visits, 24 hours" value={formatCount(t.visits.d1)} />
+            <Tile label="Visits, 7 days" value={formatCount(t.visits.d7)} />
+            <Tile label="Visits, 30 days" value={formatCount(t.visits.d30)} />
+          </Tiles>
+          <Rows>
+            <Stat label="Page views, 24 hours" value={formatCount(t.page_views.d1)} />
+            <Stat label="Page views, 7 days" value={formatCount(t.page_views.d7)} />
+            <Stat label="Page views, 30 days" value={formatCount(t.page_views.d30)} />
+            <Stat
+              label="Waitlist signups, 7 days"
+              value={`${formatCount(waitlist7d)} (${formatShare(waitlist7d, t.visits.d7)} of visits)`}
+            />
+          </Rows>
+          <TopList title="Top pages, 30 days" unit="view" rows={t.top_pages_30d.map((p) => [p.path, p.views])} />
+          <TopList
+            title="Where visits came from, 30 days"
+            unit="visit"
+            rows={t.top_referrers_30d.map((r) => [r.host === 'direct' ? 'Direct or bookmark' : r.host, r.visits])}
+          />
+          <TopList title="Countries, 30 days" unit="visit" rows={t.top_countries_30d.map((c) => [c.country, c.visits])} />
+        </>
+      )}
+      <Button
+        title="Open Cloudflare Web Analytics"
+        variant="secondary"
+        accessibilityRole="link"
+        accessibilityHint="Opens in your browser"
+        onPress={() => Linking.openURL(CLOUDFLARE_ANALYTICS)}
+      />
+    </Section>
+  );
+}
+
+function TopList({ title, unit, rows }: { title: string; unit: string; rows: [string, number][] }) {
+  return (
+    <View style={styles.gap}>
+      <ThemedText type="small" themeColor="textSecondary" accessibilityRole="header">
+        {title}
+      </ThemedText>
+      {rows.length ? (
+        <Rows>
+          {rows.map(([label, n]) => (
+            <Stat key={label} label={label} value={formatCount(n)} spoken={`${formatCount(n)} ${n === 1 ? unit : `${unit}s`}`} />
+          ))}
+        </Rows>
+      ) : (
+        <ThemedText type="small" themeColor="textSecondary">
+          No visits yet.
+        </ThemedText>
+      )}
+    </View>
   );
 }
 

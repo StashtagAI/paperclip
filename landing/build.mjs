@@ -157,15 +157,20 @@ const structuredData = {
 
 const OG_ALT = `${config.name}: save Instagram and TikTok posts, get organized lists such as Eats › Restaurants › Denver. Shown beside the app's home screen.`;
 
+// Cookie-free page-view counting, turned on in the Pages project (Metrics › Web Analytics); see README › Analytics.
+const CF_ANALYTICS = { script: 'https://static.cloudflareinsights.com', connect: 'https://cloudflareinsights.com' };
+
 function page({ path, title, description, main, structured = null, script = false, form = false, index = true }) {
   const url = abs(path);
   const csp = [
     "default-src 'none'",
     "img-src 'self'",
-    // Same origin, so in-page tools such as Lighthouse can read robots.txt and llms.txt, plus the waitlist function.
-    `connect-src 'self'${form && script ? ` ${endpoint.origin}` : ''}`,
+    // Same origin, so in-page tools such as Lighthouse can read robots.txt and llms.txt, plus the waitlist function
+    // and Cloudflare Web Analytics' beacon reporting a page view (HAN-128).
+    `connect-src 'self'${form && script ? ` ${endpoint.origin}` : ''} ${CF_ANALYTICS.connect}`,
     `style-src ${sha256(css)}`,
-    script ? `script-src ${sha256(js)}` : "script-src 'none'",
+    // Cloudflare Pages adds its Web Analytics beacon (an external script, nothing inline) to every page at deploy time.
+    `script-src${script ? ` ${sha256(js)}` : ''} ${CF_ANALYTICS.script}`,
     "base-uri 'none'",
     // 'self' as well: the function answers a plain form post with a redirect back to this site.
     form ? `form-action 'self' ${endpoint.origin}` : "form-action 'none'",

@@ -76,7 +76,32 @@ export async function fetchAdminStats(): Promise<AdminStats> {
   return data as AdminStats;
 }
 
-export const isNotAdmin = (e: Error | undefined) => (e as { code?: string } | undefined)?.code === NOT_ADMIN;
+/** Shape returned by the admin-web-traffic Edge Function (Cloudflare Web Analytics for stashtag.ai). */
+export type WebTraffic =
+  | { configured: false }
+  | {
+      configured: true;
+      generated_at: string;
+      visits: { d1: number; d7: number; d30: number };
+      page_views: { d1: number; d7: number; d30: number };
+      top_pages_30d: { path: string; views: number }[];
+      top_referrers_30d: { host: string; visits: number }[];
+      top_countries_30d: { country: string; visits: number }[];
+    };
+
+/** Loaded separately from admin_stats(), so a Cloudflare outage only blanks the traffic section. */
+export async function fetchWebTraffic(): Promise<WebTraffic> {
+  const { data, error } = await supabase.functions.invoke<WebTraffic>('admin-web-traffic', { body: {} });
+  if (error) {
+    // The function's own message ("Couldn’t reach Cloudflare.") is clearer than the client's generic one.
+    const body = await (error as { context?: Response }).context?.json?.().catch(() => null);
+    throw new Error(typeof body?.error === 'string' ? body.error : error.message);
+  }
+  if (!data) throw new Error('No reply from the server.');
+  return data;
+}
+
+export const isNotAdmin =(e: Error | undefined) => (e as { code?: string } | undefined)?.code === NOT_ADMIN;
 
 /** Postgres numerics arrive as numbers or strings; anything else is unknown. */
 const num = (v: unknown): number | null => {
