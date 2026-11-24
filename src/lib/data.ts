@@ -595,6 +595,18 @@ export async function deleteCategory(categoryId: string): Promise<void> {
   await removePhotoFiles(paths);
 }
 
+export type MoveResult = { moved: number; merged: number; skipped: number };
+
+/**
+ * Moves items into another of the user's lists under the same kind (HAN-124): one card, or every item on a list. An
+ * item the list already has (by name) is merged into that copy; lists and categories this empties are deleted.
+ */
+export async function moveItems(itemIds: string[], listId: string): Promise<MoveResult> {
+  const { data, error } = await supabase.rpc('move_items', { p_item_ids: itemIds, p_list_id: listId });
+  if (error) throw error;
+  return data as MoveResult;
+}
+
 /** Name limits from the schema's check constraints. */
 export const NAME_LIMITS = { category: 80, list: 120 } as const;
 
@@ -617,14 +629,6 @@ export async function renameCategory(category: Pick<CategoryRow, 'id' | 'kind'>,
   const trimmed = checkName(name, NAME_LIMITS.category, siblings.data, 'category');
   const { error } = await supabase.from('categories').update({ name: trimmed }).eq('id', category.id);
   if (error) throw error.code === '23505' ? new Error(`You already have a category called “${trimmed}”.`) : error;
-}
-
-export async function renameList(list: Pick<ListRow, 'id' | 'category_id'>, name: string): Promise<void> {
-  const siblings = await supabase.from('lists').select('name').eq('category_id', list.category_id).neq('id', list.id);
-  if (siblings.error) throw siblings.error;
-  const trimmed = checkName(name, NAME_LIMITS.list, siblings.data, 'list');
-  const { error } = await supabase.from('lists').update({ name: trimmed }).eq('id', list.id);
-  if (error) throw error.code === '23505' ? new Error(`You already have a list called “${trimmed}” here.`) : error;
 }
 
 /** The share token for one of the user's lists, or null if it isn't shared (HAN-50). */
