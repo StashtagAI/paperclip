@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { BottomNav } from '@/components/bottom-nav';
 import { HomeBackButton } from '@/components/home-back-button';
 import { NewSharePrompt } from '@/components/new-share-prompt';
+import { Tutorial } from '@/components/tutorial';
 import { useNudges } from '@/hooks/use-nudges';
 import { useTheme } from '@/hooks/use-theme';
 import { pendingShare } from '@/lib/share';
@@ -97,6 +98,7 @@ export default function AppLayout() {
       </Stack>
       <BottomNav />
       <NewSharePrompt />
+      <Tutorial />
     </View>
   );
 }

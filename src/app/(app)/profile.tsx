@@ -19,6 +19,7 @@ import { fetchDisplayName } from '@/lib/data';
 import { allowanceLine, fetchPlan, planTitle } from '@/lib/plan';
 import { PROVIDER_NAMES, SOCIAL_PROVIDERS, isAppleRelayEmail, linkedProviders, socialErrorMessage, type SocialProvider } from '@/lib/sign-in-providers';
 import { continueWith } from '@/lib/social-auth';
+import { openTutorial } from '@/lib/tutorial';
 import { supabase } from '@/lib/supabase';
 
 const SCHEMES: { value: SchemePreference; label: string }[] = [
@@ -34,7 +35,7 @@ function showAlert(title: string, message: string) {
 
 /**
  * Profile (HAN-34): your name (HAN-71), sign-in methods (HAN-112), appearance, security (HAN-49), feedback, support,
- * plan (HAN-132), the admin portal for admins (HAN-128) and account deletion.
+ * the tutorial (HAN-137), plan (HAN-132), the admin portal for admins (HAN-128) and account deletion.
  */
 export default function ProfileScreen() {
   const { session } = useAuth();
@@ -129,6 +130,12 @@ export default function ProfileScreen() {
       </Section>
 
       <Section title="Help">
+        <Row
+          title="How StashtagAI works"
+          subtitle="A quick tour of stashing and your lists"
+          hint="Opens the tutorial"
+          onPress={() => openTutorial(session?.user.id ?? null)}
+        />
         <Row title="Send feedback" subtitle="Report a bug or share an idea" onPress={() => router.push('/feedback')} />
         <Row
           title="Contact support"
