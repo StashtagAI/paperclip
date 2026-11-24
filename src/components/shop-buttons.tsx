@@ -126,7 +126,7 @@ export function InstacartButton({
         variant={variant}
         icon={outIcon}
         loading={sending}
-        disabled={!request?.lines.length}
+        disabled={!request}
         accessibilityHint="Opens the ingredients on Instacart, where you choose a store"
         onPress={send}
       />

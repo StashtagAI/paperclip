@@ -1,4 +1,7 @@
-import { buyLinks, config, instacartBody, parseInstacart, type Env } from "./links.ts";
+import {
+  buyLinks, config, instacartBody, instacartUrlOk, recipeRequest, shoppingListRequest, type Env, type InstacartRequest,
+  type Recipe,
+} from "./links.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -13,6 +16,29 @@ const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...cors, "content-type": "application/json" } });
 
 export const INSTACART_TIMEOUT_MS = 10_000;
+/** Most recipes on one shopping list, and most ticked-off lines the app can leave out. */
+export const MAX_RECIPES = 50;
+export const MAX_SKIP = 500;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Distinct strings, or null if it isn't an array of at most `max` that pass `ok`. */
+const strings = (v: unknown, max: number, ok: (s: string) => boolean = () => true): string[] | null =>
+  Array.isArray(v) && v.length <= max && v.every((x) => typeof x === "string" && ok(x)) ? [...new Set(v as string[])] : null;
+
+/** The caller's own recipes, in the order asked, with the ingredients and steps process-link extracted. */
+async function ownRecipes(db: Db, userId: string, itemIds: string[]): Promise<Recipe[]> {
+  const { data, error } = await db.from("items")
+    .select("id, name, link:links!items_link_id_fkey(recipe_details:raw_content->recipe_details)")
+    .in("id", itemIds).eq("user_id", userId);
+  if (error) throw error;
+  const byId = new Map<string, Recipe>();
+  for (const it of data ?? []) {
+    const d = it.link?.recipe_details?.[it.name];
+    const strings = (v: unknown) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : []);
+    byId.set(it.id, { name: it.name, ingredients: strings(d?.ingredients), steps: strings(d?.steps) });
+  }
+  return itemIds.flatMap((id) => byId.get(id) ?? []);
+}
 
 export async function handle(req: Request, { db, env, fetchFn = fetch }: Deps): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
@@ -43,9 +69,38 @@ export async function handle(req: Request, { db, env, fetchFn = fetch }: Deps): 
   }
 
   if (body.action === "instacart") {
-    const r = parseInstacart(body);
+    // The page is built here from the caller's own rows, never from text the client sends (HAN-134): each call mints
+    // a page on Instacart under our partner key.
+    //   {item_id}              → a recipe page
+    //   {item_ids, skip?}      → a shopping list for those recipes, less the line keys ticked off
+    const isId = (v: string) => UUID.test(v);
+    const recipeId = typeof body.item_id === "string" && isId(body.item_id) ? body.item_id : null;
+    const listIds = recipeId ? null : strings(body.item_ids, MAX_RECIPES, isId);
+    if (!recipeId && !listIds?.length) return json({ error: "item_id or item_ids required" }, 400);
+    const skip = body.skip == null ? [] : strings(body.skip, MAX_SKIP);
+    if (!skip) return json({ error: "bad skip" }, 400);
+    let recipes: Recipe[];
+    try {
+      recipes = await ownRecipes(db, userId, recipeId ? [recipeId] : listIds!);
+    } catch (e) {
+      console.log(`[shop-links] recipes read failed: ${(e as { code?: string }).code ?? "error"}`);
+      return json({ error: "server_error" }, 500);
+    }
+    if (!recipes.length) return json({ error: "not found" }, 404);
+    const r: InstacartRequest | null = recipeId ? recipeRequest(recipes[0]) : shoppingListRequest(recipes, skip);
     if (!r) return json({ error: "nothing to send" }, 400);
     if (!cfg.instacartKey) return json({ error: "not_configured" }, 503);
+
+    const { data: q, error: qe } = await db.rpc("claim_instacart_quota", { p_user: userId, p_per_hour: cfg.instacartPerHour });
+    if (qe || !q) {
+      // Fail closed: no bookkeeping, no page.
+      console.log(`[shop-links] quota check failed: ${qe?.code ?? "no data"}`);
+      return json({ error: "server_error" }, 500);
+    }
+    if (!q.allowed) {
+      console.log(`[shop-links] ${JSON.stringify({ instacart: "rate_limited", hour_calls: q.hour_calls })}`);
+      return json({ error: "rate_limited" }, 429);
+    }
     let res: Response;
     try {
       res = await fetchFn(`${cfg.instacartBase}/idp/v1/products/products_link`, {
@@ -60,7 +115,7 @@ export async function handle(req: Request, { db, env, fetchFn = fetch }: Deps): 
     }
     const out = await res.json().catch(() => null);
     const url = out?.products_link_url;
-    if (!res.ok || typeof url !== "string" || !url.startsWith("https://")) {
+    if (!res.ok || !instacartUrlOk(url, cfg.instacartBase)) {
       // Instacart's validation errors name the bad field; log them, but never the API key or the list itself.
       console.log(`[shop-links] instacart ${res.status} ${JSON.stringify(out?.errors ?? out?.error ?? null).slice(0, 300)}`);
       return json({ error: "instacart_failed" }, 502);

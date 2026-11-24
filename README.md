@@ -59,6 +59,10 @@ as unset: Buy links then go to plain store searches with no tag, and Send to Ins
 | `AFFILIATE_WRAPPER_ID` | Sovrn Commerce API key, or Skimlinks publisher ID (e.g. `123456X789012`) |
 | `INSTACART_API_KEY` | Instacart Developer Platform key |
 | `INSTACART_API_BASE` | Optional. `https://connect.instacart.com` (default) or `https://connect.dev.instacart.tools` for a development key |
+| `INSTACART_PER_HOUR` | Optional. Instacart pages one user can make per hour (default `20`; `0` switches it off) |
+
+The function builds every Instacart page from the caller's own saved recipes (the app sends only recipe ids), counts
+calls with the `claim_instacart_quota` RPC, and returns only `instacart.com` URLs (HAN-134).
 
 ```bash
 supabase secrets set AMAZON_ASSOCIATE_TAG=placeholder AFFILIATE_WRAPPER=sovrn AFFILIATE_WRAPPER_ID=placeholder INSTACART_API_KEY=placeholder
