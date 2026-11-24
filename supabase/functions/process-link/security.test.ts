@@ -183,6 +183,47 @@ const captured = { caption: "Taco Uno in Austin" };
   }
 }
 
+// HAN-126: the video length limit comes from the plan. A 1:55 reel whose caption names nothing: Free (90 s) skips it
+// without a paid video call and tells the capture screen why, with Premium's limit; Premium (150 s) transcribes it.
+{
+  const REEL = "https://scontent.cdninstagram.com/v/reel.mp4";
+  const fetchEnv: Record<string, string> = { ANTHROPIC_API_KEY: "k", WEB_SEARCH_ENABLED: "false", APIFY_TOKEN: "t", OPENAI_API_KEY: "o" };
+  const run = async (allowance: Row) => {
+    const db = world();
+    db.allowance = { allowed: true, ...allowance };
+    const urls: string[] = [];
+    const fn = (async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.startsWith("https://api.apify.com/")) return new Response(JSON.stringify([{ caption: "Try these ASAP", videoUrl: REEL, videoDuration: 115 }]));
+      if (url === REEL) return new Response(new Uint8Array(1024));
+      if (url === "https://api.openai.com/v1/audio/transcriptions") return new Response("Number one is Santal 33.");
+      if (url === "https://api.anthropic.com/v1/messages") return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ kind: "do", category: "x", tags: [], items: [] }) }] }));
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    const r = await handle(new Request("http://local/process-link", { method: "POST", headers: { authorization: "Bearer token-a" }, body: JSON.stringify({ link_id: LA }) }),
+      { db: db as never, env: (k: string) => fetchEnv[k], fetchFn: fn });
+    return { body: await r.json(), link: db.tables.links.find((l) => l.id === LA)!, urls };
+  };
+
+  const free = await run({ plan: "free", video_seconds: 90, premium_video_seconds: 150 });
+  assert.deepEqual(free.body, { status: "needs_capture", reason: "no_items" });
+  assert.ok(!free.urls.includes(REEL) && !free.urls.some((u) => u.includes("openai")), "free: no video download or paid video call");
+  const fetchInfo = (free.link.raw_content as { fetch: Row }).fetch;
+  assert.equal(fetchInfo.video_skip, "too_long");
+  assert.equal(fetchInfo.video_sec, 115);
+  assert.equal(fetchInfo.video_max_sec, 90);
+  assert.equal(fetchInfo.video_premium_max_sec, 150);
+
+  const premium = await run({ plan: "premium", video_seconds: 150, premium_video_seconds: 150 });
+  assert.ok(premium.urls.includes("https://api.openai.com/v1/audio/transcriptions"), "premium: the 1:55 reel is transcribed");
+  assert.equal(((premium.link.raw_content as { fetch?: Row } | null)?.fetch ?? {}).video_premium_max_sec, undefined, "premium: no upsell");
+
+  // An allowance without the field (an older database) keeps the free limit.
+  const old = await run({ plan: "free" });
+  assert.equal((old.link.raw_content as { fetch: Row }).fetch.video_max_sec, 90);
+}
+
 // ---------- prompt injection: what a fooled model returns stays inside the caller's own link ----------
 const KNOWN_ERRORS = /^(bad_output|no_json|no_captured_text|url_not_allowed|anthropic_\d{3})$/;
 for (const fx of FIXTURES) {

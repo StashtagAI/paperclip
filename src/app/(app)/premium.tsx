@@ -13,11 +13,13 @@ import { useAuth } from '@/lib/auth';
 import {
   allowanceLine,
   annualSavingsPercent,
+  clockLength,
   fetchPlan,
   formatPrice,
   PLANNED_PRICES,
   premiumUntil,
   PRIVACY_URL,
+  spokenLength,
   syncPlan,
   TERMS_URL,
   type Plan,
@@ -165,6 +167,13 @@ export default function PremiumScreen() {
           <View style={styles.perks}>
             <Perk title="Unlimited AI stashes" detail={`Free includes ${plan.data?.free_stash_limit ?? 15} a month. Fair use applies.`} />
             <Perk title="Share more lists at once" detail={`Free shares up to ${plan.data?.free_shared_list_limit ?? 5} lists at a time.`} />
+            {plan.data?.premium_video_seconds && plan.data.free_video_seconds ? (
+              <Perk
+                title="Reads longer videos"
+                detail={`Reels up to ${clockLength(plan.data.premium_video_seconds)}. Free reads up to ${clockLength(plan.data.free_video_seconds)}.`}
+                spokenDetail={`Reels up to ${spokenLength(plan.data.premium_video_seconds)}. Free reads up to ${spokenLength(plan.data.free_video_seconds)}.`}
+              />
+            ) : null}
             <Perk title="Custom organization" detail="New ways to arrange your lists, as they arrive." />
             <Perk title="Everything in Free" detail="Sharing, shopping lists and Buy buttons stay free." />
           </View>
@@ -246,9 +255,10 @@ export default function PremiumScreen() {
   );
 }
 
-function Perk({ title, detail }: { title: string; detail: string }) {
+/** spokenDetail: for VoiceOver when detail has something it misreads (it says "2:30" as a time of day). */
+function Perk({ title, detail, spokenDetail }: { title: string; detail: string; spokenDetail?: string }) {
   return (
-    <View accessible accessibilityLabel={`${title}. ${detail}`} style={styles.perk}>
+    <View accessible accessibilityLabel={`${title}. ${spokenDetail ?? detail}`} style={styles.perk}>
       <ThemedText type="defaultBold" importantForAccessibility="no">
         ✓ {title}
       </ThemedText>

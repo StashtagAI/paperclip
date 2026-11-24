@@ -1,4 +1,14 @@
-import { allowanceLine, annualSavingsPercent, premiumUntil, resetDate, stashesLeft, type Plan } from '@/lib/plan';
+import {
+  allowanceLine,
+  annualSavingsPercent,
+  clockLength,
+  premiumUntil,
+  resetDate,
+  spokenLength,
+  stashesLeft,
+  videoTooLong,
+  type Plan,
+} from '@/lib/plan';
 
 // plan.ts also talks to the server; these tests cover only its pure helpers (jest hoists this mock).
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
@@ -55,5 +65,38 @@ describe('premiumUntil', () => {
     expect(premiumUntil(free)).toBeNull();
     expect(premiumUntil(premium)).toMatch(/^Paid through .*2027\.$/);
     expect(premiumUntil({ ...premium, source: 'manual', expires_at: null })).toBe('Premium is on for this account.');
+  });
+});
+
+describe('video length (HAN-126)', () => {
+  it('formats lengths for the eye and for VoiceOver', () => {
+    expect(clockLength(150)).toBe('2:30');
+    expect(clockLength(115.4)).toBe('1:55');
+    expect(clockLength(65)).toBe('1:05');
+    expect(spokenLength(150)).toBe('2 minutes 30 seconds');
+    expect(spokenLength(90)).toBe('1 minute 30 seconds');
+    expect(spokenLength(120)).toBe('2 minutes');
+    expect(spokenLength(45)).toBe('45 seconds');
+  });
+
+  it('only speaks up when the video was skipped for length', () => {
+    expect(videoTooLong(undefined)).toBeNull();
+    expect(videoTooLong({ video_skip: 'no_key', video_max_sec: 90 })).toBeNull();
+  });
+
+  it('free plan, a 1:55 reel: record the screen, and Premium would read it', () => {
+    const r = videoTooLong({ video_skip: 'too_long', video_sec: 115, video_max_sec: 90, video_premium_max_sec: 150 })!;
+    expect(r.premiumWouldRead).toBe(true);
+    expect(r.text).toBe(
+      'This video (1:55) is longer than the 1:30 we can read automatically. Record your screen while it plays, then add the recording below. We’ll read it on this phone. Premium reads videos up to 2:30.',
+    );
+    expect(r.spoken).toContain('(1 minute 55 seconds) is longer than the 1 minute 30 seconds');
+  });
+
+  it('no Premium pitch when Premium could not read it either, or the user has Premium', () => {
+    expect(videoTooLong({ video_skip: 'too_long', video_sec: 200, video_max_sec: 90, video_premium_max_sec: 150 })!.premiumWouldRead).toBe(false);
+    const p = videoTooLong({ video_skip: 'too_long', video_sec: 200, video_max_sec: 150 })!;
+    expect(p.premiumWouldRead).toBe(false);
+    expect(p.text).not.toContain('Premium');
   });
 });

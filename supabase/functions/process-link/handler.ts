@@ -16,7 +16,7 @@ import { groupRecipes } from "./recipe-groups.ts";
 import { groupShop } from "./shop-groups.ts";
 import { MODEL } from "./extract.ts";
 import { readImages, storedImageRefs } from "./images.ts";
-import { videoReader, type VideoReader, type VideoRef } from "./video.ts";
+import { VIDEO_LIMITS, videoReader, type VideoReader, type VideoRef } from "./video.ts";
 import { book, bookVideo, costDetail, limitsFromEnv, type Meter, meteredFetch, newMeter } from "./quota.ts";
 
 const CACHE_DAYS = 30;
@@ -221,14 +221,26 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
   // HAN-88: read the video when the caption is empty or names nothing. Transcript first (cheap); the video model
   // (also reads on-screen text) only if the transcript gave no items. One download serves both. Plain fetch, not the
   // metered one: these hosts are priced here and booked with bookVideo.
-  const reader: VideoReader = videoReader(video, env, fetchFn);
+  // HAN-126: the length limit is the plan's (Premium reads longer videos); an odd answer falls back to the free limit.
+  const planSec = Number(allowance.video_seconds);
+  const maxVideoSec = Number.isFinite(planSec) && planSec >= 0 ? planSec : VIDEO_LIMITS.maxSeconds;
+  const reader: VideoReader = videoReader(video, env, fetchFn, maxVideoSec);
+  // Why the video wasn't read, kept on the link so the capture screen can say so (e.g. too long for this plan).
+  let videoSkip: Record<string, unknown> | undefined;
   const readVideo = async (via: "transcribe" | "vision") => {
     const before = reader.spent();
     const v = await reader.read(via);
+    if (!("via" in v) && !videoSkip) {
+      const premiumSec = Number(allowance.premium_video_seconds);
+      videoSkip = {
+        video_skip: v.skipped, video_sec: video?.durationSec ?? null, video_max_sec: maxVideoSec,
+        ...(allowance.plan !== "premium" && Number.isFinite(premiumSec) ? { video_premium_max_sec: premiumSec } : {}),
+      };
+    }
     bookVideo(meter, reader.spent() - before);
     await event(`video_${via}`, "via" in v, "via" in v ? v.ms : undefined, "via" in v
       ? { cost_usd: v.cost_usd, transcript_chars: v.captured.transcript?.length ?? 0, ocr_chars: v.captured.ocr?.length ?? 0 }
-      : { reason: v.skipped, cost_usd: reader.spent() - before });
+      : { reason: v.skipped, cost_usd: reader.spent() - before, duration_sec: video?.durationSec ?? null, max_sec: maxVideoSec });
     if (!("via" in v)) return false;
     captured = { ...(captured as Record<string, unknown> ?? {}), ...v.captured };
     fetched = { ...fetched, video: via, video_cost_usd: reader.spent() };
@@ -236,7 +248,7 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
   };
   if (fetching && !hit && !(captured as { caption?: string }).caption) await readVideo("transcribe");
   if (fetching && !hit && !Object.keys(captured ?? {}).length && !(await readVideo("vision"))) {
-    return await needsCapture("empty_caption", { ms: 0, cost_usd: meter.usd, tried: ["apify_instagram"] });
+    return await needsCapture("empty_caption", { ms: 0, cost_usd: meter.usd, tried: ["apify_instagram"], ...videoSkip });
   }
 
   // Keyed by normalized "name + list scope"; stores the resolved place incl. place id.
@@ -274,7 +286,7 @@ async function handleRun(req: Request, { db, env, fetchFn = fetch }: HandlerDeps
     }
     if (!r.ok) return await fail(errorCode(r.error).code);
     // A fetched caption that names nothing (only hashtags, "recipe in bio"…): let the user add what the video says.
-    if (fetched && "unsorted" in r) return await needsCapture("no_items", fetched, (captured as { caption?: string }).caption);
+    if (fetched && "unsorted" in r) return await needsCapture("no_items", { ...fetched, ...videoSkip }, (captured as { caption?: string }).caption);
     // Server-fetched text only (see source-cache.ts); a failed write never fails the run.
     // A run that hit its budget skipped Places/search; do not hand that degraded result to everyone for 30 days.
     if (fetching && !hit && !("unsorted" in r) && meter.refused === 0) {

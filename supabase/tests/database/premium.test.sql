@@ -70,7 +70,8 @@ select is((select count(*)::int from public.stash_usage where user_id = '0000000
   'deleting a stash keeps its usage row');
 
 select is(public.claim_stash_allowance('00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-0000000001a5'),
-  '{"allowed": false, "reason": "monthly_limit", "plan": "free", "used": 3, "limit": 3}'::jsonb,
+  '{"allowed": false, "reason": "monthly_limit", "plan": "free", "used": 3, "limit": 3,
+    "video_seconds": 90, "premium_video_seconds": 150}'::jsonb,
   'free: 2 done this month + 1 other in flight = 3 of 3, refused');
 delete from public.links where id = '00000000-0000-4000-8000-0000000001a4';
 select is(public.claim_stash_allowance('00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-0000000001a5') ->> 'allowed', 'true',
@@ -80,7 +81,8 @@ select is(public.claim_stash_allowance('00000000-0000-4000-8000-00000000000a', '
 insert into public.stash_usage (user_id) select '00000000-0000-4000-8000-00000000000b'::uuid from generate_series(1, 4);
 insert into public.stash_usage (user_id) select '00000000-0000-4000-8000-00000000000c'::uuid from generate_series(1, 4);
 select is(public.claim_stash_allowance('00000000-0000-4000-8000-00000000000b', null),
-  '{"allowed": true, "reason": null, "plan": "premium", "used": 4, "limit": 5}'::jsonb, 'premium: fair-use ceiling');
+  '{"allowed": true, "reason": null, "plan": "premium", "used": 4, "limit": 5,
+    "video_seconds": 150, "premium_video_seconds": 150}'::jsonb, 'premium: fair-use ceiling, and 2:30 videos (HAN-126)');
 select is(public.claim_stash_allowance('00000000-0000-4000-8000-00000000000c', null) ->> 'reason', 'monthly_limit', 'expired premium: free cap');
 insert into public.stash_usage (user_id) values ('00000000-0000-4000-8000-00000000000b');
 select is(public.claim_stash_allowance('00000000-0000-4000-8000-00000000000b', null) ->> 'reason', 'monthly_limit', 'premium: refused past the ceiling');
@@ -89,12 +91,14 @@ select is(public.claim_stash_allowance('00000000-0000-4000-8000-00000000000b', n
 select tests.login('00000000-0000-4000-8000-00000000000a');
 select is(public.my_plan() - 'resets_at',
   '{"plan": "free", "source": null, "expires_at": null, "stashes_used": 3, "stash_limit": 3, "free_stash_limit": 3,
-    "shared_lists": 0, "shared_list_limit": 2, "free_shared_list_limit": 2, "custom_organization": false}'::jsonb,
+    "shared_lists": 0, "shared_list_limit": 2, "free_shared_list_limit": 2,
+    "video_seconds": 90, "free_video_seconds": 90, "premium_video_seconds": 150, "custom_organization": false}'::jsonb,
   'my_plan: free, counting the in-flight run');
 select is((public.my_plan() ->> 'resets_at')::timestamptz, date_trunc('month', now(), 'UTC') + interval '1 month', 'my_plan: resets on the 1st, UTC');
 select tests.login('00000000-0000-4000-8000-00000000000b');
 select is(public.my_plan() ->> 'plan', 'premium', 'my_plan: premium');
 select is((public.my_plan() ->> 'custom_organization')::boolean, true, 'my_plan: premium unlocks custom organization');
+select is((public.my_plan() ->> 'video_seconds')::int, 150, 'my_plan: premium reads videos up to 2:30');
 reset role;
 
 -- ---------- shared-list limit ----------

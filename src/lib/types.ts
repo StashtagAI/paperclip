@@ -120,7 +120,19 @@ export type RawContent = {
   /** "fetched" when the caption was read from the link server-side rather than captured on the phone. */
   caption_source?: 'fetched' | null;
   /** Link-first fetch: how, how long, estimated cost, and why it fell back to capture. */
-  fetch?: { via?: string; ms?: number; cost_usd?: number; reason?: string; images?: string[] };
+  fetch?: {
+    via?: string;
+    ms?: number;
+    cost_usd?: number;
+    reason?: string;
+    images?: string[];
+    /** Why the video wasn't read (HAN-126), e.g. "too_long", with its length and the plan's limit in seconds. */
+    video_skip?: string;
+    video_sec?: number | null;
+    video_max_sec?: number;
+    /** Set on the free plan only: the longer limit Premium reads. */
+    video_premium_max_sec?: number;
+  };
   transcript?: string | null;
   ocr?: string | null;
   linked_sites?: string[];
