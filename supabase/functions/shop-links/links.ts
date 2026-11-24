@@ -1,5 +1,6 @@
 // Affiliate link building for Buy buttons and Send to Instacart (HAN-131). Pure functions: no network, no env reads,
 // so they're unit-tested in test.ts. The IDs come from the function's secrets (see config()).
+import { buildShoppingList, type ShoppingLine } from "../_shared/shopping-list.ts";
 
 export type Env = (k: string) => string | undefined;
 
@@ -10,12 +11,19 @@ export type Config = {
   wrapper: { kind: "sovrn"; key: string } | { kind: "skimlinks"; id: string } | null;
   instacartKey: string | null;
   instacartBase: string;
+  /** Instacart pages one user can make per hour (HAN-134). */
+  instacartPerHour: number;
 };
 
 /** Empty or "placeholder" secrets count as unset, so the placeholder config in README ships no fake IDs in links. */
 const secret = (env: Env, k: string) => {
   const v = env(k)?.trim();
   return v && !/^placeholder/i.test(v) ? v : null;
+};
+
+const perHour = (v: string | null) => {
+  const n = Number(v ?? NaN);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 20;
 };
 
 export function config(env: Env): Config {
@@ -27,6 +35,7 @@ export function config(env: Env): Config {
     instacartKey: secret(env, "INSTACART_API_KEY"),
     // The dev host (https://connect.dev.instacart.tools) takes development keys only.
     instacartBase: (secret(env, "INSTACART_API_BASE") ?? "https://connect.instacart.com").replace(/\/+$/, ""),
+    instacartPerHour: perHour(secret(env, "INSTACART_PER_HOUR")),
   };
 }
 
@@ -92,7 +101,7 @@ export const LIMITS = { title: 200, lines: 100, text: 200, instructions: 50, ins
 
 const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
-/** Checks and trims what the app sent. Returns null if there's nothing to send. */
+/** Trims a request to Instacart's sizes. Returns null if there's nothing to send. */
 export function parseInstacart(body: Record<string, unknown>): InstacartRequest | null {
   const title = clean(body.title, LIMITS.title);
   const kind = body.kind === "recipe" ? "recipe" : "shopping_list";
@@ -117,6 +126,40 @@ export function parseInstacart(body: Record<string, unknown>): InstacartRequest 
     ? body.instructions.slice(0, LIMITS.instructions).map((s) => clean(s, LIMITS.instruction)).filter(Boolean)
     : [];
   return { title, kind, lines, ...(kind === "recipe" && instructions.length ? { instructions } : {}) };
+}
+
+export type Recipe = { name: string; ingredients: string[]; steps: string[] };
+
+const lineIn = (l: ShoppingLine): LineIn => ({
+  name: l.name,
+  display_text: l.text,
+  ...(l.amount ? { quantity: l.amount.quantity, unit: l.amount.unit } : {}),
+});
+
+/** One recipe as an Instacart recipe page: its ingredients (repeats combined) and steps. */
+export function recipeRequest(r: Recipe): InstacartRequest | null {
+  return parseInstacart({ title: r.name, kind: "recipe", lines: buildShoppingList([r]).map(lineIn), instructions: r.steps });
+}
+
+/** The shopping list for these recipes, the way the app shows it, less the lines ticked off (`skip`, by line key). */
+export function shoppingListRequest(recipes: Recipe[], skip: string[] = []): InstacartRequest | null {
+  const lines = buildShoppingList(recipes).filter((l) => !skip.includes(l.key)).map(lineIn);
+  return parseInstacart({ title: `Shopping list for ${recipes.map((r) => r.name).join(", ")}`, kind: "shopping_list", lines });
+}
+
+/** Instacart's own pages only: the app hands this URL to Linking.openURL. The dev API base links to the dev site. */
+export function instacartUrlOk(url: unknown, base: string): url is string {
+  if (typeof url !== "string") return false;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  const hosts = ["instacart.com", ...(new URL(base).hostname.endsWith(".instacart.tools") ? ["instacart.tools"] : [])];
+  const host = u.hostname.toLowerCase();
+  return u.protocol === "https:" && !u.username && !u.password && !u.port &&
+    hosts.some((h) => host === h || host.endsWith(`.${h}`));
 }
 
 /** Body for POST /idp/v1/products/products_link (Instacart Developer Platform: "Create shopping list page"). */

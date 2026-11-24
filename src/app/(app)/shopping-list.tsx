@@ -183,7 +183,10 @@ export default function ShoppingListScreen() {
           {Features.shopLinks && lines.length ? (
             // What's still to buy: ticked-off lines are already in the basket or the cupboard.
             <InstacartButton
-              request={toBuy.length ? shoppingListRequest(toBuy, data.map((r) => r.name)) : null}
+              request={toBuy.length ? shoppingListRequest(
+                      data.map((r) => r.id),
+                      lines.filter((l) => checked.includes(l.key)).map((l) => l.key),
+                    ) : null}
               variant="primary"
             />
           ) : null}
