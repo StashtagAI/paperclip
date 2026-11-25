@@ -14,6 +14,7 @@ import { DoneCheck } from '@/components/done-check';
 import { FavoriteStar } from '@/components/favorite-star';
 import { PlaceFacts } from '@/components/google-place-info';
 import { ItemEditForm, ReportItemForm } from '@/components/item-forms';
+import { MapExport } from '@/components/map-export';
 import { PlaceMap } from '@/components/place-map';
 import { ProgressBar } from '@/components/progress-bar';
 import { MoveForm } from '@/components/move-form';
@@ -322,6 +323,9 @@ export default function ListScreen() {
         />
       ) : null}
       {pins.length ? <PlaceMap pins={pins} selectedId={selectedId} onPinPress={selectPin} city={data?.name} /> : null}
+      {data && places && !editing && data.items.some(hasCoords) ? (
+        <MapExport category={data.category.name} list={data.name} kind={data.category.kind} items={data.items} />
+      ) : null}
       {data && tags.length ? (
         <Tags kind={data.category.kind} tags={tags} active={activeTag} total={data.items.length} onPick={pickTag} />
       ) : null}

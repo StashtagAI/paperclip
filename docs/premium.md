@@ -7,6 +7,7 @@ The plan was approved on HAN-127. The free cap comes from HAN-129.
 | AI stashes | 15 a month (resets on the 1st, UTC) | Unlimited, with a fair-use ceiling of 300 a month |
 | Lists shared at the same time | 5 | 100 |
 | Custom organization | – | Yes (flag only; no feature is gated yet) |
+| Export an Eats/Travel list to Google My Maps (KML, HAN-141) | – | Yes (checked in the app; the file is made on the phone from the user's own list) |
 | Sharing, shopping lists, Buy buttons, manual edits | Yes | Yes |
 
 The 20 links/hour and $3/day per-user limits from HAN-37 apply to both plans.
