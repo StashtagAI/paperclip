@@ -165,6 +165,7 @@ export default function PremiumScreen() {
           <View style={styles.perks}>
             <Perk title="Unlimited AI stashes" detail={`Free includes ${plan.data?.free_stash_limit ?? 15} a month. Fair use applies.`} />
             <Perk title="Share more lists at once" detail={`Free shares up to ${plan.data?.free_shared_list_limit ?? 5} lists at a time.`} />
+            <Perk title="Export to Google My Maps" detail="Put an Eats or Travel list on a map in Google Maps." />
             <Perk title="Custom organization" detail="New ways to arrange your lists, as they arrive." />
             <Perk title="Everything in Free" detail="Sharing, shopping lists and Buy buttons stay free." />
           </View>
