@@ -1,4 +1,19 @@
-import { appleMapsUrl, destination, fitViewport, googleMapsUrl, hasCoords, project, TILE_SIZE } from '@/lib/geo';
+import {
+  appleMapsUrl,
+  cameraViewport,
+  centreOn,
+  destination,
+  fitCamera,
+  fitViewport,
+  googleMapsUrl,
+  hasCoords,
+  MAX_USER_ZOOM,
+  MIN_ZOOM,
+  panCamera,
+  project,
+  TILE_SIZE,
+  zoomCamera,
+} from '@/lib/geo';
 
 const scottsdale = { name: 'Café Monarch', address: '6934 E 1st Ave, Scottsdale, AZ', lat: 33.4917, lng: -111.9302 };
 const noCoords = { name: 'The Mission', address: null, lat: null, lng: null };
@@ -58,5 +73,47 @@ describe('directions', () => {
     expect(destination(noCoords, 'Scottsdale')).toBe('The Mission, Scottsdale');
     expect(appleMapsUrl(noCoords, 'Scottsdale')).toBe('https://maps.apple.com/?daddr=The%20Mission%2C%20Scottsdale');
     expect(destination({ ...noCoords, address: '3815 N Brown Ave' }, 'Scottsdale')).toBe('The Mission, 3815 N Brown Ave');
+  });
+});
+
+describe('interactive camera (HAN-141)', () => {
+  const pin = { id: 'a', ...scottsdale };
+  const start = fitCamera([pin], 300, 200)!;
+  const at = (camera: typeof start) => cameraViewport(camera, [pin], 300, 200).pins[0];
+
+  it('moves pins with the finger when panned', () => {
+    const before = at(start);
+    const after = at(panCamera(start, 40, -25));
+    expect(after.left - before.left).toBeCloseTo(40);
+    expect(after.top - before.top).toBeCloseTo(-25);
+  });
+
+  it('keeps the point under the fingers still while zooming', () => {
+    const before = at(start);
+    // Zoom about the pin itself: it must not move.
+    const after = at(zoomCamera(start, start.zoom - 1.5, 300, 200, before.left, before.top));
+    expect(after.left).toBeCloseTo(before.left);
+    expect(after.top).toBeCloseTo(before.top);
+  });
+
+  it('clamps zoom to the tile range', () => {
+    expect(zoomCamera(start, 40, 300, 200).zoom).toBe(MAX_USER_ZOOM);
+    expect(zoomCamera(start, -3, 300, 200).zoom).toBe(MIN_ZOOM);
+  });
+
+  it('stretches whole-zoom tiles between zooms and still covers the view', () => {
+    const v = cameraViewport({ ...start, zoom: 12.4 }, [pin], 300, 200);
+    expect(v.tiles[0].z).toBe(12);
+    expect(v.tiles[0].size).toBeCloseTo(TILE_SIZE * 2 ** 0.4);
+    expect(Math.min(...v.tiles.map((t) => t.left))).toBeLessThanOrEqual(0);
+    expect(Math.max(...v.tiles.map((t) => t.left + t.size))).toBeGreaterThanOrEqual(300);
+    expect(Math.min(...v.tiles.map((t) => t.top))).toBeLessThanOrEqual(0);
+    expect(Math.max(...v.tiles.map((t) => t.top + t.size))).toBeGreaterThanOrEqual(200);
+  });
+
+  it('centres on a place', () => {
+    const p = at(centreOn(panCamera(start, 120, 80), pin));
+    expect(p.left).toBeCloseTo(150);
+    expect(p.top).toBeCloseTo(100);
   });
 });

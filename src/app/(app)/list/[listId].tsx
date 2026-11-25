@@ -71,7 +71,7 @@ export default function ListScreen() {
   const tags = data ? tagCounts(data.tags, data.items) : [];
   const activeTag = tags.some((t) => t.tag === tag) ? tag : null;
   const shown = data ? filterByTag(data.items, activeTag) : [];
-  const pins = places ? shown.flatMap((i) => (hasCoords(i) ? [{ id: i.id, name: i.name, lat: i.lat, lng: i.lng }] : [])) : [];
+  const pins = places ? shown.flatMap((i) => (hasCoords(i) ? [{ id: i.id, name: i.name, address: i.address, lat: i.lat, lng: i.lng }] : [])) : [];
 
   const scrollRef = useRef<ScrollViewInstance>(null);
   const rowY = useRef(new Map<string, number>());
@@ -321,7 +321,7 @@ export default function ListScreen() {
           onNote={note}
         />
       ) : null}
-      {pins.length ? <PlaceMap pins={pins} selectedId={selectedId} onPinPress={selectPin} /> : null}
+      {pins.length ? <PlaceMap pins={pins} selectedId={selectedId} onPinPress={selectPin} city={data?.name} /> : null}
       {data && tags.length ? (
         <Tags kind={data.category.kind} tags={tags} active={activeTag} total={data.items.length} onPick={pickTag} />
       ) : null}
