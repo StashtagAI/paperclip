@@ -23,15 +23,26 @@ function open(url: string) {
   else Linking.openURL(url);
 }
 
+type Place = Pick<ItemRow, 'name' | 'address' | 'lat' | 'lng'>;
+
+/** The Apple Maps / Google Maps directions buttons, shared by this sheet and the full-screen map (HAN-141). */
+export function DirectionsButtons({ item, city, onGo }: { item: Place; city?: string | null; onGo?: () => void }) {
+  const go = (url: string) => {
+    onGo?.();
+    open(url);
+  };
+  return (
+    <>
+      {SHOW_APPLE ? <Button title="Directions in Apple Maps" onPress={() => go(appleMapsUrl(item, city))} /> : null}
+      <Button title="Directions in Google Maps" onPress={() => go(googleMapsUrl(item, city))} />
+    </>
+  );
+}
+
 /** Bottom sheet offering directions to a place in Apple Maps or Google Maps (HAN-24). */
 export function DirectionsSheet({ item, city, onClose }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const go = (url: string) => {
-    onClose();
-    open(url);
-  };
-
   return (
     <Modal visible={!!item} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
@@ -49,8 +60,7 @@ export function DirectionsSheet({ item, city, onClose }: Props) {
               </ThemedText>
             ) : null}
           </View>
-          {SHOW_APPLE ? <Button title="Directions in Apple Maps" onPress={() => go(appleMapsUrl(item, city))} /> : null}
-          <Button title="Directions in Google Maps" onPress={() => go(googleMapsUrl(item, city))} />
+          <DirectionsButtons item={item} city={city} onGo={onClose} />
           <Button title="Cancel" variant="secondary" onPress={onClose} />
         </View>
       ) : null}
