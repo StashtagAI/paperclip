@@ -106,7 +106,7 @@ jobs:
           fi
       - name: Dependency review (new or changed dependencies in this PR)
         if: github.event_name == 'pull_request' && steps.depgraph.outputs.enabled == 'true'
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
